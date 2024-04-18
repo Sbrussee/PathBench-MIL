@@ -31,7 +31,7 @@ import os
 import pytorch_lightning as pl
 
 argparse.add_argument('--method', choices=["MAE", "BarlowTwins", "SimCLR", "DINO"], type=str, help='SSL method to use')
-argparse.add_argument('--backbone', choices=["resnet18", "vit16", "vit32"]. type=str, help='Backbone model to use')
+argparse.add_argument('--backbone', choices=["resnet18", "vit16", "vit32"], type=str, help='Backbone model to use')
 argparse.add_argument('--path_to_train', type=str, help='Path to training images')
 argparse.add_argument('--path_to_val', default=None, type=str, help='Path to validation')
 argparse.add_argument('--ssl_model_name', type=str, help='Name of the SSL model')
