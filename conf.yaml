@@ -1,0 +1,61 @@
+experiment:
+  project_name: MF_TEST
+  annotation_file: ../../Thom_Doeleman/annotations.csv
+  balancing: category
+  split_technique: k-fold
+  n_splits: 10
+  aggregation_level: slide
+
+  evaluation:
+    - balanced_accuracy
+    - auc
+
+  visualization:
+    - learning_curve
+    - confusion_matrix
+    - roc_curve
+    - layer_activations
+
+datasets:
+  - name: int_MF
+    slide_path: ../../Thom_Doeleman/CLAM_train_cropped
+    used_for: training
+
+  - name: ext_MF
+    slide_path: ../../Thom_Doeleman/CLAM_validate_cropped
+    used_for: testing
+
+benchmark_parameters:
+  tile_px:
+    - 256
+  tile_um:
+    - 40x
+  normalization:
+    - macenko
+    - reinhard
+    - vahadane
+  feature_extraction:
+    - resnet50_imagenet
+    - CTransPath
+    - RetCCL
+    - PLIP
+    - HistoSSL
+    - BarlowTwins
+  mil:
+    - CLAM_SB
+    - CLAM_MB
+    - TransMIL
+    - AttMIL
+
+  
+model_specific_parameters:
+  -BarlowTwins:
+    weight_path: ""
+    backbone: resnet50
+  
+
+hpo:
+  method: grid_search
+  hyperparameter_file: conf.yaml
+
+  
