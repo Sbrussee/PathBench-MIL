@@ -2,9 +2,9 @@ import yaml
 import slideflow as sf
 import os
 import torch
-from optimization.hpo import HyperParameterOptimizer
-from benchmarking.benchmark import benchmark
-from models.ssl import train_ssl_model
+from ..optimization.hpo import HyperParameterOptimizer
+from ..benchmarking.benchmark import benchmark
+from ..models.ssl import train_ssl_model
 
 def read_config(config_file):
     with open(config_file, 'r') as f:
