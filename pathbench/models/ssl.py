@@ -30,13 +30,14 @@ import os
 
 import pytorch_lightning as pl
 
-argparse.add_argument('--method', choices=["MAE", "BarlowTwins", "SimCLR", "DINO"], type=str, help='SSL method to use')
-argparse.add_argument('--backbone', choices=["resnet18", "vit16", "vit32"], type=str, help='Backbone model to use')
-argparse.add_argument('--path_to_train', type=str, help='Path to training images')
-argparse.add_argument('--path_to_val', default=None, type=str, help='Path to validation')
-argparse.add_argument('--ssl_model_name', type=str, help='Name of the SSL model')
+parser = argparse.ArgumentParser()
+parser.add_argument('--method', choices=["MAE", "BarlowTwins", "SimCLR", "DINO"], type=str, help='SSL method to use')
+parser.add_argument('--backbone', choices=["resnet18", "vit16", "vit32"], type=str, help='Backbone model to use')
+parser.add_argument('--path_to_train', type=str, help='Path to training images')
+parser.add_argument('--path_to_val', default=None, type=str, help='Path to validation')
+parser.add_argument('--ssl_model_name', type=str, help='Name of the SSL model')
 
-args = argparse.parse_args()
+args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
