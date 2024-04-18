@@ -53,9 +53,15 @@ model_specific_parameters:
     weight_path: ""
     backbone: resnet50
   
-
 hpo:
   method: grid_search
   hyperparameter_file: conf.yaml
 
-  
+ssl:
+  method: BarlowTwins
+  train_path: ../../Thom_Doeleman/CLAM_train_cropped
+  val_path: ../../Thom_Doeleman/CLAM_validate_cropped
+  backbone: "resnet18"
+  ssl_model_name: BT_test
+
+mode: ssl
