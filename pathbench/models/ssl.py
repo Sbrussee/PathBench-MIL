@@ -19,7 +19,14 @@ from torch import nn
 import torch
 from torchvision import models
 import copy
+import argparse
 
+argparse.add_argument('--method', choices=["MAE", "BarlowTwins", "SimCLR", "DINO"], type=str, help='SSL method to use')
+argparse.add_argument('--backbone', choices=["resnet18", "vit16", "vit32"]. type=str, help='Backbone model to use')
+argparse.add_argument('--path_to_images', type=str, help='Path to images')
+argparse.add_argument('--ssl_model_name', type=str, help='Name of the SSL model')
+
+args = argparse.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -221,7 +228,7 @@ def train_dino(path_to_images, backbone, input_dim, ssl_model_name):
             total_loss += loss.detach()
             loss.backward()
             #Cancel gradients of student head
-            model.student_head.cancer_last_layer_graidents(current_epoch=epoch)
+            model.student_head.cancel_last_layer_gradients(current_epoch=epoch)
             optimizer.step()
             optimizer.zero_grad()
 
@@ -302,3 +309,6 @@ def train_mae(path_to_images, backbone, ssl_model_name):
     #Save the backbone
     pretrained_backbone = model.backbone
     torch.save(pretrained_backbone.state_dict(), ssl_model_name)
+
+if __name__ == "__main__":
+    train_ssl_model(args.method, args.backbone, args.path_to_images, args.ssl_model_name)

@@ -28,11 +28,11 @@ class Experiment():
         self.mode = mode
         self.load_datasets()
 
+    def run(self):
         if self.mode == 'exploration':
             self.benchmark()
         elif self.mode == 'hpo':
             self.hpo()
-
 
     def load_datasets(self):
         #Create an experiment folder
