@@ -8,7 +8,7 @@ import slideflow as sf
 from slideflow.model import build_feature_extractor
 from slideflow.stats.metrics import ClassifierMetrics
 from slideflow.mil import mil_config
-from visualization.visualization import visualize_activations
+from ..visualization.visualization import visualize_activations
 """
 
 
