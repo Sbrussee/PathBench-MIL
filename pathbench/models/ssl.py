@@ -14,34 +14,104 @@ from lightly.models import utils
 from lightly.data.dataset import LightlyDataset
 from lightly.transforms.mmcr_transform import MMCRTransform
 from lightly.transforms.multi_view_transform import MultiViewTransform
+from lightly.models.utils import (
+    batch_shuffle,
+    batch_unshuffle,
+    deactivate_requires_grad,
+    update_momentum,
+)
 
 from torch import nn
 import torch
 from torchvision import models
 import copy
 import argparse
+import os
+
+import pytorch_lightning as pl
 
 argparse.add_argument('--method', choices=["MAE", "BarlowTwins", "SimCLR", "DINO"], type=str, help='SSL method to use')
 argparse.add_argument('--backbone', choices=["resnet18", "vit16", "vit32"]. type=str, help='Backbone model to use')
-argparse.add_argument('--path_to_images', type=str, help='Path to images')
+argparse.add_argument('--path_to_train', type=str, help='Path to training images')
+argparse.add_argument('--path_to_val', default=None, type=str, help='Path to validation')
 argparse.add_argument('--ssl_model_name', type=str, help='Name of the SSL model')
 
 args = argparse.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-class BarlowTwins(nn.Module):
+class Classifier(pl.LightingModule):
+    def __init__(self, backbone, num_classes):
+        super().__init__()
+        self.backbone = backbone
+        self.fc = nn.Linear(512, num_classes)
+
+        #Freeze backbone
+        deactivate_requires_grad(self.backbone)
+
+        self.criterion = nn.CrossEntropyLoss()
+        self.validation_step_outputs = []
+
+    def forward(self, x):
+        x = self.backbone(x).flatten(start_dim=1)
+        x = self.fc(x)
+        return x
+
+    def training_step(self, batch, batch_idx):
+        x, y, _ = batch
+        logits = self.forward(x)
+        loss = self.criterion(logits, y)
+        self.log("train_loss_fc", loss)
+        return loss
+    
+    def validation_step(self, batch, batch_idx):
+        x, y, _ = batch
+        logits = self.forward(x)
+        y_hat = torch.nn.functional.softmax(logits, dim=1)
+        _, predicted = torch.max(y_hat, 1)
+        num = predicted.shape[0]
+        correct = (predicted == y).sum().item()
+        self.validation_step_outpus.append((num, correct))
+        return num, correct
+    
+
+    def on_validation_epoch_end(self):
+        if self.validation_step_outputs:
+            total_num = 0
+            total_correct = 0
+            for num, correct in self.validation_step_outputs:
+                total_num += num
+                total_correct += correct
+            acc = total_correct / total_num
+            self.log("val_acc_fc", acc)
+            self.validation_step_outputs.clear()
+    
+
+class BarlowTwins(pl.LightningModule):
     def __init__(self, backbone):
         super().__init__()
         self.backbone = backbone
         self.projection_head = BarlowTwinsProjectionHead()
+        self.criterion = BarlowTwinsLoss()
+
 
     def forward(self, x):
         x = self.backbone(x).flatten(start_dim=1)
         z = self.projection_head(x)
         return z
-
-class DINO(nn.Module):
+    
+    def training_step(self, batch, batch_id):
+        (x0, x1) = batch
+        z0 = self.forward(x0)
+        z1 = self.forward(x1)
+        loss = self.criterion(z0, z1)
+        return loss
+    
+    def configure_optimizers(self):
+        optim = torch.optim.SGD(self.parameters(), lr=0.05)
+        return optim
+    
+class DINO(pl.LightningModule):
     def __init__(self, backbone, input_dim):
         super().__init__()
         self.student_backbone = backbone
@@ -53,6 +123,8 @@ class DINO(nn.Module):
         deactivate_requires_grad(self.teacher_backbone)
         deactivate_requires_grad(self.teacher_head)
 
+        self.criterion = DINOLoss(output_dim=2048, warmup_teacher_temp_epochs=5)
+
     def forward(self, x):
         y = self.student_backbone(x).flatten(start_dim=1)
         z = self.student_head(y)
@@ -63,71 +135,115 @@ class DINO(nn.Module):
         z = self.teacher_head(y)
         return z
 
-class SimCLR(nn.Module):
+    def training_step(self, batch, batch_id):
+        momentum = cosine_schedule(self.current_epoch, 10, 0.996, 1)
+        update_momentum(self.student_head, self.teacher_head, momentum)
+        update_momentum(self.student_backbone, self.teacher_backbone, momentum)
+        views = batch[0]
+        views = [view.to(self.device) for view in views]
+        global_views = views[:2]
+        t_out = [self.forward_teacher(view) for view in global_views]
+        s_out = [self.forward(view) for view in views]
+        loss = self.criterion(t_out, s_out, epoch=self.current_epoch)
+        return loss
+
+    def on_after_backward(self):
+        self.student_head.cancel_last_layer_gradients(current_epoch=self.current_epoch)
+
+    def configure_optimizers(self):
+        optim = torch.optim.Adam(self.parameters(), lr=0.001)
+        return optim
+    
+
+class SimCLR(pl.LightningModule):
     def __init__(self, backbone):
         super().__init__()
         self.backbone = backbone
-        self.projection_head = SimCLRProjectionHead(512, 512, 128)
+        self.projection_head = SimCLRProjectionHead(512, 2048, 2048)
+        self.criterion = NTXentLoss()
 
     def forward(self, x):
         x = self.backbone(x).flatten(start_dim=1)
         z = self.projection_head(x)
         return z
 
-class MAE(nn.Module):
-    def __init__(self, vit):
-        super().__init__()
+    def training_step(self, batch, batch_id):
+        (x0, x1) = batch[0]
+        z0 = self.forward(x0)
+        z1 = self.forward(x1)
+        loss = self.criterion(z0, z1)
+        return loss
 
-        decoder_dim = 512
+    def configure_optimizers(self):
+        optim = torch.optim.SGD(self.parameters(), lr=0.06)
+        return optim
+    
+
+class MAE(pl.LightningModule):
+    def __init__(self, backbone):
+        super().__init__()
+        self.backbone = backbone
         self.mask_ratio = 0.75
-        self.patch_size = vit.patch_size
-        self.sequence_length = vit.seq_length
-        self.mask_token = nn.Parameter(torch.zeros(1,1,decoder_dim))
-        self.backbone = masked_autoencoder.MAEBackbone.from_vit(vit)
+        self.patch_size = 16
+        self.sequence_length = 49
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, 512))
         self.decoder = masked_autoencoder.MAEDecoder(
-        seq_length = vit.seq_length,
+        seq_length=49,
         num_layers=1,
         num_heads=16,
-        embed_input_dim = vit.hidden_dim,
-        hidden_dim=decoder_dim,
-        mlp_dim=decoder_dim * 4,
-        out_dim = vit.patch_size**2 * 3,
+        embed_input_dim=512,
+        hidden_dim=512,
+        mlp_dim=512 * 4,
+        out_dim=16**2 * 3,
         dropout=0,
         attention_dropout=0
         )
+
+        self.criterion = nn.MSELoss()
 
     def forward_encoder(self, images, idx_keep=None):
         return self.backbone.encode(images, idx_keep)
 
     def forward_decoder(self, x_encoded, idx_keep, idx_mask):
-        batch_size = x.encoded.shape[0]
+        batch_size = x_encoded.shape[0]
         x_decode = self.decoder.embed(x_encoded)
         x_masked = utils.repeat_token(
         self.mask_token, (batch_size, self.sequence_length)
         )
+
+        x_masked = utils.set_at_index(x_masked, idx_keep, x_decode.type_as(x_masked))
+
         x_decoded = self.decoder.decode(x_masked)
 
         x_pred = utils.get_at_index(x_decoded, idx_mask)
         x_pred = self.decoder.predict(x_pred)
         return x_pred
 
-    def forward(self, images):
+    def training_step(self, batch, batch_id):
+        views = batch[0]
+        images = views[0]
         batch_size = images.shape[0]
         idx_keep, idx_mask = utils.random_token_mask(
-        size = (batch_size, self.sequence_length),
-        mask_ratio = self.mask_ratio,
-        device=images.device)
-
-        x_encoded = self.forward_encoder(images, idx_keep)
+        size=(batch_size, self.sequence_length),
+        mask_ratio=self.mask_ratio,
+        device=images.device
+        )
+        x_encoded = self.forward_encoder(images=images, idx_keep=idx_keep)
         x_pred = self.forward_decoder(x_encoded, idx_keep, idx_mask)
 
         patches = utils.patchify(images, self.patch_size)
+
         target = utils.get_at_index(patches, idx_mask-1)
-        return x_pred, target
 
+        loss = self.criterion(x_pred, target)
+        return loss
 
+    def configure_optimizers(self):
+        optim = torch.optim.Adam(self.parameters(), lr=1.5e-4)
+        return optim
+    
 
-def train_ssl_model(method, backbone_model, path_to_images, ssl_model_name):
+def train_ssl_model(method, backbone_model, ssl_model_name, path_to_train, path_to_val=None):
     if backbone_model == 'resnet18':
         resnet  = models.resnet18()
         backbone = nn.Sequential(*list(resnet.children())[:-1])
@@ -142,173 +258,46 @@ def train_ssl_model(method, backbone_model, path_to_images, ssl_model_name):
         input_dim = 512
 
     if method == 'BarlowTwins':
-        train_barlow_twins(path_to_images, backbone, ssl_model_name)
+        transform = SimCLRTransform()
+        model = BarlowTwins()
 
     elif method == 'DINO':
-        train_dino(path_to_images, backbone, input_dim, ssl_model_name)
+        transform = DINOTransform()
+        model = DINO(input_dim=input_dim)
 
     elif method == "SimCLR":
-        train_simclr(path_to_images, backbone, ssl_model_name)
+        transform = SimCLRTransform()
+        model = SimCLR()
 
     elif method == 'MAE':
-        train_mae(path_to_images, backbone, ssl_model_name)
+        transform = MAETransform()
+        model = MAE()
 
-def train_barlow_twins(path_to_images, backbone, ssl_model_name):
-    #Initialize Barlow Twins
-    model = BarlowTwins(backbone)
-    model.to(device)
+    train_dataset = LightlyDataset(path_to_train, transform=transform)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=256, shuffle=True, drop_last=True, num_workers=8)
 
-    transform = SimCLRTransform()
-    dataloader = torch.utils.data.DataLoader(
-    LightlyDataset(path_to_images, transform=transform),
-    batch_size=256,
-    shuffle=True,
-    drop_last=True,
-    num_workers=8
+    val_dataset = None
+    val_loader = None
+    if path_to_val:
+        val_dataset = LightlyDataset(path_to_val, transform=transform)
+        val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=256, shuffle=False, drop_last=False, num_workers=8)
+
+    trainer = pl.Trainer(max_epochs=200, gpus=1 if torch.cuda.is_available() else 0, accelerator="ddp")
+    
+    early_stop_callback = pl.callbacks.EarlyStopping(
+        monitor='val_loss',
+        min_delta=0.00,
+        patience=5,
+        verbose=True,
+        mode='min'
     )
 
-    criterion = BarlowTwinsLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.06)
+    trainer.fit(model=model, train_dataloader=train_loader, val_dataloaders=val_loader, callbacks=[early_stop_callback])
 
-    print("Training Barlow Twins model...")
-    for epoch in range(50):
-        total_loss = 0
-        for batch in dataloader:
-            x0, x1 = batch[0]
-            x0, x1 = x0.to(device), x1.to(device)
-            z0, z1 = model(x0), model(x1)
-            loss = criterion(z0, z1)
-            total_loss += loss.detach()
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-        avg_loss = total_loss / len(dataloader)
-        print(f"epoch {epoch}, loss: {avg_loss:.5f}")
-
-    #Save the backbone
-    pretrained_backbone = model.backbone
-    torch.save(pretrained_backbone.state_dict(), ssl_model_name)
-
-
-def train_dino(path_to_images, backbone, input_dim, ssl_model_name):
-    model = DINO(backbone, input_dim)
-    model.to(device)
-
-    transform = DINOTransform()
-
-    dataloader = torch.utils.data.DataLoader(
-    LightlyDataset(path_to_images, transform=transform),
-    batch_size=32,
-    shuffle=True,
-    drop_last=True,
-    num_workers=8
-    )
-
-    criterion = DINOLoss(
-    output_dim=2048,
-    warmup_teacher_temp_epochs=5
-    )
-
-    critertion = criterion.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-
-    print("Training DINO model...")
-    for epoch in range(50):
-        total_loss = 0
-        momentum_val = cosine_schedule(epoch, 50, 0.996, 1)
-        for batch in dataloader:
-            views = batch[0]
-            update_momentum(model.student_backbone, model.teacher_backbone)
-            update_momentum(model.student_head, model.teacher_head)
-            views = [view.to(device) for view in views]
-            global_views = views[:2]
-            teacher_out = [model.forward_teacher(view) for view in global_views]
-            student_out = [model.forward(view) for view in views]
-            loss = criterion(teacher_out, student_out, epoch=epoch)
-            total_loss += loss.detach()
-            loss.backward()
-            #Cancel gradients of student head
-            model.student_head.cancel_last_layer_gradients(current_epoch=epoch)
-            optimizer.step()
-            optimizer.zero_grad()
-
-        avg_loss = total_loss / len(dataloader)
-        print(f"epoch {epoch}, loss: {avg_loss:.5f}")
-
-    #Save the backbone
-    pretrained_backbone = model.backbone
-    torch.save(pretrained_backbone.state_dict(), ssl_model_name)
-
-def train_simclr(path_to_images, backbone, ssl_model_name):
-    model = SimCLR(backbone)
-    model.to(device)
-
-    transform = SimCLRTransform(input_size=32)
-
-    dataloader = torch.utils.data.DataLoader(
-    LightlyDataset(path_to_images, transform=transform),
-    batch_size=256,
-    shuffle=True,
-    drop_last=True,
-    num_workers=8
-    )
-
-    criterion = NTXentLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.06)
-
-    print("Training SimCLR model...")
-    for epoch in range(50):
-        total_loss = 0
-        for batch in dataloader:
-            x0, x1 = batch[0]
-            x0, x1 = x0.to(device), x1.to(device)
-            z0, z1 = model(x0), model(x1)
-            loss = criterion(z0, z1)
-            total_loss += loss.detach()
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-        avg_loss = total_loss / len(dataloader)
-        print(f"epoch {epoch}, loss: {avg_loss:.5f}")
-
-    #Save the backbone
-    pretrained_backbone = model.backbone
-    torch.save(pretrained_backbone.state_dict(), ssl_model_name)
-
-def train_mae(path_to_images, backbone, ssl_model_name):
-    model = MAE(backbone)
-    model.to(device)
-    transform = MAETransform()
-
-    dataloader = torch.utils.data.DataLoader(
-    LightlyDataset(path_to_images, transform=transform),
-    batch_size=256,
-    shuffle=True,
-    drop_last=True,
-    num_workers=8
-    )
-
-    criterion = nn.MSELoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1.5e-4)
-
-    print("Training MAE model...")
-    for epoch in range(50):
-        total_loss = 0
-        for batch in dataloader:
-            views = batch[0]
-            images = views[0].to(device)
-            predictions, targets = model(images)
-            loss = criterion(predictions, targets)
-            total_loss += loss.detach()
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-        avg_loss = total_loss / len(dataloader)
-        print(f"epoch {epoch}, loss: {avg_loss:.5f}")
-
-    #Save the backbone
-    pretrained_backbone = model.backbone
-    torch.save(pretrained_backbone.state_dict(), ssl_model_name)
+    os.makedirs("train_checkpoints", exist_ok=True)
+    #Save the trained model
+    torch.save(model.state_dict(), f"train_checkpoints/{ssl_model_name}.pth")
 
 if __name__ == "__main__":
-    train_ssl_model(args.method, args.backbone, args.path_to_images, args.ssl_model_name)
+    train_ssl_model(args.method, args.backbone, args.ssl_model_name,
+                    args.path_to_train, args.path_to_val)
