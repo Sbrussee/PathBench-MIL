@@ -52,7 +52,7 @@ class Experiment():
             slides=first_dataset['slide_path']
         ) 
         #Add additional datasets to the project
-        if len(self.config['datasets'] > 1):
+        if len(self.config['datasets']) > 1:
             for source in self.config['datasets'][1:]:
                 self.project.add_source(
                     name=source['name'],
