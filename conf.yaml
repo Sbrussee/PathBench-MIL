@@ -1,6 +1,6 @@
 experiment:
   project_name: MF_TEST
-  annotation_file: ../../../Thom_Doeleman/annotations.csv
+  annotation_file: ../../MF_annotations.csv
   balancing: category
   split_technique: k-fold
   n_splits: 10
