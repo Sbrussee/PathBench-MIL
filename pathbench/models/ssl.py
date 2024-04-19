@@ -41,7 +41,7 @@ args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-class Classifier(pl.LightingModule):
+class Classifier(pl.LightningModule):
     def __init__(self, backbone, num_classes):
         super().__init__()
         self.backbone = backbone
