@@ -45,12 +45,16 @@ class Experiment():
 
         first_dataset = self.config['datasets'][0]
         #Create project based on first dataset
-        self.project = sf.create_project(
-            name=self.project_name,
-            root=f"experiments/{self.project_name}",
-            annotations=self.config['experiment']['annotation_file'],
-            slides=first_dataset['slide_path']
-        ) 
+        #Check if project exists
+        if os.path.exists(f"experiments/{self.project_name}"):
+            self.project = sf.load_project(f"experiments/{self.project_name}")
+        else:
+            self.project = sf.create_project(
+                name=self.project_name,
+                root=f"experiments/{self.project_name}",
+                annotations=self.config['experiment']['annotation_file'],
+                slides=first_dataset['slide_path']
+            ) 
         #Add additional datasets to the project
         if len(self.config['datasets']) > 1:
             for source in self.config['datasets'][1:]:
