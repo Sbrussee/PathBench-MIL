@@ -2,7 +2,8 @@ from pathbench.experiment.experiment import Experiment
 
 
 def main():
-    experiment = Experiment('config.yaml')
+    # Create an instance of the Experiment class
+    experiment = Experiment('conf.yaml')
     experiment.run()
 
 if __name__ == "__main__":
