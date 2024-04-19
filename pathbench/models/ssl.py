@@ -260,19 +260,19 @@ def train_ssl_model(method, backbone_model, ssl_model_name, path_to_train, path_
 
     if method == 'BarlowTwins':
         transform = SimCLRTransform()
-        model = BarlowTwins()
+        model = BarlowTwins(backbone=backbone)
 
     elif method == 'DINO':
         transform = DINOTransform()
-        model = DINO(input_dim=input_dim)
+        model = DINO(backbone=backbone, input_dim=input_dim)
 
     elif method == "SimCLR":
         transform = SimCLRTransform()
-        model = SimCLR()
+        model = SimCLR(backbone=backbone)
 
     elif method == 'MAE':
         transform = MAETransform()
-        model = MAE()
+        model = MAE(backbone=backbone)
 
     train_dataset = LightlyDataset(path_to_train, transform=transform)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=256, shuffle=True, drop_last=True, num_workers=8)
