@@ -23,7 +23,7 @@ combination_dict shape:
 def benchmark(config, project):
     #Get all column values
     columns = list(config['benchmark_parameters'].keys())
-    columns.extend(list(config['experiment']['evaluation'].keys()))                   
+    columns.extend(list(config['experiment']['evaluation']))                   
     val_df = pd.DataFrame(columns=columns)
     test_df = pd.DataFrame(columns=columns)
 
