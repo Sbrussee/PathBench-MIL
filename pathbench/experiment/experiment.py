@@ -8,7 +8,7 @@ from ..models.ssl import train_ssl_model
 
 def read_config(config_file):
     with open(config_file, 'r') as f:
-        config = yaml.load(f)
+        config = yaml.load(f, Loader=yaml.SafeLoader)
     return config
 
 # Check if GPU is available
