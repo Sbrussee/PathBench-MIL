@@ -24,7 +24,7 @@ else:
     print('GPU not available. Using CPU.')
 
 class Experiment():
-    def __init__(self, config_file, mode):
+    def __init__(self, config_file):
         self.config = read_config(config_file)
         self.mode = self.config['mode']
         self.load_datasets()
