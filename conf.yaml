@@ -1,6 +1,6 @@
 experiment:
   project_name: MF_TEST
-  annotation_file: ../../Thom_Doeleman/annotations.csv
+  annotation_file: ../../../Thom_Doeleman/annotations.csv
   balancing: category
   split_technique: k-fold
   n_splits: 10
@@ -18,11 +18,11 @@ experiment:
 
 datasets:
   - name: int_MF
-    slide_path: ../../Thom_Doeleman/CLAM_train_cropped
+    slide_path: ../../../Thom_Doeleman/CLAM_train_cropped
     used_for: training
 
   - name: ext_MF
-    slide_path: ../../Thom_Doeleman/CLAM_validate_cropped
+    slide_path: ../../../Thom_Doeleman/CLAM_validate_cropped
     used_for: testing
 
 benchmark_parameters:
@@ -59,8 +59,8 @@ hpo:
 
 ssl:
   method: BarlowTwins
-  train_path: ../../Thom_Doeleman/CLAM_train_cropped
-  val_path: ../../Thom_Doeleman/CLAM_validate_cropped
+  train_path: ../../../Thom_Doeleman/CLAM_train_cropped
+  val_path: ../../../Thom_Doeleman/CLAM_validate_cropped
   backbone: "resnet18"
   ssl_model_name: BT_test
 
