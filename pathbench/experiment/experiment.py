@@ -43,7 +43,7 @@ class Experiment():
 
         self.project_name = self.config['experiment']['project_name']
 
-        first_dataset = self.config['dataset'][0]
+        first_dataset = self.config['datasets'][0]
         #Create project based on first dataset
         self.project = sf.create_project(
             name=self.project_name,
