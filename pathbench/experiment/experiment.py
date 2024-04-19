@@ -48,7 +48,7 @@ class Experiment():
         self.project = sf.create_project(
             name=self.project_name,
             root=f"experiments/{self.project_name}",
-            annotations=first_dataset['annotation_path'],
+            annotations=self.config['experiment']['annotation_file'],
             slides=first_dataset['slide_path']
         ) 
         #Add additional datasets to the project
