@@ -5,6 +5,8 @@ import torch
 from ..optimization.hpo import HyperParameterOptimizer
 from ..benchmarking.benchmark import benchmark
 from ..models.ssl import train_ssl_model
+import random
+import shutil
 
 def read_config(config_file):
     with open(config_file, 'r') as f:
@@ -66,11 +68,56 @@ class Experiment():
     
     def ssl(self):
         ssl_parameters = self.config['ssl']
-        (method, backbone, train_path, val_path,
+        (method, backbone, train_path, val_path, val_split,
         ssl_model_name) = (ssl_parameters['method'],
             ssl_parameters['backbone'], ssl_parameters['train_path'],
-            ssl_parameters['val_path'], ssl_parameters['ssl_model_name'])
-        train_ssl_model(method, backbone, ssl_model_name, train_path, val_path)
+            ssl_parameters['val_path'], ssl_parameters['val_split'],
+            ssl_parameters['ssl_model_name'])
+        
+        os.makedirs(f'{self.config['experiment']['project_name']}/ssl_train', exist_ok=True)
+        os.makedirs(f'{self.config['experiment']['project_name']}/ssl_val', exist_ok=True)
+
+        if val_path == None and val_split != None:
+            #Get all directories in the training directory
+            train_slides = os.listdir(train_path)
+            print("Total number of slides: ", len(train_slides))
+
+            #Shuffle the directory
+            random.shuffle(train_slides)
+            #Split training data into training and validation data
+            val_size = int(val_split * len(train_slides))
+            val_files = train_slides[:val_size]
+            train_files = train_slides[val_size:]
+
+            for slide in train_files:
+                images = os.listdir(f'{train_path}/{slide}')
+                for image in images:
+                    shutil.copy(f'{train_path}/{slide}/{image}', f'{self.config['experiment']['project_name']}/ssl_train/{image}')
+
+            for slide in val_files:
+                images = os.listdir(f'{train_path}/{slide}')
+                for image in images:
+                    shutil.copy(f'{train_path}/{slide}/{image}', f'{self.config['experiment']['project_name']}/ssl_val/{image}')
+
+        elif val_path != None:
+            #Copy all files from the training directory to the ssl_train directory
+            for slide in os.listdir(train_path):
+                for image in os.listdir(slide):
+                    shutil.copy(f'{train_path}/{slide}/{image}', f'{self.config['experiment']['project_name']}/ssl_train/{image}')
+            #Copy all files from the validation directory to the ssl_val directory
+            for slide in os.listdir(val_path):
+                for image in os.listdir(slide):
+                    shutil.copy(f'{val_path}/{slide}/{image}', f'{self.config['experiment']['project_name']}/ssl_val/{image}')
+        else:
+            for slide in os.listdir(train_path):
+                for image in os.listdir(slide):
+                    shutil.copy(f'{train_path}/{slide}/{image}', f'{self.config['experiment']['project_name']}/ssl_train/{image}')
+
+        if val_path != None:
+            train_ssl_model(method, backbone, ssl_model_name, f'{self.config['experiment']['project_name']}/ssl_train',
+                        f'{self.config['experiment']['project_name']}/ssl_val')
+        else:
+            train_ssl_model(method, backbone, ssl_model_name, f'{self.config['experiment']['project_name']}/ssl_train')
     
     def benchmark(self):
         #Iterate over all possible combinations of hyperparameters

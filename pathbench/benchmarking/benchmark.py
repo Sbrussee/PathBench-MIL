@@ -59,8 +59,7 @@ def benchmark(config, project):
                                    tile_um=combination_dict['tile_um'])
         
         feature_extractor = build_feature_extractor(combination_dict['feature_extraction'],
-                                                    tile_px=combination_dict['tile_px'],
-                                                    tile_um=combination_dict['tile_um'])
+                                                    tile_px=combination_dict['tile_px'])
         
         #Generate feature bags
         os.makedirs(f"experiments/{config['experiment']['project_name']}/bags")
@@ -95,7 +94,7 @@ def benchmark(config, project):
                 outcomes='category',
                 train_dataset=train,
                 val_dataset=val,
-                bags=f"experiments/{config['experiment']['project_name']}/bags/{save_string}",
+                bags=bags,
                 exp_label=f"{save_string}_{index}"
             )
             metrics = calculate_results(val_result, config, save_string)

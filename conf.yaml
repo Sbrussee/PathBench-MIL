@@ -59,8 +59,9 @@ hpo:
 
 ssl:
   method: BarlowTwins
-  train_path: 
-  val_path: ../../../Thom_Doeleman/CLAM_validate_cropped
+  train_path: "experiments/MF_test/tiles/256px 
+  val_path: None
+  val_split: 0.1
   backbone: "resnet18"
   ssl_model_name: BT_test
 
