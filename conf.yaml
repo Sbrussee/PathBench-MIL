@@ -59,7 +59,7 @@ hpo:
 
 ssl:
   method: BarlowTwins
-  train_path: "experiments/MF_test/tiles/256px 
+  train_path: experiments/MF_test/tiles/256px
   val_path: None
   val_split: 0.1
   backbone: "resnet18"
