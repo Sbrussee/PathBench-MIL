@@ -115,7 +115,7 @@ class Experiment():
 
         if val_path != None:
             train_ssl_model(method, backbone, ssl_model_name, f"{self.config['experiment']['project_name']}/ssl_train",
-                        f'{self.config['experiment']['project_name']}/ssl_val')
+                        f"{self.config['experiment']['project_name']}/ssl_val")
         else:
             train_ssl_model(method, backbone, ssl_model_name, f"{self.config['experiment']['project_name']}/ssl_train")
     
