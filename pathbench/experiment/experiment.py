@@ -103,21 +103,21 @@ class Experiment():
             #Copy all files from the training directory to the ssl_train directory
             for slide in os.listdir(train_path):
                 for image in os.listdir(slide):
-                    shutil.copy(f'{train_path}/{slide}/{image}', f'{self.config['experiment']['project_name']}/ssl_train/{image}')
+                    shutil.copy(f'{train_path}/{slide}/{image}', f"{self.config['experiment']['project_name']}/ssl_train/{image}")
             #Copy all files from the validation directory to the ssl_val directory
             for slide in os.listdir(val_path):
                 for image in os.listdir(slide):
-                    shutil.copy(f'{val_path}/{slide}/{image}', f'{self.config['experiment']['project_name']}/ssl_val/{image}')
+                    shutil.copy(f'{val_path}/{slide}/{image}', f"{self.config['experiment']['project_name']}/ssl_val/{image}")
         else:
             for slide in os.listdir(train_path):
                 for image in os.listdir(slide):
-                    shutil.copy(f'{train_path}/{slide}/{image}', f'{self.config['experiment']['project_name']}/ssl_train/{image}')
+                    shutil.copy(f'{train_path}/{slide}/{image}', f"{self.config['experiment']['project_name']}/ssl_train/{image}")
 
         if val_path != None:
-            train_ssl_model(method, backbone, ssl_model_name, f'{self.config['experiment']['project_name']}/ssl_train',
+            train_ssl_model(method, backbone, ssl_model_name, f"{self.config['experiment']['project_name']}/ssl_train",
                         f'{self.config['experiment']['project_name']}/ssl_val')
         else:
-            train_ssl_model(method, backbone, ssl_model_name, f'{self.config['experiment']['project_name']}/ssl_train')
+            train_ssl_model(method, backbone, ssl_model_name, f"{self.config['experiment']['project_name']}/ssl_train")
     
     def benchmark(self):
         #Iterate over all possible combinations of hyperparameters
