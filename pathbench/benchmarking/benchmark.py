@@ -56,8 +56,7 @@ def benchmark(config, project):
 
         #Split datasets into train, val and test
         all_data = project.dataset(tile_px=combination_dict['tile_px'],
-                                   tile_um=combination_dict['tile_um'],
-                                   annotations=config['experiment']['annotation_file'])
+                                   tile_um=combination_dict['tile_um'])
         
         feature_extractor = build_feature_extractor(combination_dict['feature_extraction'],
                                                     tile_px=combination_dict['tile_px'],
