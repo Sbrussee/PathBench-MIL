@@ -74,8 +74,8 @@ class Experiment():
             ssl_parameters['val_path'], ssl_parameters['val_split'],
             ssl_parameters['ssl_model_name'])
         
-        os.makedirs(f'{self.config['experiment']['project_name']}/ssl_train', exist_ok=True)
-        os.makedirs(f'{self.config['experiment']['project_name']}/ssl_val', exist_ok=True)
+        os.makedirs(f'{self.config["experiment"]["project_name"]}/ssl_train', exist_ok=True)
+        os.makedirs(f'{self.config["experiment"]["project_name"]}/ssl_val', exist_ok=True)
 
         if val_path == None and val_split != None:
             #Get all directories in the training directory
