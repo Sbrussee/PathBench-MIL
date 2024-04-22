@@ -92,12 +92,12 @@ class Experiment():
             for slide in train_files:
                 images = os.listdir(f'{train_path}/{slide}')
                 for image in images:
-                    shutil.copy(f'{train_path}/{slide}/{image}', f'{self.config['experiment']['project_name']}/ssl_train/{image}')
+                    shutil.copy(f'{train_path}/{slide}/{image}', f"{self.config['experiment']['project_name']}/ssl_train/{image}")
 
             for slide in val_files:
                 images = os.listdir(f'{train_path}/{slide}')
                 for image in images:
-                    shutil.copy(f'{train_path}/{slide}/{image}', f'{self.config['experiment']['project_name']}/ssl_val/{image}')
+                    shutil.copy(f'{train_path}/{slide}/{image}', f"{self.config['experiment']['project_name']}/ssl_val/{image}")
 
         elif val_path != None:
             #Copy all files from the training directory to the ssl_train directory
