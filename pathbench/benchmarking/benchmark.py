@@ -61,8 +61,8 @@ def benchmark(config, project):
         feature_extractor = build_feature_extractor(combination_dict['feature_extraction'],
                                                     tile_px=combination_dict['tile_px'])
         
-        #Generate feature bags
-        os.makedirs(f"experiments/{config['experiment']['project_name']}/bags")
+        #Generate feature bags.
+        os.makedirs(f"experiments/{config['experiment']['project_name']}/bags", exist_ok=True)
         bags = project.generate_feature_bags(model=feature_extractor, 
                                              dataset= all_data,
                                              normalizer=combination_dict['normalization'],
