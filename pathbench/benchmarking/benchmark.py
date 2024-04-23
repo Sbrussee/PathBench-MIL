@@ -73,13 +73,13 @@ def benchmark(config, project):
                                           normalizer=combination_dict['normalization'])
             visualize_activations(features, config, all_data, save_string)
         """
-        train_set = all_data.filter(filters={'category' : 'train'})
+        train_set = all_data.filter(filters={'dataset' : 'train'})
         
         try:
             train_set.balance(headers='category', strategy=config['experiment']['balancing'])
         except:
             print("Train set balancing failed.")
-        test_set = all_data.filter(filters={'category' : 'validate'})
+        test_set = all_data.filter(filters={'dataset' : 'validate'})
 
         if config['experiment']['split_technique'] == 'k-fold':
             k = config['experiment']['k']
