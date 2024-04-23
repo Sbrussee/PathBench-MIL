@@ -81,15 +81,20 @@ def benchmark(config, project):
             print("Train set balancing failed.")
         test_set = all_data.filter(filters={'category' : 'test'})
 
-        if config['experiment']['split_technique'] == 'k_fold':
+        if config['experiment']['split_technique'] == 'k-fold':
             k = config['experiment']['k']
 
             splits = train_set.k_fold(k=k, labels='category')
+        else:
+            splits = train_set.split(labels='category',
+                                     val_strategy=config['experiment']['split_technqiue'],
+                                     val_fraction=config['experiment']['val_split'])
         
         #Set MIL configuration
         config= mil_config(combination_dict['mil'].lower(), aggregation_level=config['experiment']['aggregation_level'])
 
         index = 1
+        
         for train, val in splits:
             val_result = project.train_mil(
                 config=config,
