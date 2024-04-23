@@ -84,7 +84,7 @@ def benchmark(config, project):
         if config['experiment']['split_technique'] == 'k-fold':
             k = config['experiment']['k']
 
-            splits = train_set.k_fold(k=k, labels='category')
+            splits = train_set.k_fold_split(k=k, labels='category')
         else:
             splits = train_set.split(labels='category',
                                      val_strategy=config['experiment']['split_technqiue'],
