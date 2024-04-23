@@ -62,7 +62,9 @@ class Experiment():
             for source in self.config['datasets'][1:]:
                 self.project.add_source(
                     name=source['name'],
-                    slides=source['slide_path']
+                    slides=source['slide_path'],
+                    tfrecords=source['tfrecord_path'],
+                    tiles=source['tile_path']
                 )
         
     
