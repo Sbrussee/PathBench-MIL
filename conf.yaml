@@ -19,10 +19,14 @@ experiment:
 datasets:
   - name: int_MF
     slide_path: ../../../Thom_Doeleman/CLAM_train_cropped
+    tfrecord_path: int_MF/tfrecrods
+    tile_path: int_MF/tiles
     used_for: training
 
   - name: ext_MF
     slide_path: ../../../Thom_Doeleman/CLAM_validate_cropped
+    tfrecord_path: ext_MF/tfrecrods
+    tile_path: ext_MF/tiles
     used_for: testing
 
 benchmark_parameters:
