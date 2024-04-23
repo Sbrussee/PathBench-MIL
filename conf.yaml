@@ -3,6 +3,7 @@ experiment:
   annotation_file: ../../MF_annotations.csv
   balancing: category
   split_technique: k-fold
+  k: 10
   val_fraction: 0.1
   n_splits: 10
   aggregation_level: slide
