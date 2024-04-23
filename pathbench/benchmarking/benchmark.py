@@ -45,18 +45,16 @@ def benchmark(config, project):
         save_string = "_".join([f"{value}" for value in combination_dict.values()])
         #Run with current parameters
 
-        #Extract tiles with QC for all datasets
-        project.extract_tiles(tile_px=combination_dict['tile_px'],
-                              tile_um=combination_dict['tile_um'],
-                              enable_downsample=False,
+        #Split datasets into train, val and test
+        all_data = project.dataset(tile_px=combination_dict['tile_px'],
+                                   tile_um=combination_dict['tile_um'],
+                                   )
+        
+                #Extract tiles with QC for all datasets
+        all_data.extract_tiles(enable_downsample=False,
                               save_tiles=True,
                               img_format="png",
                               qc="both")
-        
-
-        #Split datasets into train, val and test
-        all_data = project.dataset(tile_px=combination_dict['tile_px'],
-                                   tile_um=combination_dict['tile_um'])
         
         feature_extractor = build_feature_extractor(combination_dict['feature_extraction'],
                                                     tile_px=combination_dict['tile_px'])
