@@ -87,7 +87,7 @@ def benchmark(config, project):
             splits = train_set.k_fold(k=k, labels='category')
         
         #Set MIL configuration
-        config= mil_config(combination_dict['mil'], aggregation_level=config['experiment']['aggregation_level'])
+        config= mil_config(combination_dict['mil'].lower(), aggregation_level=config['experiment']['aggregation_level'])
 
         index = 1
         for train, val in splits:
