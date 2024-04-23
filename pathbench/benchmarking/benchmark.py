@@ -75,8 +75,10 @@ def benchmark(config, project):
         """
         train_set = all_data.filter(filters={'category' : 'train'})
         
-        train_set.balance(headers='category', strategy=config['experiment']['balancing'])
-
+        try:
+            train_set.balance(headers='category', strategy=config['experiment']['balancing'])
+        except:
+            print("Train set balancing failed.")
         test_set = all_data.filter(filters={'category' : 'test'})
 
         if config['experiment']['split_technique'] == 'k_fold':
