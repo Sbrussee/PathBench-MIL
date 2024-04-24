@@ -147,6 +147,7 @@ def benchmark(config, project):
 
 def calculate_results(result, config, save_string):
     metrics = {}
+    print(result)
     y_pred_cols = [c for c in result.columns if c.startswith('y_pred')]
     for idx in range(len(y_pred_cols)):
         m = ClassifierMetrics(
