@@ -134,7 +134,7 @@ def benchmark(config, project):
                 outdir=f"{config['experiment']['project_name']}/mil/{save_string}_{index}"
             )
 
-            number = get_highest_numbered_filename(f"{config['experiment']['project_name']}/mil")
+            number = get_highest_numbered_filename(f"{config['experiment']['project_name']}/mil/{save_string}")
 
             val_result = pd.read_parquet(f"{config['experiment']['project_name']}/mil/{save_string}/{number}-{save_string}/predictions.parquet")
             print(val_result)
