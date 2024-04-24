@@ -136,7 +136,7 @@ def benchmark(config, project):
 
             number = get_highest_numbered_filename(f"{config['experiment']['project_name']}/mil/{save_string}_1")
 
-            val_result = pd.read_parquet(f"{config['experiment']['project_name']}/mil/{save_string}/{number}-{save_string}/predictions.parquet")
+            val_result = pd.read_parquet(f"{config['experiment']['project_name']}/mil/{save_string}_1/{number}-{save_string}/predictions.parquet")
             print(val_result)
             metrics = calculate_results(val_result, config, save_string)
             val_dict = combination_dict.copy()
