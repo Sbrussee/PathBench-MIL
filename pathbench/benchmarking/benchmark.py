@@ -130,7 +130,7 @@ def benchmark(config, project):
                 train_dataset=train,
                 val_dataset=val,
                 bags=bags,
-                exp_label=f"{save_string}_{index}"
+                exp_label=f"{save_string}_{index}",
                 outdir=f"{config['experiment']['project_name']}/mil/{save_string}_{index}"
             )
             metrics = calculate_results(val_result, config, save_string)
