@@ -133,6 +133,9 @@ def benchmark(config, project):
                 exp_label=f"{save_string}_{index}",
                 outdir=f"{config['experiment']['project_name']}/mil/{save_string}_{index}"
             )
+
+            val_result = pd.read_parquet(f"{config['experiment']['project_name']}/mil/{save_string}/predictions.parquet")
+            print(val_result)
             metrics = calculate_results(val_result, config, save_string)
             val_dict = combination_dict.copy()
             val_dict.update(metrics)
@@ -147,6 +150,8 @@ def benchmark(config, project):
                 bags=f"experiments/{config['experiment']['project_name']}/bags/{save_string}",
                 outdir=f"{config['experiment']['project_name']}/mil_eval/{save_string}",
             )   
+
+            test_result = pd.read_parquet(f"{config['experiment']['project_name']}/mil_eval/{save_string}/predictions.parquet")
             
             metrics = calculate_results(test_result, config, save_string)
             test_dict = combination_dict.copy()
