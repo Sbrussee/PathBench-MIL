@@ -119,13 +119,13 @@ def benchmark(config, project):
                                      val_fraction=config['experiment']['val_split'])
         
         #Set MIL configuration
-        config= mil_config(combination_dict['mil'].lower(), aggregation_level=config['experiment']['aggregation_level'])
+        mil_conf = mil_config(combination_dict['mil'].lower(), aggregation_level=config['experiment']['aggregation_level'])
 
         index = 1
         
         for train, val in splits:
             val_result = train_mil(
-                config=config,
+                config=mil_conf,
                 outcomes='category',
                 train_dataset=train,
                 val_dataset=val,
@@ -140,6 +140,7 @@ def benchmark(config, project):
             val_df = val_df.append(val_dict, ignore_index=True)
 
             test_result = eval_mil(
+                config=mil_conf,
                 weights = f"experiments/{config['experiment']['project_name']}/mil/{save_string}_{index}",
                 outcomes='category',
                 dataset=test_set,
