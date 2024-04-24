@@ -8,7 +8,36 @@ import slideflow as sf
 from slideflow.model import build_feature_extractor
 from slideflow.stats.metrics import ClassifierMetrics
 from slideflow.mil import mil_config
+from slideflow.mil import eval_mil
 from ..visualization.visualization import visualize_activations
+
+
+def get_highest_numbered_filename(directory_path):
+    # List all files in the directory
+    files = os.listdir(directory_path)
+
+    # Initialize variables to keep track of the highest number and corresponding filename
+    highest_number = float('-inf')
+    highest_number_filename = None
+
+    # Iterate over each file
+    for filename in files:
+        # Get the part before the first '-'
+        first_part = filename.split('-')[0]
+
+        # Try to convert the first part to a number
+        try:
+            number = int(first_part)
+            # If the converted number is higher than the current highest, update the variables
+            if number > highest_number:
+                highest_number = number
+                highest_number_part = first_part
+        except ValueError:
+            pass  # Ignore non-numeric parts
+
+    return highest_number_part
+
+
 """
 
 
@@ -110,13 +139,13 @@ def benchmark(config, project):
 
             val_df = val_df.append(val_dict, ignore_index=True)
 
-            test_result = project.evaluate_mil(
-                model = f"experiments/{config['experiment']['project_name']}/mil/{save_string}_{index}",
+            test_result = eval_mil(
+                weights = f"experiments/{config['experiment']['project_name']}/mil/{save_string}_{index}",
                 outcomes='category',
                 dataset=test_set,
                 bags=f"experiments/{config['experiment']['project_name']}/bags/{save_string}",
-                config=config
-            )
+                outdir=f"{config['experiment']['project_name']}/mil_eval/{save_string}",
+            )   
             
             metrics = calculate_results(test_result, config, save_string)
             test_dict = combination_dict.copy()
