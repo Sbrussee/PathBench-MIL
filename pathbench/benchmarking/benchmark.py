@@ -7,8 +7,7 @@ from sklearn.metrics import balanced_accuracy_score, confusion_matrix, Confusion
 import slideflow as sf
 from slideflow.model import build_feature_extractor
 from slideflow.stats.metrics import ClassifierMetrics
-from slideflow.mil import mil_config
-from slideflow.mil import eval_mil
+from slideflow.mil import eval_mil, train_mil, mil_config
 from ..visualization.visualization import visualize_activations
 
 
@@ -125,13 +124,14 @@ def benchmark(config, project):
         index = 1
         
         for train, val in splits:
-            val_result = project.train_mil(
+            val_result = train_mil(
                 config=config,
                 outcomes='category',
                 train_dataset=train,
                 val_dataset=val,
                 bags=bags,
                 exp_label=f"{save_string}_{index}"
+                outdir=f"{config['experiment']['project_name']}/mil/{save_string}_{index}"
             )
             metrics = calculate_results(val_result, config, save_string)
             val_dict = combination_dict.copy()
