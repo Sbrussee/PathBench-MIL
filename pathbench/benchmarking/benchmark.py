@@ -102,6 +102,14 @@ def benchmark(config, project):
                                           normalizer=combination_dict['normalization'])
             visualize_activations(features, config, all_data, save_string)
         
+        if 'mosaic' in config['experiment']['visualization']:
+            features = sf.DatasetFeatures(model=feature_extractor,
+                                          dataset=all_data,
+                                          pooling='avg',
+                                          normalizer=combination_dict['normalization'])
+            mosaic = project.generate_mosaic(features)
+            mosaic.save(config['experiment']['project_name'], f"{config['experiment']['project_name']}/visualizations/mosaic_{save_string}")
+
         train_set = all_data.filter(filters={'dataset' : 'train'})
         
         try:
@@ -148,7 +156,7 @@ def benchmark(config, project):
                 model= f"{config['experiment']['project_name']}/mil/{save_string}_{index}/{number}-{save_string}_{index}",
                 outcomes='category',
                 dataset=test_set,
-                bags=f"{config['experiment']['project_name']}/bags/{save_string}",
+                bags=f"experiments/{config['experiment']['project_name']}/bags/{save_string}",
                 config=mil_conf,
             )   
 
