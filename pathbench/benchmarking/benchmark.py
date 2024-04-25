@@ -95,21 +95,6 @@ def benchmark(config, project):
                                              outdir=f"experiments/{config['experiment']['project_name']}/bags/{save_string}")
         #Currently gives OUTOFMEMORY error, needs reworking
         
-        if 'layer_activations' in config['experiment']['visualization']:
-            features = sf.DatasetFeatures(model=feature_extractor,
-                                          dataset=all_data,
-                                          pooling='avg',
-                                          normalizer=combination_dict['normalization'])
-            visualize_activations(features, config, all_data, save_string)
-        
-        if 'mosaic' in config['experiment']['visualization']:
-            features = sf.DatasetFeatures(model=feature_extractor,
-                                          dataset=all_data,
-                                          pooling='avg',
-                                          normalizer=combination_dict['normalization'])
-            mosaic = project.generate_mosaic(features)
-            mosaic.save(config['experiment']['project_name'], f"{config['experiment']['project_name']}/visualizations/mosaic_{save_string}")
-
         train_set = all_data.filter(filters={'dataset' : 'train'})
         
         try:
@@ -167,6 +152,10 @@ def benchmark(config, project):
             test_dict.update(metrics)
             test_df = test_df.append(test_dict, ignore_index=True)
 
+            if 'layer_activations' in config['experiment']['visualization']:
+                features = project.generate_features(model=feature_extractor,
+                                                 dataset=test_set)
+                visualize_activations(features, config, test_set, save_string)
             index += 1
         print(f"Combination {save_string} finished...")
             
