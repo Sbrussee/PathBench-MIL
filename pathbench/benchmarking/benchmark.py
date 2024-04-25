@@ -144,11 +144,11 @@ def benchmark(config, project):
             val_df = val_df.append(val_dict, ignore_index=True)
             #Test the trained model
             test_result = project.evaluate_mil(
-                model= f"experiments/{config['experiment']['project_name']}/mil/{save_string}_{index}",
+                model= f"experiments/{config['experiment']['project_name']}/mil/{save_string}_{index}/{number}-{save_string}_{index}",
                 outcomes='category',
                 dataset=test_set,
                 bags=f"experiments/{config['experiment']['project_name']}/bags/{save_string}",
-                config=f"experiments/{config['experiment']['project_name']}/mil/{save_string}_{index}/{number}-{save_string}_{index}/mil_params.json",
+                config=mil_conf,
             )   
 
             test_result = pd.read_parquet(f"{config['experiment']['project_name']}/mil_eval/{save_string}_{index}/{number}-{save_string}_1/predictions.parquet")
