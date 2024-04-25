@@ -94,13 +94,14 @@ def benchmark(config, project):
                                              normalizer=combination_dict['normalization'],
                                              outdir=f"experiments/{config['experiment']['project_name']}/bags/{save_string}")
         #Currently gives OUTOFMEMORY error, needs reworking
-        """
+        
         if 'layer_activations' in config['experiment']['visualization']:
             features = sf.DatasetFeatures(model=feature_extractor,
                                           dataset=all_data,
+                                          pooling='avg',
                                           normalizer=combination_dict['normalization'])
             visualize_activations(features, config, all_data, save_string)
-        """
+        
         train_set = all_data.filter(filters={'dataset' : 'train'})
         
         try:
