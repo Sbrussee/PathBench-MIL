@@ -131,7 +131,6 @@ def benchmark(config, project):
                 val_dataset=val,
                 bags=bags,
                 exp_label=f"{save_string}_{index}",
-                outdir=f"{config['experiment']['project_name']}/mil/{save_string}_{index}"
             )
             #Get current newest MIL model number
             number = get_highest_numbered_filename(f"{config['experiment']['project_name']}/mil/{save_string}_1")
@@ -149,7 +148,6 @@ def benchmark(config, project):
                 outcomes='category',
                 dataset=test_set,
                 bags=f"experiments/{config['experiment']['project_name']}/bags/{save_string}",
-                outdir=f"{config['experiment']['project_name']}/mil_eval/{save_string}",
             )   
 
             test_result = pd.read_parquet(f"{config['experiment']['project_name']}/mil_eval/{save_string}_1/{number}-{save_string}_1/predictions.parquet")
