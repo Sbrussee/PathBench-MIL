@@ -133,9 +133,9 @@ def benchmark(config, project):
                 exp_label=f"{save_string}_{index}",
             )
             #Get current newest MIL model number
-            number = get_highest_numbered_filename(f"{config['experiment']['project_name']}/mil/{save_string}_1")
+            number = get_highest_numbered_filename(f"{config['experiment']['project_name']}/mil/{save_string}_{index}")
             #Get the corresponding validation results
-            val_result = pd.read_parquet(f"{config['experiment']['project_name']}/mil/{save_string}_1/{number}-{save_string}_1/predictions.parquet")
+            val_result = pd.read_parquet(f"{config['experiment']['project_name']}/mil/{save_string}_{index}/{number}-{save_string}_{index}/predictions.parquet")
             print(val_result)
             metrics = calculate_results(val_result, config, save_string)
             val_dict = combination_dict.copy()
@@ -148,9 +148,10 @@ def benchmark(config, project):
                 outcomes='category',
                 dataset=test_set,
                 bags=f"experiments/{config['experiment']['project_name']}/bags/{save_string}",
+                config=f"experiments/{config['experiment']['project_name']}/mil/{save_string}_{index}/{number}-{save_string}_{index}/mil_params.json",
             )   
 
-            test_result = pd.read_parquet(f"{config['experiment']['project_name']}/mil_eval/{save_string}_1/{number}-{save_string}_1/predictions.parquet")
+            test_result = pd.read_parquet(f"{config['experiment']['project_name']}/mil_eval/{save_string}_{index}/{number}-{save_string}_1/predictions.parquet")
             
             metrics = calculate_results(test_result, config, save_string)
             test_dict = combination_dict.copy()
@@ -198,6 +199,7 @@ def calculate_results(result, config, save_string):
         print(f"BA cat #{idx}: {balanced_accuracy}")
         metrics['balanced_accuracy'] = balanced_accuracy
         metrics['auc'] = auroc
+
 
 
     plt.figure()
