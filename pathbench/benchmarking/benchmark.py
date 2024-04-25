@@ -146,7 +146,7 @@ def benchmark(config, project):
                 exp_label=f"{save_string}_{index}"
             )   
 
-            test_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}/predictions.parquet")
+            test_result = pd.read_parquet(f"{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}/predictions.parquet")
             
             metrics = calculate_results(test_result, config, save_string)
             test_dict = combination_dict.copy()
