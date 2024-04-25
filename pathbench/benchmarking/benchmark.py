@@ -144,10 +144,10 @@ def benchmark(config, project):
             val_df = val_df.append(val_dict, ignore_index=True)
             #Test the trained model
             test_result = project.evaluate_mil(
-                model= f"experiments/{config['experiment']['project_name']}/mil/{save_string}_{index}/{number}-{save_string}_{index}",
+                model= f"{config['experiment']['project_name']}/mil/{save_string}_{index}/{number}-{save_string}_{index}",
                 outcomes='category',
                 dataset=test_set,
-                bags=f"experiments/{config['experiment']['project_name']}/bags/{save_string}",
+                bags=f"{config['experiment']['project_name']}/bags/{save_string}",
                 config=mil_conf,
             )   
 
