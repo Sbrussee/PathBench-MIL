@@ -171,11 +171,11 @@ def benchmark(config, project):
     test_df_agg = test_df.agg(config['experiment']['evaluation'])
 
     #Save all dataframes
-    os.makedirs(f"{config['experiment']['name']}/results", exist_ok=True)
-    val_df.to_csv(f"{config['experiment']['name']}/results/val_results_{save_string}.csv")
-    test_df.to_csv(f"{config['experiment']['name']}/results/test_results_{save_string}.csv")
-    val_df_agg.to_csv(f"{config['experiment']['name']}/results/val_results_agg_{save_string}.csv")
-    test_df_agg.to_csv(f"{config['experiment']['name']}/results/test_results_agg_{save_string}.csv")
+    os.makedirs(f"{config['experiment']['project_name']}/results", exist_ok=True)
+    val_df.to_csv(f"{config['experiment']['project_name']}/results/val_results_{save_string}.csv")
+    test_df.to_csv(f"{config['experiment']['project_name']}/results/test_results_{save_string}.csv")
+    val_df_agg.to_csv(f"{config['experiment']['project_name']}/results/val_results_agg_{save_string}.csv")
+    test_df_agg.to_csv(f"{config['experiment']['project_name']}/results/test_results_agg_{save_string}.csv")
 
 
 
@@ -219,8 +219,8 @@ def calculate_results(result, config, save_string):
     plt.ylabel("True Positive Rate")
     plt.title("ROC-AUC")
     plt.legend(loc="lower right")
-    os.makedirs(f"{config['experiment']['name']}/visualizations", exist_ok=True)
-    plt.savefig(f"{config['experiment']['name']}/visualizations/roc_auc_{save_string}.png")
+    os.makedirs(f"{config['experiment']['project_name']}/visualizations", exist_ok=True)
+    plt.savefig(f"{config['experiment']['project_name']}/visualizations/roc_auc_{save_string}.png")
     return metrics
 
         
