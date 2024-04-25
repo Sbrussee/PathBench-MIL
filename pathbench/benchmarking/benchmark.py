@@ -124,7 +124,7 @@ def benchmark(config, project):
         index = 1
         
         for train, val in splits:
-            val_result = train_mil(
+            val_result = project.train_mil(
                 config=mil_conf,
                 outcomes='category',
                 train_dataset=train,
@@ -144,8 +144,7 @@ def benchmark(config, project):
 
             val_df = val_df.append(val_dict, ignore_index=True)
             #Test the trained model
-            test_result = eval_mil(
-                config=mil_conf,
+            test_result = project.evaluate_mil(
                 weights = f"experiments/{config['experiment']['project_name']}/mil/{save_string}_{index}",
                 outcomes='category',
                 dataset=test_set,
