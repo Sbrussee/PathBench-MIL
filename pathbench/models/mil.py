@@ -9,6 +9,7 @@ import timm
 from timm.data import resolve_data_config
 from timm.data.transforms_factory import create_transform
 from huggingface_hub import login
+import os
 
 class ResNetTrunk(ResNet):
     def __init__(self, *args, **kwargs):
