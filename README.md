@@ -106,6 +106,113 @@ In addition to a wide range of feature extractors, PathBench also includes a wid
 | VarMIL | Supported | Supported | Supported | Supported | |
 | DSMIL | Supported | Supported | Supported | Supported | |
 
+# PathBench Configuration Example
+
+To use PathBench, you need to provide a configuration file in YAML format. Below is an example configuration file:
+
+```yaml
+experiment:
+  project_name: Example_Project # Name of the project, where the results will be saved
+  annotation_file: /path/to/your/annotation_file.csv # Path to the annotation file
+  #splits: /path/to/your/split_file.json # Path to the split file, not required.
+  balancing: category # Training set balancing strategy, can be None, category, slide, patient or tile. 
+  split_technique: k-fold # Splitting technique, can be k-fold or fixed
+  epochs: 5 # Number of training epochs
+  batch_size: 32 # Batch size
+  k: 2 # Number of folds, if split-technique is k-fold
+  val_fraction: 0.1 # Fraction of the training set used for validation
+  aggregation_level: slide # Aggregation level, can be slide or patient
+  with_continue: True # Continue training from a previous checkpoint, if available
+  task: classification # Task, can be classification, regression or survival
+  weights_dir: /path/to/your/pretrained_weights # Path to the model weights
+  visualization: # Visualization options, options: learning_curve, confusion_matrix, roc_curve, umap, mosaic
+    - learning_curve
+    - confusion_matrix
+    - roc_curve
+    - umap
+    - mosaic
+  mode: optimization # Mode to use, either benchmark or optimization
+
+optimization:
+  objective_metric: balanced_accuracy # Objective metric to optimize
+  sampler: TPESampler # Algorithm to use for optimization: grid_search, TPE, Bayesian
+  trials: 100 # Number of optimization trials
+  pruner: HyperbandPruner
+
+datasets: # List of datasets to use, each dataset should have a name, slide_path, tfrecord_path, tile_path and used_for.
+  - name: dataset_1
+    slide_path: /path/to/your/dataset_1/slides
+    tfrecord_path: /path/to/your/dataset_1/tfrecords
+    tile_path: /path/to/your/dataset_1/tiles
+    used_for: training
+
+  - name: dataset_2
+    slide_path: /path/to/your/dataset_2/slides
+    tfrecord_path: /path/to/your/dataset_2/tfrecords
+    tile_path: /path/to/your/dataset_2/tiles
+    used_for: testing
+
+benchmark_parameters: # Parameters for the benchmarking, can be used to compare different methods
+  tile_px: # Tile size in pixels
+    - 256
+  tile_um: # Tile size in micrometers
+    - 20x
+  normalization: # Normalization method, can be macenko, reinhard, ruifrok or cyclegan
+    - macenko
+    - reinhard
+  feature_extraction: # Feature extraction methods
+    - resnet50_imagenet
+    - hibou_b
+  mil: # Multiple instance learning aggregation methods
+    - Attention_MIL
+    - dsmil
+
+# Available normalization methods:
+# - macenko
+# - reinhard
+# - ruifrok
+# - cyclegan
+
+# Available feature extraction methods:
+# - resnet50_imagenet
+# - CTransPath
+# - transpath_mocov3
+# - RetCCL
+# - PLIP
+# - HistoSSL
+# - uni
+# - dino
+# - mocov2
+# - swav
+# - phikon
+# - gigapath
+# - barlow_twins
+# - hibou_b
+# - pathoduet_ihc
+# - pathoduet_he
+# - kaiko_s8
+# - kaiko_s16
+# - kaiko_b8
+# - kaiko_b16
+# - kaiko_l14
+# - h_optimus_0
+# - virchow
+
+# Available MIL aggregation methods:
+# - CLAM_SB
+# - CLAM_MB
+# - Attention_MIL
+# - transmil
+# - bistro.transformer
+# - linear_mil
+# - mean_mil
+# - max_mil
+# - lse_mil
+# - lstm_mil
+# - deepset_mil
+# - distributionpooling_mil
+# - dsmil
+# - varmil
 
 <div style="text-align: center;">
  <img src="PathBench-logo-gecentreerd.png" alt="PathBench Logo" width="550" height="400">
