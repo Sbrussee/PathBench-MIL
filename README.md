@@ -35,8 +35,11 @@ PathBench is being developed at the Leiden University Medical Center: Department
       - benchmark.py
     - experiment/
       - experiment.py
+    - models/
+      - aggregators.py
+      - feature_extractors.py
     - utils
-      - utils.py
+      - calculate_feature_similarity.py
   - requirements.txt
   - README.md
   - LICENSE
