@@ -1,5 +1,5 @@
 <div style="text-align: center;">
- <img src="thumbnail_PathBench-logo-horizontaal" alt="PathBench Logo" width="550" height="400">
+ <img src="thumbnail_PathBench-logo-horizontaal" alt="PathBench" width="550" height="400">
 </div>
 
 # PathBench
