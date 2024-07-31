@@ -213,7 +213,7 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 # - distributionpooling_mil
 # - dsmil
 # - varmil
-
+```
 <div style="text-align: center;">
  <img src="PathBench-logo-gecentreerd.png" alt="PathBench Logo" width="550" height="400">
 </div>
