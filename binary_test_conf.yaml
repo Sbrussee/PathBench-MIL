@@ -1,0 +1,100 @@
+experiment:
+  project_name: MF_TEST # Name of the project, where the results will be saved
+  annotation_file: ../../MF_annotations.csv # Path to the annotation file
+  #splits: MF_split.json # Path to the split file, not required.
+  balancing: category # Training set balancing strategy, can be None, category, slide, patient or tile. 
+  split_technique: k-fold # Splitting technique, can be k-fold or fixed
+  epochs: 5 # Number of training epochs
+  batch_size: 32 # Batch size
+  k: 2 # Number of folds, if split-tecnique is k-fold
+  val_fraction: 0.1 # Fraction of the training set used for validation
+  aggregation_level: slide # Aggregation level, can be slide or patient
+  with_continue: True # Continue training from a previous checkpoint, if available
+  task: classification # Task, can be classification, regression or survival
+  weights_dir : ./pretrained_weights # Path to the model weights
+  visualization: # Visualization options, options: learning_curve, confusion_matrix, roc_curve, umap, mosaic
+    - learning_curve
+    - confusion_matrix
+    - roc_curve
+    - umap
+    - mosaic
+  mode: optimization # Mode to use, either benchmark or optimization
+
+optimization:
+  objective_metric: balanced_accuracy # Objective metric to optimize
+  sampler: TPESampler # Algorithm to use for optimization: grid_search, TPE, Bayesian
+  optimization_trials: 100 # Number of optimization trials
+  pruner: HyperbandPruner
+
+datasets: # List of datasets to use, each dataset should have a name, slide_path, tfrecord_path, tile_path and used_for.
+# The slide_path should be the path to the folder containing the slides.
+# The tfrecord_path should be the path to the folder containing the tfrecords.
+# The tile_path should be the path to the folder containing the tiles.
+# The used_for should be training or testing.
+  - name: int_MF
+    slide_path: ../../../Thom_Doeleman/CLAM_train_cropped
+    tfrecord_path: int_MF/tfrecrods
+    tile_path: int_MF/tiles
+    used_for: training
+
+  - name: ext_MF
+    slide_path: ../../../Thom_Doeleman/CLAM_validate_cropped
+    tfrecord_path: ext_MF/tfrecrods
+    tile_path: ext_MF/tiles
+    used_for: testing
+
+benchmark_parameters: # Parameters for the benchmarking, can be used to compare different methods
+  tile_px: # Tile size in pixels
+    - 256
+  tile_um: # Tile size in micrometers
+    - 20x
+  normalization: # Normalization method, can be macenko, reinhard, ruifrok or cyclegan
+    - macenko
+    - reinhard
+#   - ruifrok
+#   - cyclegan
+  feature_extraction: # Feature extraction methods. 
+  # Available methods: resnet50_imagnet, CTransPath, transpath_mocov3, RetCCL, PLIP, HistoSSL,
+  # uni, dino, mocov2, swav, phikon, gigapath, barlow_twins, hibou_b, pathoduet_ihc, pathoduet_he,
+  # kaiko_s8, kaiko_s16, kaiko_b8, kaiko_b16, kaiko_l14, h_optimus_0, virchow
+    #- resnet50_imagenet
+    #- CTransPath
+    #- transpath_mocov3
+    #- RetCCL
+    #- PLIP
+    #- HistoSSL
+    #- uni #GATED
+    #- dino
+    #- mocov2
+    #- swav
+    #- phikon
+    #- gigapath #GATED
+    #- barlow_twins
+    - hibou_b
+    #- pathoduet_ihc
+    #- pathoduet_he
+    #- kaiko_s8
+    #- kaiko_s16
+    #- kaiko_b8
+    #- kaiko_b16
+    #- kaiko_l14
+    #- h_optimus_0
+    #- virchow #GATED
+
+  mil: # Multiple instance learning aggregation methods
+  # Available methods: Attention_MIL, transmil, bistro.transformer, linear_mil, mean_mil, max_mil,
+  # lse_mil, lstm_mil, deepset_mil, distributionpooling_mil, dsmil, varmil
+    #- CLAM_SB
+    #- CLAM_MB
+    #- Attention_MIL
+    #- transmil
+    #- bistro.transformer
+    #- linear_mil
+    #- mean_mil
+    #- max_mil
+    #- lse_mil
+    #- lstm_mil
+    #- deepset_mil
+    #- distributionpooling_mil
+    - dsmil
+    - varmil

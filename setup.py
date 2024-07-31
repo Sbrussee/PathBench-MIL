@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name='PathBench',
     version='0.1.0',
-    description='Easy benchmarking for MIL & SSL models for Histopathology',
+    description='Easy benchmarking for MIL models for Histopathology',
     author='S Brussee',
     author_email='s.brussee@lumc.nl',
     url='https://github.com/your-username/your-repo',

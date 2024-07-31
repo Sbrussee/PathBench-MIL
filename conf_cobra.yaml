@@ -1,0 +1,73 @@
+experiment:
+  project_name: COBRA
+  annotation_file: ../../../cobra/cobra_annotations.csv
+  balancing: category
+  split_technique: k-fold
+  splits: "COBRA_splits.json"
+  epochs: 10
+  batch_size: 32
+  k: 10
+  val_fraction: 0.1
+  n_splits: 10
+  aggregation_level: slide
+
+  evaluation:
+    - balanced_accuracy
+    - auc
+
+  visualization:
+    - learning_curve
+    - confusion_matrix
+    - roc_curve
+    - layer_activations
+
+datasets:
+  - name: bcc
+    slide_path: ../../../cobra/package/bcc/data/images
+    masks: ../../../cobra/package/bcc/data/tissue_masks
+    tfrecord_path: COBRA/bcc_tfrecords
+    tile_path: COBRA/bcc_tiles
+    used_for: training
+
+  - name: non-malignant
+    slide_path: ../../../cobra/package/non-malignant/data/images
+    masks: ../../../cobra/package/non-malignant/data/tissue_masks
+    tfrecord_path: COBRA/non-malignant_tfrecords
+    tile_path: COBRA/non-malignant_tiles
+    used_for: training
+
+benchmark_parameters:
+  tile_px:
+    - 256
+  tile_um:
+    - 40x
+  normalization:
+    - macenko
+    - reinhard
+    - vahadane
+  feature_extraction:
+    - resnet50_imagenet
+    - CTransPath
+    - RetCCL
+    - PLIP
+    - HistoSSL
+    - uni
+    - barlow_twins
+  mil:
+    - CLAM_SB
+    - CLAM_MB
+    - Attention_MIL
+  
+hpo:
+  method: grid_search
+  hyperparameter_file: conf.yaml
+
+ssl:
+  method: BarlowTwins
+  train_path: experiments/MF_TEST/tiles/256px_40x
+  val_path: ext_MF/tiles/256px_40x
+  val_split: 0.1
+  backbone: "resnet18"
+  ssl_model_name: BT_test
+
+mode: exploration

@@ -102,7 +102,13 @@ class BarlowTwins(pl.LightningModule):
         return z
     
     def training_step(self, batch, batch_id):
-        (x0, x1) = batch
+        print(batch)
+        print("BATCH SHAPE")
+        print(len(batch))
+        print(batch[0].shape, batch[1].shape)
+        x0, x1 = batch[0], batch[1]
+        print("X0 shape, X1 shape")
+        print(x0.shape, x1.shape)
         z0 = self.forward(x0)
         z1 = self.forward(x1)
         loss = self.criterion(z0, z1)
@@ -282,8 +288,6 @@ def train_ssl_model(method, backbone_model, ssl_model_name, path_to_train, path_
     if path_to_val:
         val_dataset = LightlyDataset(path_to_val, transform=transform)
         val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=256, shuffle=False, drop_last=False, num_workers=8)
-
-    trainer = pl.Trainer(max_epochs=200, gpus=1 if torch.cuda.is_available() else 0, accelerator="ddp")
     
     early_stop_callback = pl.callbacks.EarlyStopping(
         monitor='val_loss',
@@ -293,7 +297,9 @@ def train_ssl_model(method, backbone_model, ssl_model_name, path_to_train, path_
         mode='min'
     )
 
-    trainer.fit(model=model, train_dataloader=train_loader, val_dataloaders=val_loader, callbacks=[early_stop_callback])
+    trainer = pl.Trainer(max_epochs=200, accelerator="gpu" if torch.cuda.is_available() else "cpu", strategy="ddp", callbacks=[early_stop_callback])
+    print("Starting SSL training...")
+    trainer.fit(model, train_loader, val_loader)
 
     os.makedirs("train_checkpoints", exist_ok=True)
     #Save the trained model
