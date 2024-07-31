@@ -1,4 +1,9 @@
-# PathBench <img src="PathBench-logo-gecentreerd.png" alt="PathBench Logo" width="200" height="100">
+<div style="text-align: center;">
+ <img src="PathBench-logo-gecentreerd.png" alt="PathBench Logo" width="650" height="500">
+</div>
+
+# PathBench
+
 
 PathBench is a Python package designed to facilitate benchmarking, experimentation, and optimization of Multiple Instance Learning (MIL) and Semi-Supervised Learning (SSL) methods for computational histopathology. It provides tools for conducting experiments, evaluating performance, visualizing results, and optimizing hyperparameters. PathBench is built on top of SlideFlow for handling Whole Slide images, Lightly for SSL methods, and integrates Optuna for hyperparameter optimization.
 
