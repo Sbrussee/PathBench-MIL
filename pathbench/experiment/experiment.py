@@ -7,8 +7,18 @@ from ..benchmarking.benchmark import benchmark
 from ..models.ssl import train_ssl_model
 import random
 import shutil
+import logging
 
-def read_config(config_file):
+def read_config(config_file : str):
+    """
+    Read the configuration file for the experiment
+
+    Args:
+        config_file (str): The path to the configuration file
+    
+    Returns:
+        dict: The configuration dictionary for the experiment
+    """
     with open(config_file, 'r') as f:
         config = yaml.load(f, Loader=yaml.SafeLoader)
     return config
@@ -26,30 +36,59 @@ else:
     print('GPU not available. Using CPU.')
 
 class Experiment():
-    def __init__(self, config_file):
+    """
+    Experiment class, designed to load the data and the configuration of a benchmarking
+    experiement and run the benchmarking experiment.
+
+    Parameters
+    ----------
+    config_file : str
+        The path to the configuration file for the experiment
+    
+    Attributes
+    ----------
+    config : dict
+        The configuration dictionary for the experiment
+    project : slideflow.Project
+        The slideflow project object
+    project_name : str
+        The name of the project
+    
+    Methods
+    -------
+    run()
+        Run the benchmarking experiment
+    load_datasets()
+        Load the datasets into the project
+    benchmark()
+        Run the benchmarking experiment
+    
+    """
+    def __init__(self, config_file : str):
         self.config = read_config(config_file)
-        self.mode = self.config['mode']
         self.load_datasets()
 
     def run(self):
-        if self.mode == 'exploration':
-            self.benchmark()
-        elif self.mode == 'hpo':
-            self.hpo()
-        elif self.mode == 'ssl':
-            self.ssl()
+        self.benchmark()
 
     def load_datasets(self):
+        """
+        Load datasets into the project
+        """
         #Create an experiment folder
         os.makedirs('experiments', exist_ok=True)
 
         self.project_name = self.config['experiment']['project_name']
 
-        first_dataset = self.config['datasets'][0]
+        if 'datasets' in self.config:
+            first_dataset = self.config['datasets'][0]
         #Create project based on first dataset
         #Check if project exists
         if os.path.exists(f"experiments/{self.project_name}"):
-            self.project = sf.load_project(f"experiments/{self.project_name}")
+            self.project = sf.Project(f"experiments/{self.project_name}",
+            annotations=self.config['experiment']['annotation_file'])
+            logging.info(f"Project {self.project_name} loaded")
+            logging.info(f"Annotations in project: {self.project.annotations}")
         else:
             self.project = sf.create_project(
                 name=self.project_name,
@@ -57,6 +96,8 @@ class Experiment():
                 annotations=self.config['experiment']['annotation_file'],
                 slides=first_dataset['slide_path']
             ) 
+            logging.info(f"Project {self.project_name} created")
+
         #Add additional datasets to the project
         if len(self.config['datasets']) > 1:
             for source in self.config['datasets'][1:]:
@@ -67,7 +108,8 @@ class Experiment():
                     tiles=source['tile_path']
                 )
         
-    
+        
+    """
     def ssl(self):
         ssl_parameters = self.config['ssl']
         (method, backbone, train_path, val_path, val_split,
@@ -104,15 +146,15 @@ class Experiment():
         elif val_path != None:
             #Copy all files from the training directory to the ssl_train directory
             for slide in os.listdir(train_path):
-                for image in os.listdir(slide):
+                for image in os.listdir(f"{train_path}/{slide}"):
                     shutil.copy(f'{train_path}/{slide}/{image}', f"{self.config['experiment']['project_name']}/ssl_train/{image}")
             #Copy all files from the validation directory to the ssl_val directory
             for slide in os.listdir(val_path):
-                for image in os.listdir(slide):
+                for image in os.listdir(f"{val_path}/{slide}"):
                     shutil.copy(f'{val_path}/{slide}/{image}', f"{self.config['experiment']['project_name']}/ssl_val/{image}")
         else:
             for slide in os.listdir(train_path):
-                for image in os.listdir(slide):
+                for image in os.listdir(f"{train_path}/{slide}"):
                     shutil.copy(f'{train_path}/{slide}/{image}', f"{self.config['experiment']['project_name']}/ssl_train/{image}")
 
         if val_path != None:
@@ -120,14 +162,13 @@ class Experiment():
                         f"{self.config['experiment']['project_name']}/ssl_val")
         else:
             train_ssl_model(method, backbone, ssl_model_name, f"{self.config['experiment']['project_name']}/ssl_train")
-    
+    """
     def benchmark(self):
         #Iterate over all possible combinations of hyperparameters
         benchmark(self.config, self.project)
 
-
-
+    """
     def hpo(self):
         optimizer = HyperParameterOptimizer()
         optimizer.run()
-
+    """

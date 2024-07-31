@@ -1,0 +1,49 @@
+experiment:
+  project_name: MF_TEST
+  annotation_file: fake_multiclass_prediction_data.csv
+  balancing: category
+  split_technique: k-fold
+  epochs: 10
+  batch_size: 32
+  k: 5
+  val_fraction: 0.1
+  aggregation_level: slide
+  with_continue: True
+  task: classification
+
+  evaluation:
+    - balanced_accuracy
+    - auc
+
+  visualization:
+    - learning_curve
+    - confusion_matrix
+    - roc_curve
+    - layer_activations
+
+datasets:
+  - name: int_MF
+    slide_path: ../../../Thom_Doeleman/CLAM_train_cropped
+    tfrecord_path: int_MF/tfrecrods
+    tile_path: int_MF/tiles
+    splits: int_MF_splits.json
+    used_for: training
+
+  - name: ext_MF
+    slide_path: ../../../Thom_Doeleman/CLAM_validate_cropped
+    tfrecord_path: ext_MF/tfrecrods
+    tile_path: ext_MF/tiles
+    used_for: testing
+
+benchmark_parameters:
+  tile_px:
+    - 256
+  tile_um:
+    - 20x
+  normalization:
+    - macenko
+  feature_extraction:
+    - resnet50_imagenet
+  mil:
+    - CLAM_SB
+    - Attention_MIL

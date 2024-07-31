@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/pathbench/utils/calculate_feature_similarity.py", line 270, in <module>
+    main()
+  File "/exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/pathbench/utils/calculate_feature_similarity.py", line 243, in main
+    slides = pd.read_csv("/exports/path-cutane-lymfomen-hpc/siemen/MF_annotations.csv")['slide'].unique()
+NameError: name 'pd' is not defined
