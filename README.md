@@ -1,5 +1,5 @@
 <div style="text-align: center;">
- <img src="thumbnail_PathBench-logo-horizontaal" alt="PathBench" width="550" height="400">
+ <img src="thumbnail_PathBench-logo-horizontaal.png" alt="PathBench" width="550" height="400">
 </div>
 
 # PathBench
@@ -41,7 +41,7 @@ You can install PathBench and its dependencies using pip:
 
 ```bash
 pip install pathbench
-
+```
 
 <div style="text-align: center;">
  <img src="PathBench-logo-gecentreerd.png" alt="PathBench Logo" width="550" height="400">
