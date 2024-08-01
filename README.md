@@ -122,6 +122,7 @@ experiment:
   split_technique: k-fold # Splitting technique, can be k-fold or fixed
   epochs: 5 # Number of training epochs
   batch_size: 32 # Batch size
+  bag_size : 512 # Bag size for MIL
   k: 2 # Number of folds, if split-technique is k-fold
   val_fraction: 0.1 # Fraction of the training set used for validation
   aggregation_level: slide # Aggregation level, can be slide or patient
@@ -216,6 +217,9 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 # - distributionpooling_mil
 # - dsmil
 # - varmil
+
+weights_dir : ./pretrained_weights
+
 ```
 
 ## Extending PathBench
