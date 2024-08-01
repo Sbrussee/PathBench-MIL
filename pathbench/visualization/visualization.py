@@ -8,7 +8,7 @@ from lifelines.utils import concordance_index
 from sklearn.calibration import calibration_curve
 from sksurv.metrics import cumulative_dynamic_auc
 import scipy.stats as stats
-from sklearn.metrics import precision_recall_curve, average_precision_score
+from sklearn.metrics import precision_recall_curve, average_precision_score, roc_curve, auc
 import seaborn as sns
 import logging
 import sys
@@ -77,18 +77,64 @@ def visualize_activations(config : dict, dataset : str,
         plt.close()
 
 
+def plot_roc_auc(y_true, y_pred_prob, save_path, save_string, dataset_type):
+    """
+    Plots the ROC-AUC curve along with a diagonal baseline and the legend showing the AUC score.
+
+    Args:
+        y_true: The true labels
+        y_pred_prob: The predicted probabilities
+        save_path: Path to save the plot
+        save_string: String to append to the saved plot filename
+        dataset_type: Type of the dataset (e.g., train, test, validation)
+    """
+    fpr, tpr, _ = roc_curve(y_true, y_pred_prob)
+    roc_auc = auc(fpr, tpr)
+
+    plt.figure()
+    plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title(f'Receiver Operating Characteristic - {dataset_type}')
+    plt.legend(loc="lower right")
+    plt.grid(True)
+
+    os.makedirs(save_path, exist_ok=True)
+    plt.savefig(f"{save_path}/roc_auc_{save_string}_{dataset_type}.png")
+    plt.close()
+
+    logging.info(f"ROC-AUC plot saved at {save_path}/roc_auc_{save_string}_{dataset_type}.png")
+
 def plot_precision_recall_curve(y_true : np.array, y_pred_prob : np.array, save_path : str, save_string : str, dataset_type : str):
+    """
+    Plot the precision-recall curve based on the true labels and predicted probabilities
+
+    Args:
+        y_true: The true labels
+        y_pred_prob: The predicted probabilities
+        save_path: The save path
+        save_string: The save string
+        dataset_type: The dataset type
+    
+    Returns:
+        None
+    """
     precision, recall, _ = precision_recall_curve(y_true, y_pred_prob)
     average_precision = average_precision_score(y_true, y_pred_prob)
 
     plt.figure(figsize=(10, 6))
     plt.plot(recall, precision, label=f'Precision-Recall curve (AP = {average_precision:.2f})', color='b')
+    #Add baseline precision
+    plt.plot([0, 1], [np.mean(y_true), np.mean(y_true)], linestyle='--', color='r', label='Baseline (random)')
     plt.xlabel('Recall')
     plt.ylabel('Precision')
     plt.title('Precision-Recall Curve')
     plt.legend(loc="lower left")
     plt.grid(True)
-    plt.savefig(f"{save_path}/{dataset_type}_precision_recall_curve_{save_string}.png")
+    plt.savefig(f"{save_path}/precision_recall_curve_{save_string}_{dataset_type}.png")
     plt.close()
 
 def plot_roc_curve_across_splits(rates : list, save_string : str, dataset : str, config : dict):
@@ -134,6 +180,7 @@ def plot_roc_curve_across_splits(rates : list, save_string : str, dataset : str,
     tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
     plt.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2, label=r'$\pm$ 1 std. dev.')
 
+    plt.plot([0, 1], [0, 1], color='red', lw=2, linestyle='--', label='Random')
     plt.xlim([-0.05, 1.05])
     plt.ylim([-0.05, 1.05])
     plt.xlabel('False Positive Rate')
@@ -255,6 +302,8 @@ def plot_precision_recall_curve_across_splits(precision_recall_data: list, save_
     precisions = []
     recalls = []
 
+    logging.info(f"Plotting precision-recall curve for {dataset}...")
+    logging.info(f"Precision-recall data: {precision_recall_data}")
     # Loop through the data to populate the precision and recall lists
     for precision, recall in precision_recall_data:
         precisions.append(precision)
@@ -523,3 +572,41 @@ def plot_calibration_across_splits(results : pd.DataFrame, save_string : str, da
     os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations", exist_ok=True)
     plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/calibration_{save_string}_{dataset}.png")
     plt.close()
+
+#TODO: Implement function that outputs the top 5 most- and least attented tiles
+"""
+def get_top5_annotation_tiles_per_class(attention_map, bag_index, tile_directory, slide_name, diagnosis):
+    #Get the top 5 attention values
+    top5_attention_values = np.argsort(attention_map)[::-1][:5]
+    print(f"Top 5 attention indices: {top5_attention_values}")
+    top5_least_attended = np.argsort(attention_map)[:5]
+
+    #Get the corresponding tile coordinates from bag_index
+    top5_tile_coordinates = bag_index[top5_attention_values]
+    print(f"Top 5 tile coordinates: {top5_tile_coordinates}")
+    top5_least_attended_coordinates = bag_index[top5_least_attended]
+
+    #Get the corresponding tile paths
+    top5_tiles = [f"{tile_directory}/{slide_name}-{coord[0]}-{coord[1]}.png" for coord in top5_tile_coordinates]
+    top5_least_attended_tiles = [f"{tile_directory}/{slide_name}-{coord[0]}-{coord[1]}.png" for coord in top5_least_attended_coordinates]
+    print(f"Top 5 tile paths: {top5_tiles}")
+
+    #Construct top 5 tiles directory
+    os.makedirs(f"top5_tiles", exist_ok=True)
+
+    #Plot the top 5 tiles using matplotlib
+    import matplotlib.pyplot as plt
+    import cv2
+    fig, axs = plt.subplots(1, 5, figsize=(20, 5))
+    for i, tile in enumerate(top5_tiles):
+        img = Image.open(tile)
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        axs[i].imshow(img)
+        axs[i].axis('off')
+    #Set global title above the subplots
+    plt.suptitle(f"Top 5 most attended tiles ({diagnosis} {slide_name})", fontsize=21)
+    plt.tight_layout()
+    plt.savefig(f"top5_tiles/{diagnosis}_{slide_name}_top5_tiles.png")
+    plt.close()
+"""

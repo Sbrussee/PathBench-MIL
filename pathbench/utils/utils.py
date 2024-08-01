@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import os
+import logging
 
 def calculate_entropy(row : pd.Series):
     """
@@ -54,7 +55,7 @@ def get_model_class(module, class_name):
         The class from the module
     """
     return getattr(module, class_name)
-    
+
 def get_highest_numbered_filename(directory_path : str):
     """
     Get the highest numbered filename in the directory
@@ -88,3 +89,42 @@ def get_highest_numbered_filename(directory_path : str):
             pass  # Ignore non-numeric parts
 
     return highest_number_part
+
+def save_correct(result: pd.DataFrame, save_string: str, dataset_type: str, config: dict):
+    """
+    Save CSV files with correct and incorrect predictions.
+
+    Args:
+        result: The results dataframe
+        save_string: The save string
+        dataset_type: Type of dataset (e.g., "val" or "test")
+        config: The configuration dictionary
+
+    Returns:
+        None
+    """
+    # Identify correct predictions
+    y_true = result['y_true'].values
+    y_pred_cols = [c for c in result.columns if c.startswith('y_pred')]
+    
+    # For multiclass classification, find the column with the highest probability for each prediction
+    y_pred_probs = result[y_pred_cols].values
+    y_pred = np.argmax(y_pred_probs, axis=1)
+
+    # Add a column indicating whether the prediction is correct
+    result['correct'] = (y_true == y_pred).astype(int)
+    
+    # Filter correct and incorrect predictions
+    correct_predictions = result[result['correct'] == 1]
+    incorrect_predictions = result[result['correct'] == 0]
+
+    # Save correct predictions to a CSV file
+    correct_save_path = f"experiments/{config['experiment']['project_name']}/results/{save_string}_{dataset_type}_correct.csv"
+    incorrect_save_path = f"experiments/{config['experiment']['project_name']}/results/{save_string}_{dataset_type}_incorrect.csv"
+    os.makedirs(os.path.dirname(correct_save_path), exist_ok=True)
+    
+    correct_predictions.to_csv(correct_save_path, index=False)
+    incorrect_predictions.to_csv(incorrect_save_path, index=False)
+
+    logging.info(f"Correct predictions saved to {correct_save_path}")
+    logging.info(f"Incorrect predictions saved to {incorrect_save_path}")

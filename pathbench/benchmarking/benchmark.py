@@ -22,6 +22,7 @@ import importlib
 import traceback
 import pickle
 import datetime
+import json
 
 from slideflow.model import build_feature_extractor
 
@@ -55,6 +56,9 @@ ESSENTIAL_METRICS = {
     'regression': ['r2_score'],
     'survival': ['c_index']
 }
+
+#Set MIL methods already built into slideflow
+BUILT_IN_MIL = ['clam_sb', 'clam_mb', 'attention_mil', 'mil_fc', 'mil_fc_mc', 'transmil', 'bistro.transformer']
 
 def determine_splits_file(config : dict, project_directory : str):
     """
@@ -177,7 +181,7 @@ def should_continue(config : dict, all_combinations : list):
         finished_combinations = []
         with open(finished_file_path, 'wb') as f:
             pickle.dump(finished_combinations, f)
-        all_combinations = list(product(*combinations))
+        all_combinations = calculate_combinations(config)
         val_df = pd.DataFrame()
         test_df = pd.DataFrame()
     else:
@@ -340,17 +344,18 @@ def set_mil_config(config : dict, combination_dict : dict):
     Returns:
         The MIL configuration
     """
-    built_in_mil = ['clam_sb', 'clam_mb', 'attention_mil', 'mil_fc', 'mil_fc_mc', 'transmil', 'bistro.transformer']
     #Check for non-slideflow MIL method
-    if combination_dict['mil'].lower() not in built_in_mil:
+    if combination_dict['mil'].lower() not in BUILT_IN_MIL:
         mil_method = get_model_class(aggregators, combination_dict['mil'].lower())
         mil_conf = mil_config(mil_method, aggregation_level=config['experiment']['aggregation_level'], trainer="fastai",
-                            epochs=config['experiment']['epochs'], drop_last=False)
+                            epochs=config['experiment']['epochs'], drop_last=False,
+                            batch_size=config['experiment']['batch_size'], bag_size=config['experiment']['bag_size'])
     else:
         mil_method = combination_dict['mil'].lower()
         #Check whether multiclass and CLAM problem
         mil_conf = mil_config(mil_method, aggregation_level=config['experiment']['aggregation_level'], trainer="fastai",
-                    epochs=config['experiment']['epochs'], drop_last=False)
+                    epochs=config['experiment']['epochs'], drop_last=False,
+                    batch_size=config['experiment']['batch_size'], bag_size=config['experiment']['bag_size'])
     return mil_conf
 
 
@@ -390,11 +395,12 @@ def plot_across_splits(config : dict, survival_results_per_split : list, test_su
     elif config['experiment']['task'] == 'classification':    
         plot_roc_curve_across_splits(val_results_per_split, save_string, "val", config)
         plot_roc_curve_across_splits(test_results_per_split, save_string, "test", config)
-        plot_precision_recall_curve_across_splits(val_pr_per_split, save_string, "val", config)
-        plot_precision_recall_curve_across_splits(test_pr_per_split, save_string, "test", config)
+        #TODO: Correctly implement precision-recall curve
+        #plot_precision_recall_curve_across_splits(val_pr_per_split, save_string, "val", config)
+        #plot_precision_recall_curve_across_splits(test_pr_per_split, save_string, "test", config)
 
 
-def build_aggregated_results(val_df : pd.DataFrame, test_df: pd.DataFrame,
+def build_aggregated_results(val_df : pd.DataFrame, test_df: pd.DataFrame, config : dict,
                              benchmark_parameters : dict, aggregation_functions : dict):
     """
     Aggregate the results across splits, based on the relevant metric for each task
@@ -443,7 +449,8 @@ def build_aggregated_results(val_df : pd.DataFrame, test_df: pd.DataFrame,
 
 
 def find_and_apply_best_model(config : dict, val_df_agg : pd.DataFrame, test_df_agg : pd.DataFrame,
-                              benchmark_parameters : dict, val_df : pd.DataFrame, test_df : pd.DataFrame):
+                              benchmark_parameters : dict, val_df : pd.DataFrame, test_df : pd.DataFrame,
+                              val : sf.Dataset, test : sf.Dataset, bags : str, mil_conf : dict, target : str):
     """
     Find and apply the best model based on the relevant metric for each task
 
@@ -487,19 +494,18 @@ def find_and_apply_best_model(config : dict, val_df_agg : pd.DataFrame, test_df_
     best_val_model_df = pd.read_csv(f"experiments/{config['experiment']['project_name']}/saved_models/best_val_model_{date_string}.csv", header=None)
     best_test_model_df = pd.read_csv(f"experiments/{config['experiment']['project_name']}/saved_models/best_test_model_{date_string}.csv", header=None)
 
-    #Get value from series
-    best_weights = test_df['weights']
-    best_weights = best_weights[best_weights.index[0]]
+    #TODO: Find the corresponding test model for the best validation model, which has weights and config
+    #Get best weights
+    best_test_weights = test_df['weights'].iloc[0]
 
-    run_best_model(config, 'val', val, bags, mil_conf, target, best_weights)
-    run_best_model(config, 'test', test, bags, mil_conf, target, best_weights)
+    #Get best model dict
+    best_test_model_dict = json.loads(test_df['mil_params'].iloc[0])
 
-    # Load the configuration as a dictionary
-    best_val_model_dict = dict(zip(list(benchmark_parameters.keys()), best_val_model_df.values[0]))
-    best_test_model_dict = dict(zip(list(benchmark_parameters.keys()), best_test_model_df.values[0]))
+    logging.info("BEST TEST MODEL CONFIG:")
+    logging.info(best_test_model_dict)
 
-    print(best_val_model_dict)
-    print(best_test_model_dict)
+    # Run the best model (on the test set)
+    run_best_model(config, 'test', test, bags, best_test_model_dict, target, best_test_weights)
 
     # Save the best configurations
     with open(f"experiments/{config['experiment']['project_name']}/saved_models/best_val_model_{date_string}.pkl", 'wb') as f:
@@ -631,7 +637,8 @@ def benchmark(config, project):
                     val_dataset=val,
                     bags=bags,
                     exp_label=f"{save_string}_{index}",
-                    task=config['experiment']['task'],
+                    pb_config=config,
+                    proj_dir=project_directory
                 )
                 #Get current newest MIL model number
                 number = get_highest_numbered_filename(f"experiments/{config['experiment']['project_name']}/mil/")
@@ -652,7 +659,7 @@ def benchmark(config, project):
                     val_pr_per_split.append(val_pr_curves)
                 
                 if config['experiment']['task'] == 'classification':
-                    calculate_uncertainty(val_result, save_string, "val", config)
+                    save_correct(val_result, save_string, "val", config)
                 val_dict = combination_dict.copy()
                 val_dict.update(metrics)
 
@@ -665,9 +672,10 @@ def benchmark(config, project):
                     bags=bags,
                     config=mil_conf,
                     outdir=f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}",
-                    task=config['experiment']['task'],
+                    pb_config=config,
+                    proj_dir=project_directory
                 )   
-                if combination_dict['mil'].lower() in built_in_mil:
+                if combination_dict['mil'].lower() in ['clam_sb', 'clam_mb', 'attention_mil', 'mil_fc', 'mil_fc_mc', 'transmil', 'bistro.transformer']:
                     model_string = combination_dict['mil'].lower()
                 else:
                     model_string = f"<class 'pathbench.models.aggregators.{combination_dict['mil'].lower()}'>"
@@ -685,12 +693,12 @@ def benchmark(config, project):
                     test_results_per_split.append([tpr, fpr])
                     test_pr_per_split.append(test_pr_curves)
                 if config['experiment']['task'] == 'classification':
-                    calculate_uncertainty(test_result, save_string, "test", config)
+                    save_correct(test_result, save_string, "test", config)
                 test_dict = combination_dict.copy()
                 test_dict.update(metrics)
                 #Add weights directory to test dict
                 test_dict['weights'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}"
-                
+                test_dict['mil_params'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/mil_params.json"
                 if 'umap' in config['experiment']['visualization'] or 'mosaic' in config['experiment']['visualization']:
                     visualize_activations(config, val, f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}", bags, target, save_string)
                     visualize_activations(config, test, f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}", bags, target, save_string)
@@ -721,9 +729,10 @@ def benchmark(config, project):
     print(val_df, test_df)
     print(list(benchmark_parameters.keys()))
 
-    val_df_agg, test_df_agg = build_aggregated_results(val_df, test_df, benchmark_parameters, aggregation_functions)
+    val_df_agg, test_df_agg = build_aggregated_results(val_df, test_df, config, benchmark_parameters, aggregation_functions)
     
-    find_and_apply_best_model(config, val_df_agg, test_df_agg, benchmark_parameters, val_df, test_df)
+    find_and_apply_best_model(config, val_df_agg, test_df_agg, benchmark_parameters, val_df, test_df,
+                              val, test_set, bags, mil_conf, target)
     
     # Remove the finished combinations
     with open(f"experiments/{config['experiment']['project_name']}/finished_combinations.pkl", 'wb') as f:
@@ -784,7 +793,7 @@ def calculate_results(result: pd.DataFrame, config: dict, save_string: str, data
     """
     metrics = {}
     y_pred_cols = [c for c in result.columns if c.startswith('y_pred')]
-
+    save_path = f"experiments/{config['experiment']['project_name']}/visualizations"
     task = config['experiment']['task']
     
     # Calculate uncertainty for each row if task is classification
@@ -846,6 +855,9 @@ def calculate_results(result: pd.DataFrame, config: dict, save_string: str, data
             average_recalls.append(recall_score((all_y_true == class_label).astype(int), y_pred_binary_opt))
             f1_scores[col] = f1
 
+            plot_roc_auc((all_y_true == class_label).astype(int), y_pred_prob, save_path, save_string, f'class_{class_label}_{dataset_type}')
+  
+        
         # Compute overall class predictions
         all_y_pred_prob = np.vstack(all_y_pred_prob).T
         all_y_pred_class = np.argmax(all_y_pred_prob, axis=1)
@@ -865,7 +877,10 @@ def calculate_results(result: pd.DataFrame, config: dict, save_string: str, data
         # Plot precision-recall curve
         y_true_binary = np.isin(all_y_true, unique_classes[unique_classes != unique_classes[-1]]).astype(int)
         y_pred_prob_binary = all_y_pred_prob[:, unique_classes != unique_classes[-1]].max(axis=1)
-        plot_precision_recall_curve(y_true_binary, y_pred_prob_binary, save_path, save_string)
+        precision, recall, _ = precision_recall_curve(y_true_binary, y_pred_prob_binary)
+        
+        precision_recall_data.append((precision.flatten(), recall.flatten()))
+        plot_precision_recall_curve(y_true_binary, y_pred_prob_binary, save_path, save_string, dataset_type)
 
         # Store metrics
         metrics['balanced_accuracy'] = np.mean(balanced_accuracies)
@@ -935,44 +950,6 @@ def calculate_brier_score(durations : np.array, events : np.array, predictions :
         brier_scores.append(brier_score)
 
     return np.mean(brier_scores)
-
-
-"""
-def get_top5_annotation_tiles_per_class(attention_map, bag_index, tile_directory, slide_name, diagnosis):
-    #Get the top 5 attention values
-    top5_attention_values = np.argsort(attention_map)[::-1][:5]
-    print(f"Top 5 attention indices: {top5_attention_values}")
-    top5_least_attended = np.argsort(attention_map)[:5]
-
-    #Get the corresponding tile coordinates from bag_index
-    top5_tile_coordinates = bag_index[top5_attention_values]
-    print(f"Top 5 tile coordinates: {top5_tile_coordinates}")
-    top5_least_attended_coordinates = bag_index[top5_least_attended]
-
-    #Get the corresponding tile paths
-    top5_tiles = [f"{tile_directory}/{slide_name}-{coord[0]}-{coord[1]}.png" for coord in top5_tile_coordinates]
-    top5_least_attended_tiles = [f"{tile_directory}/{slide_name}-{coord[0]}-{coord[1]}.png" for coord in top5_least_attended_coordinates]
-    print(f"Top 5 tile paths: {top5_tiles}")
-
-    #Construct top 5 tiles directory
-    os.makedirs(f"top5_tiles", exist_ok=True)
-
-    #Plot the top 5 tiles using matplotlib
-    import matplotlib.pyplot as plt
-    import cv2
-    fig, axs = plt.subplots(1, 5, figsize=(20, 5))
-    for i, tile in enumerate(top5_tiles):
-        img = Image.open(tile)
-        if img.mode != 'RGB':
-            img = img.convert('RGB')
-        axs[i].imshow(img)
-        axs[i].axis('off')
-    #Set global title above the subplots
-    plt.suptitle(f"Top 5 most attended tiles ({diagnosis} {slide_name})", fontsize=21)
-    plt.tight_layout()
-    plt.savefig(f"top5_tiles/{diagnosis}_{slide_name}_top5_tiles.png")
-    plt.close()
-"""
 
 def optimize_parameters(config, project):
     def objective(trial):
