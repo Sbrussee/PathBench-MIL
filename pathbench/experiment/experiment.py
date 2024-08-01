@@ -68,6 +68,11 @@ class Experiment():
         self.config = read_config(config_file)
         self.load_datasets()
 
+        WEIGHTS_DIR = self.config['experiment']['weights_dir']
+        # Set environment variables
+        os.environ['TORCH_HOME'] = WEIGHTS_DIR
+        os.environ['HF_HOME'] = WEIGHTS_DIR
+
     def run(self):
         self.benchmark()
 
