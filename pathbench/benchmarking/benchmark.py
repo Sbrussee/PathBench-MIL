@@ -11,9 +11,10 @@ from sksurv.metrics import integrated_brier_score, cumulative_dynamic_auc, brier
 from sksurv.util import Surv
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import (
-    balanced_accuracy_score, f1_score, precision_recall_curve, average_precision_score, confusion_matrix, roc_curve,
+    balanced_accuracy_score, f1_score, precision_recall_curve, recall_score, average_precision_score, confusion_matrix, roc_curve,
     auc, mean_absolute_error, mean_squared_error, r2_score, PrecisionRecallDisplay, ConfusionMatrixDisplay
 )
+from sklearn.preprocessing import label_binarize
 import sys
 import slideflow
 import logging
@@ -33,6 +34,11 @@ import slideflow as sf
 from ..models.feature_extractors import *
 from ..models import aggregators
 
+from ..utils.utils import *
+from ..visualization.visualization import *
+
+
+
 #Set logging level
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -49,57 +55,6 @@ ESSENTIAL_METRICS = {
     'regression': ['r2_score'],
     'survival': ['c_index']
 }
-
-
-def get_model_class(module, class_name):
-    """
-    Get the class from the module based on the class name
-
-    Args:
-        module: The module to get the class from
-        class_name: The name of the class to get
-
-    Returns:
-        The class from the module
-    """
-    return getattr(module, class_name)
-
-
-def get_highest_numbered_filename(directory_path : str):
-    """
-    Get the highest numbered filename in the directory
-
-    Args:
-        directory_path: The path to the directory
-
-    Returns:
-        The highest numbered filename
-    """
-    # List all files in the directory
-    files = os.listdir(directory_path)
-
-    # Initialize variables to keep track of the highest number and corresponding filename
-    highest_number = float('-inf')
-    highest_number_filename = None
-
-    # Iterate over each file
-    for filename in files:
-        # Get the part before the first '-'
-        first_part = filename.split('-')[0]
-
-        # Try to convert the first part to a number
-        try:
-            number = int(first_part)
-            # If the converted number is higher than the current highest, update the variables
-            if number > highest_number:
-                highest_number = number
-                highest_number_part = first_part
-        except ValueError:
-            pass  # Ignore non-numeric parts
-
-    return highest_number_part
-
-
 
 def determine_splits_file(config : dict, project_directory : str):
     """
@@ -197,8 +152,11 @@ def should_continue(config : dict, all_combinations : list):
         val_df: The validation results dataframe
         test_df: The test results dataframe
     """
-    finished_file_path = f"{config['experiment']['project_name']}/finished_combinations.pkl"
+    finished_file_path = f"experiments/{config['experiment']['project_name']}/finished_combinations.pkl"
     
+    directory = os.path.dirname(finished_file_path)
+    os.makedirs(directory, exist_ok=True)
+
     # Ensure the finished_combinations.pkl file exists and is not empty
     if not os.path.exists(finished_file_path):
         with open(finished_file_path, 'wb') as f:
@@ -570,12 +528,14 @@ def benchmark(config, project):
     Returns:
         None
     """
-    #Set the splits
+    
     logging.info("Starting benchmarking...")
     task = config['experiment']['task']
     benchmark_parameters = config['benchmark_parameters']
-    
     project_directory = f"experiments/{config['experiment']['project_name']}"
+    annotations = project.annotations
+    logging.info(f"Using {project_directory} for project directory...")
+    logging.info(f"Using {annotations} for annotations...")
     #Determine splits file
     splits_file = determine_splits_file(config, project_directory)
     
@@ -626,8 +586,7 @@ def benchmark(config, project):
             #Extract tiles with QC for all datasets
             all_data.extract_tiles(enable_downsample=False,
                                     save_tiles=False,
-                                    qc="both",
-                                    skip_extracted=True)
+                                    qc="both")
                                 
             train_set = all_data.filter(filters={'dataset' : 'train'})
 
@@ -681,14 +640,14 @@ def benchmark(config, project):
                 #Print the unique values in y_pred0:
                 print(val_result)
                 if config['experiment']['task'] == 'survival':
-                    metrics, durations, events, predictions = calculate_survival_results(val_result, config, save_string)
+                    metrics, durations, events, predictions = calculate_survival_results(val_result, config, save_string, "val")
                     survival_results_per_split.append((durations, events, predictions))
                 elif config['experiment']['task'] == 'regression':
-                    metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, save_string)
+                    metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, save_string, "val")
                     y_true, y_pred = val_result['y_true'], val_result['y_pred0']
                     val_results_per_split.append((y_true, y_pred))
                 else:
-                    metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, save_string)
+                    metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, save_string, "val")
                     val_results_per_split.append([tpr, fpr])
                     val_pr_per_split.append(val_pr_curves)
                 
@@ -715,14 +674,14 @@ def benchmark(config, project):
                 test_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}/00000-{model_string}/predictions.parquet")
                 print(test_result)
                 if config['experiment']['task'] == 'survival':
-                    metrics, durations, events, predictions = calculate_survival_results(test_result, config, save_string)
+                    metrics, durations, events, predictions = calculate_survival_results(test_result, config, save_string, "test")
                     test_survival_results_per_split.append((durations, events, predictions))
                 elif config['experiment']['task'] == 'regression':
-                    metrics, tpr, fprr, test_pr_curves = calculate_results(test_result, config, save_string)
+                    metrics, tpr, fprr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
                     y_true, y_pred = test_result['y_true'], test_result['y_pred0']
                     test_results_per_split.append((y_true, y_pred))
                 else:
-                    metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string)
+                    metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
                     test_results_per_split.append([tpr, fpr])
                     test_pr_per_split.append(test_pr_curves)
                 if config['experiment']['task'] == 'classification':
@@ -810,123 +769,7 @@ def run_best_model(config: dict, split : int, dataset : sf.Dataset, bags : str, 
     )
 
 
-def visualize_activations(config : dict, dataset : sf.Dataset,
-                          tfrecord_dir : str, bag_dir : str, target : str, save_string : str):
-    """
-    Visualize the activations based on the configuration
-
-    Args:
-        config: The configuration dictionary
-        dataset: The dataset
-        tfrecord_dir: Directory with tfrecords
-        bag_dir: Directory with bags
-        target: The target variable
-        save_string: The save string
-    
-    Returns:
-        None
-
-    """
-
-    
-    dts_ftrs = sf.DatasetFeatures.from_bags(bag_dir)
-
-    slide_map = sf.SlideMap.from_features(dts_ftrs)
-
-    if 'umap' in config['experiment']['visualization'] or 'mosaic' in config['experiment']['visualization']:
-        logging.info("Visualizing activations...")
-        labels, unique_labels = dataset.labels(target, format='name')
-        for index, label in enumerate(unique_labels):
-            try:
-                #TOFIX: DOES NOT WORK NOW
-                slide_map.label_by_preds(index=index)
-                slide_map.save_plot(
-                    filename=f"experiments/{config['experiment']['project_name']}/visualizations/slide_level_umap_pred_{save_string}_{index}",
-                    title=f"Feature UMAP, by prediction of class {index}"
-                )
-
-                plt.close() 
-            except:
-                print(f"Could not visualize UMAP for class {index}")
-                pass
-            
-        slide_map.label_by_slide(labels)
-        #Make a new directory inside visualizations
-        if not os.path.exists(f"experiments/{config['experiment']['project_name']}/visualizations/slide_level_umap_label_{save_string}"):
-            os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations/slide_level_umap_label_{save_string}")
-        slide_map.save_plot(
-            filename=f"experiments/{config['experiment']['project_name']}/visualizations/slide_level_umap_label_{save_string}",
-            title="Feature UMAP, by label",
-            subsample=2000
-        )
-
-        plt.close()
-    
-    if 'mosaic' in config['experiment']['visualization']:
-
-        #TOFIX: DOES NOT WORK NOW!
-        logging.info("Building mosaic...")
-        # Get list of all directories in the tfrecords dir with full path
-        dir_list = [os.path.join(tfrecord_dir, x) for x in os.listdir(tfrecord_dir) if x.endswith('.tfrecord')]
-        print(dir_list)
-        mosaic = slide_map.build_mosaic(tfrecords=dir_list)
-        mosaic.save(
-            filename=f"experiments/{config['experiment']['project_name']}/visualizations/slide_level_mosaic_{save_string}.png"
-        )
-        plt.close()
-
-
-"""
-def augment_bags(bags, config):
-    aug_prob = config['experiment']['aug_prob']
-    augmentations = config['benchmark_parameters']['aug']
-    logging.info(f"Augmenting bags with {augmentations}, probability: {aug_prob}...")
-    
-    # Load the .pt bags
-    for bag in bags:
-        # Load the original features from the bag
-        original_features = torch.load(bag)
-        
-        # Save the original features with '_original' suffix
-        original_bag_name = os.path.splitext(bag)[0] + '_original.pt'
-        torch.save(original_features, original_bag_name)
-        
-        # Initialize augmented_features as the original features
-        augmented_features = original_features.clone()
-        augmented = False  # Flag to track if any augmentation is applied
-
-        # Apply augmentations
-        for aug in augmentations:
-            # With a probability of aug_prob, apply the augmentations
-            if np.random.rand() > aug_prob:
-                continue
-            else:
-                if aug == 'patch_dropout':
-                    augmented_features = patch_dropout(augmented_features)
-                elif aug == 'shuffle_patches':
-                    augmented_features = shuffle_patches(augmented_features)
-                elif aug == 'add_gaussian_noise':
-                    augmented_features = add_gaussian_noise(augmented_features)
-                elif aug == 'random_scaling':
-                    augmented_features = random_scaling(augmented_features)
-                elif aug == 'feature_masking':
-                    augmented_features = feature_masking(augmented_features)
-                elif aug == 'feature_dropout':
-                    augmented_features = feature_dropout(augmented_features)
-                augmented = True
-
-        # Save the augmented bag with the original filename
-        # If no augmentation took place, save the original features
-        if augmented:
-            torch.save(augmented_features, bag)
-            logging.info(f"Augmented bag saved to {bag}")
-        else:
-            # If no augmentation took place, save the original features to the original name
-            torch.save(original_features, bag)
-            logging.info(f"No augmentation applied to {bag}")
-"""
-
-def calculate_results(result : pd.DataFrame, config : dict, save_string : str):
+def calculate_results(result: pd.DataFrame, config: dict, save_string: str, dataset_type : str):
     """
     Calculate the results based on the configuration, given the results dataframe and the
     task.
@@ -943,6 +786,7 @@ def calculate_results(result : pd.DataFrame, config : dict, save_string : str):
     y_pred_cols = [c for c in result.columns if c.startswith('y_pred')]
 
     task = config['experiment']['task']
+    
     # Calculate uncertainty for each row if task is classification
     if task == 'classification':
         result['uncertainty'] = result.apply(calculate_entropy, axis=1)
@@ -955,11 +799,9 @@ def calculate_results(result : pd.DataFrame, config : dict, save_string : str):
     average_precisions = []
     average_recalls = []
     f1_scores = {}
-
     precision_recall_data = []
-
     tpr, fpr = [], []
-    
+
     if task == 'regression':
         # Calculate regression metrics
         y_true = result['y_true'].values
@@ -978,107 +820,62 @@ def calculate_results(result : pd.DataFrame, config : dict, save_string : str):
         logging.info(f"R² Score: {r2}")
 
     else:  # classification and multiclass classification
-        all_y_true = []
-        all_y_pred = []
+        all_y_true = result['y_true'].values
+        all_y_pred_prob = []
         unique_classes = np.unique(result.y_true.values)
 
-        for idx in range(len(y_pred_cols)):
-            y_true_binary = (result.y_true.values == unique_classes[idx]).astype(int)
-            y_pred = result[f'y_pred{idx}'].values
+        for col in y_pred_cols:
+            y_pred_prob = result[col].values
+            class_label = int(col[-1])  # Get the class label from the column name
 
-            m = ClassifierMetrics(y_true=y_true_binary, y_pred=y_pred)
+            all_y_pred_prob.append(y_pred_prob)
+
+            # Binary predictions based on the optimal threshold
+            m = ClassifierMetrics(y_true=(all_y_true == class_label).astype(int), y_pred=y_pred_prob)
             fpr, tpr, auroc, threshold = m.fpr, m.tpr, m.auroc, m.threshold
             optimal_idx = np.argmax(tpr - fpr)
             optimal_threshold = threshold[optimal_idx]
-            y_pred_binary_opt = (y_pred > optimal_threshold).astype(int)
+            y_pred_binary_opt = (y_pred_prob > optimal_threshold).astype(int)
 
-            balanced_accuracy = balanced_accuracy_score(y_true_binary, y_pred_binary_opt)
-            f1 = f1_score(y_true_binary, y_pred_binary_opt)
+            balanced_accuracy = balanced_accuracy_score((all_y_true == class_label).astype(int), y_pred_binary_opt)
+            f1 = f1_score((all_y_true == class_label).astype(int), y_pred_binary_opt)
 
             balanced_accuracies.append(balanced_accuracy)
             aucs.append(auroc)
-            f1_scores[f'f1_score_{idx}'] = f1
+            average_precisions.append(average_precision_score((all_y_true == class_label).astype(int), y_pred_prob))
+            average_recalls.append(recall_score((all_y_true == class_label).astype(int), y_pred_binary_opt))
+            f1_scores[col] = f1
 
-            # Compute precision-recall curve
-            precision, recall, _ = precision_recall_curve(y_true_binary, y_pred)
-            average_precision = average_precision_score(y_true_binary, y_pred)
+        # Compute overall class predictions
+        all_y_pred_prob = np.vstack(all_y_pred_prob).T
+        all_y_pred_class = np.argmax(all_y_pred_prob, axis=1)
 
-            average_precisions.append(average_precision)
-            average_recalls.append(recall.mean())
+        # Compute overall confusion matrix
+        all_cm = confusion_matrix(all_y_true, all_y_pred_class, labels=unique_classes)
 
-            precision_recall_data.append((precision, recall))
-
-            # Collect all true and predicted values
-            all_y_true.extend(result.y_true.values[result.y_true.values == unique_classes[idx]])
-            all_y_pred.extend([unique_classes[idx]] * sum(y_pred_binary_opt))
-
-            # Save correct and incorrect classifications per slide
-            os.makedirs(f"experiments/{config['experiment']['project_name']}/results", exist_ok=True)
-            correct = result[(result.y_true.values == unique_classes[idx])]
-            incorrect = result[(result.y_true.values != unique_classes[idx])]
-            correct.to_csv(f"experiments/{config['experiment']['project_name']}/results/correct_{save_string}_{idx}.csv")
-            incorrect.to_csv(f"experiments/{config['experiment']['project_name']}/results/incorrect_{save_string}_{idx}.csv")
-
-            # Compute and plot the confusion matrix for individual classes
-            cm = confusion_matrix(y_true_binary, y_pred_binary_opt)
-            cm_percentage = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-            disp = ConfusionMatrixDisplay(confusion_matrix=cm_percentage)
-            disp.plot(cmap=plt.cm.Blues)
-            plt.title(f"Confusion Matrix for Class {unique_classes[idx]}")
-            os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations", exist_ok=True)
-            plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/confusion_matrix_{save_string}_{idx}.png")
-            plt.close()
-
-            # Plot ROC-AUC curve
-            plt.figure()
-            lw = 2
-            plt.plot(fpr, tpr, color="orange", lw=lw, label=f"ROC curve (area = %0.2f)" % auroc)
-            plt.plot([0, 1], [0, 1], color="navy", lw=lw, linestyle="--")
-            plt.xlim([0.0, 1.0])
-            plt.ylim([0.0, 1.05])
-            plt.xlabel("False Positive Rate")
-            plt.ylabel("True Positive Rate")
-            plt.title("ROC-AUC")
-            plt.legend(loc="lower right")
-            plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/roc_auc_{save_string}_{idx}.png")
-            plt.close()
-
-            # Plot precision-recall curve
-            plt.figure()
-            plt.plot(recall, precision, color="b", lw=lw, label=f"Precision-Recall curve (area = %0.2f)" % average_precision)
-            plt.xlabel("Recall")
-            plt.ylabel("Precision")
-            plt.title("Precision-Recall Curve")
-            plt.legend(loc="lower left")
-            plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/precision_recall_{save_string}_{idx}.png")
-            plt.close()
-
-            logging.info(f"Results for combination {save_string}:")
-            logging.info(f"Balanced accuracy: {balanced_accuracy}")
-            logging.info(f"AUC: {auroc}")
-            logging.info(f"Average Precision: {average_precision}")
-            logging.info(f"F1 Score: {f1}")
-
-        # Overall confusion matrix
-        all_y_true = np.array(all_y_true)
-        all_y_pred = np.array(all_y_pred)
-        cm_overall = confusion_matrix(all_y_true, all_y_pred, labels=unique_classes)
-        cm_overall_percentage = cm_overall.astype('float') / cm_overall.sum(axis=1)[:, np.newaxis]
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm_overall_percentage, display_labels=unique_classes)
+        # Plot overall confusion matrix
+        save_path = f"experiments/{config['experiment']['project_name']}/visualizations"
+        os.makedirs(save_path, exist_ok=True)
+        disp = ConfusionMatrixDisplay(confusion_matrix=all_cm, display_labels=unique_classes)
         disp.plot(cmap=plt.cm.Blues)
-        plt.title("Overall Confusion Matrix")
-        plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/confusion_matrix_overall_{save_string}.png")
+        plt.title('Overall Confusion Matrix')
+        plt.savefig(f"{save_path}/confusion_matrix_{save_string}_overall.png")
         plt.close()
 
+        # Plot precision-recall curve
+        y_true_binary = np.isin(all_y_true, unique_classes[unique_classes != unique_classes[-1]]).astype(int)
+        y_pred_prob_binary = all_y_pred_prob[:, unique_classes != unique_classes[-1]].max(axis=1)
+        plot_precision_recall_curve(y_true_binary, y_pred_prob_binary, save_path, save_string)
+
+        # Store metrics
         metrics['balanced_accuracy'] = np.mean(balanced_accuracies)
-        metrics.update(f1_scores)
+        metrics['mean_f1'] = np.mean(list(f1_scores.values()))
         metrics['auc'] = np.mean(aucs)
         metrics['mean_average_precision'] = np.mean(average_precisions)
         metrics['mean_average_recall'] = np.mean(average_recalls)
 
         logging.info(f"Balanced Accuracy: {metrics['balanced_accuracy']}")
-        for idx in range(len(y_pred_cols)):
-            logging.info(f"F1 Score for class {unique_classes[idx]}: {metrics[f'f1_score_{idx}']}")
+        logging.info(f"Mean F1 Score: {metrics['mean_f1']}")
         logging.info(f"Mean AUC: {metrics['auc']}")
         logging.info(f"Mean Average Precision: {metrics['mean_average_precision']}")
         logging.info(f"Mean Average Recall: {metrics['mean_average_recall']}")
@@ -1139,510 +936,6 @@ def calculate_brier_score(durations : np.array, events : np.array, predictions :
 
     return np.mean(brier_scores)
 
-def plot_roc_curve_across_splits(rates : list, save_string : str, dataset : sf.Dataset, config : dict):
-    """
-    Plot the ROC curve across splits based on the rates
-
-    Args:
-        rates: The rates
-        save_string: The save string
-        dataset: The dataset
-        config: The configuration dictionary
-    
-    Returns:
-        None
-    """
-    fpr_list = [rate[1] for rate in rates]
-    tpr_list = [rate[0] for rate in rates]
-
-    mean_fpr = np.linspace(0, 1, 100)
-    tprs = []
-    aucs = []
-
-    for i in range(len(fpr_list)):
-        fpr = fpr_list[i]
-        tpr = np.interp(mean_fpr, fpr, tpr_list[i])
-        tpr[0] = 0.0
-        tprs.append(tpr)
-        roc_auc = auc(fpr_list[i], tpr_list[i])
-        aucs.append(roc_auc)
-
-    mean_tpr = np.mean(tprs, axis=0)
-    mean_tpr[-1] = 1.0
-    std_tpr = np.std(tprs, axis=0)
-
-    mean_auc = auc(mean_fpr, mean_tpr)
-    std_auc = np.std(aucs)
-
-    # Plot the ROC curve with shaded standard deviation area
-    plt.figure()
-    plt.plot(mean_fpr, mean_tpr, color='b', label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, std_auc), lw=2, alpha=.8)
-
-    tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
-    tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
-    plt.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2, label=r'$\pm$ 1 std. dev.')
-
-    plt.xlim([-0.05, 1.05])
-    plt.ylim([-0.05, 1.05])
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title('Receiver Operating Characteristic')
-    plt.legend(loc="lower right")
-    os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations", exist_ok=True)
-    plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/roc_auc_{save_string}_{dataset}.png")
-
-def plot_survival_auc_across_folds(results : pd.DataFrame, save_string : str, dataset : sf.Dataset, config : dict):
-    """
-    Plot the survival ROC-AUC across folds based on the results
-
-    Args:
-        results: The results
-        save_string: The save string
-        dataset: The dataset
-        config: The configuration dictionary
-
-    Returns:
-        None
-
-    """
-
-    fig, ax = plt.subplots()
-    all_aucs = []
-    times_list = []
-
-    for durations, events, predictions in results:
-        # Ensure durations and events are numpy arrays
-        durations = np.asarray(durations)
-        events = np.asarray(events)
-        
-        # Create a structured array for survival data
-        survival_data = np.array([(e, d) for e, d in zip(events, durations)], dtype=[('event', '?'), ('time', '<f8')])
-
-        # Ensure time points are within the follow-up time range
-        max_duration = durations.max()
-        times = np.linspace(0, max_duration, 100)
-        times_list.append(times)
-        
-        aucs = []
-        for time in times:
-            if time >= max_duration:
-                continue  # Skip time points that are out of range
-
-            # Calculate AUC and check for validity
-            try:
-                auc_score = cumulative_dynamic_auc(survival_data, survival_data, predictions, time)[0]
-                if not np.isnan(auc_score):
-                    aucs.append(auc_score)
-            except ZeroDivisionError:
-                continue
-
-        if aucs:
-            all_aucs.append(np.array(aucs).flatten())  # Ensure the AUC array is flattened
-            mean_auc = np.mean(aucs)
-            std_auc = np.std(aucs)
-            ax.plot(times[:len(aucs)], aucs, label=f'AUC (mean = {mean_auc:.2f}, std = {std_auc:.2f})')
-
-    if all_aucs:
-        # Determine the maximum length of the AUC lists
-        max_len = max(len(auc) for auc in all_aucs)
-        
-        # Pad the aucs lists to have the same length
-        padded_aucs = np.full((len(all_aucs), max_len), np.nan)
-        for i, auc in enumerate(all_aucs):
-            padded_aucs[i, :len(auc)] = auc
-
-        mean_aucs = np.nanmean(padded_aucs, axis=0)
-        std_aucs = np.nanstd(padded_aucs, axis=0)
-        times = times_list[0]  # Use times from the first split
-        ax.plot(times[:len(mean_aucs)], mean_aucs, label=f'Mean AUC (mean = {np.nanmean(mean_aucs):.2f}, std = {np.nanmean(std_aucs):.2f})', color='blue')
-
-    ax.set_xlabel('Time')
-    ax.set_ylabel('AUC')
-    ax.set_title('Time-dependent ROC-AUC')
-    ax.legend(loc="lower right")
-
-    os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations", exist_ok=True)
-    plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/survival_roc_auc_{save_string}_{dataset}.png")
-    plt.close()
-
-
-def ensure_monotonic(recall : list, precision : list):
-    """
-    Ensure that the recall is monotonically increasing and the precision is non-increasing
-
-    Args:
-        recall: The recall
-        precision: The precision
-
-    Returns:
-        The recall and precision, ensuring the conditions are met
-    """
-    # Ensure that recall is monotonically increasing and precision is non-increasing
-    for i in range(1, len(recall)):
-        if recall[i] < recall[i - 1]:
-            recall[i] = recall[i - 1]
-    for i in range(1, len(precision)):
-        if precision[i] > precision[i - 1]:
-            precision[i] = precision[i - 1]
-    return recall, precision
-
-def plot_precision_recall_curve_across_splits(precision_recall_data : list, save_string : str, dataset : sf.Dataset, config : dict):
-    """
-    Plot the precision-recall curve across splits based on the precision-recall data
-
-    Args:
-        precision_recall_data: The precision-recall data, containing tuples of format (precision, recall)
-        save_string: The save string
-        dataset: The dataset
-        config: The configuration dictionary
-    
-    Returns:
-        None
-    """
-    mean_recall = np.linspace(0, 1, 100)
-    precisions = []
-    aps = []
-    
-    all_y_true = np.concatenate([y_true for y_true, _ in precision_recall_data])
-    baseline_precision = np.mean(all_y_true)  # Ratio of positive samples in the dataset
-
-    for i, (y_true, y_pred) in enumerate(precision_recall_data):
-        precision, recall, _ = precision_recall_curve(y_true, y_pred)
-
-        if recall.ndim > 1 or precision.ndim > 1:
-            recall = recall.flatten()
-            precision = precision.flatten()
-
-        if len(recall) == 0 or len(precision) == 0:
-            print(f"Empty precision or recall for split {i}")
-            continue
-
-        recall_reversed = recall[::-1]
-        precision_reversed = precision[::-1]
-
-        recall_reversed, precision_reversed = ensure_monotonic(recall_reversed, precision_reversed)
-
-        try:
-            interpolated_precision = np.interp(mean_recall, recall_reversed, precision_reversed)
-            precisions.append(interpolated_precision)
-            average_precision = auc(recall_reversed, precision_reversed)
-            aps.append(average_precision)
-            print(f"Interpolated precision for split {i}: {interpolated_precision}"
-                  f"\nAverage precision for split {i}: {average_precision}")
-
-        except ValueError as e:
-            print(f"Error interpolating precision-recall for split {i}: {e}")
-            continue
-
-    if len(precisions) == 0:
-        print("No valid precision-recall data available.")
-        return
-
-    mean_precision = np.nanmean(precisions, axis=0)
-    std_precision = np.nanstd(precisions, axis=0)
-
-    mean_ap = np.nanmean(aps)
-    std_ap = np.nanstd(aps)
-
-    # Plot the mean precision-recall curve with shaded standard deviation area
-    plt.figure()
-    plt.plot(mean_recall, mean_precision, color='b', label=r'Mean Precision-Recall (AP = %0.2f $\pm$ %0.2f)' % (mean_ap, std_ap), lw=2, alpha=.8)
-
-    precisions_upper = np.minimum(mean_precision + std_precision, 1)
-    precisions_lower = np.maximum(mean_precision - std_precision, 0)
-    plt.fill_between(mean_recall, precisions_lower, precisions_upper, color='grey', alpha=.2, label=r'$\pm$ 1 std. dev.')
-
-    # Add baseline precision-recall line
-    plt.plot([0, 1], [baseline_precision, baseline_precision], linestyle='--', color='r', label='Baseline (random)')
-
-    plt.xlim([-0.05, 1.05])
-    plt.ylim([-0.05, 1.05])
-    plt.xlabel('Recall')
-    plt.ylabel('Precision')
-    plt.title('Precision-Recall Curve')
-    plt.legend(loc="lower left")
-    os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations", exist_ok=True)
-    plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/precision_recall_{save_string}_{dataset}.png")
-    plt.close()
-
-def plot_concordance_index_across_folds(results : pd.DataFrame, save_string : str, dataset : sf.Dataset, config : dict):
-    """
-    Plot the concordance index across folds based on the results
-
-    Args:
-        results: The results
-        save_string: The save string
-        dataset: The dataset
-        config: The configuration dictionary
-    
-    Returns:
-        None
-    """
-    fig, ax = plt.subplots()
-    times = np.linspace(0, max(durations.max() for durations, _, _ in results), 100)
-    all_concordances = []
-
-    for durations, events, predictions in results:
-        fold_concordances = []
-        for time in times:
-            mask = durations >= time
-            c_index = concordance_index(durations[mask], predictions[mask], events[mask])
-            fold_concordances.append(c_index)
-        all_concordances.append(fold_concordances)
-
-    mean_concordances = np.mean(all_concordances, axis=0)
-    std_concordances = np.std(all_concordances, axis=0)
-
-    ax.plot(times, mean_concordances, marker='o', linewidth=1, label='Mean Concordance Index')
-    ax.fill_between(times, mean_concordances - std_concordances, mean_concordances + std_concordances, alpha=0.2)
-
-    ax.set_title('Concordance Index Over Time')
-    ax.set_xlabel('Time')
-    ax.set_ylabel('Concordance Index')
-    ax.legend()
-
-    os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations", exist_ok=True)
-    plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/concordance_index_{save_string}_{dataset}.png")
-    plt.close()
-
-def plot_predicted_vs_actual_across_folds(results : pd.DataFrame, save_string : str, dataset : sf.Dataset, config : dict):
-    """
-    Plot the predicted vs actual values across folds based on the results
-
-    Args:
-        results: The results
-        save_string: The save string
-        dataset: The dataset
-        config: The configuration dictionary
-    
-    Returns:
-        None
-    """
-    all_y_true = []
-    all_y_pred = []
-
-    for y_true, y_pred in results:
-        all_y_true.append(y_true)
-        all_y_pred.append(y_pred)
-
-    all_y_true = np.array(all_y_true)
-    all_y_pred = np.array(all_y_pred)
-    mean_y_true = np.mean(all_y_true, axis=0)
-    mean_y_pred = np.mean(all_y_pred, axis=0)
-    std_y_pred = np.std(all_y_pred, axis=0)
-
-    plt.figure()
-    plt.errorbar(mean_y_true, mean_y_pred, yerr=std_y_pred, fmt='o', ecolor='r', capsize=2, label='Mean Predicted vs Actual')
-    plt.plot([min(mean_y_true), max(mean_y_true)], [min(mean_y_true), max(mean_y_true)], color='red', linestyle='--')
-    plt.xlabel('Actual Values')
-    plt.ylabel('Predicted Values')
-    plt.title('Predicted vs Actual')
-    plt.legend()
-
-    os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations", exist_ok=True)
-    plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/predicted_vs_actual_{save_string}_{dataset}.png")
-    plt.close()
-
-def plot_calibration(results : pd.DataFrame, save_string : str, dataset : sf.Dataset, config : dict, bins : int = 10):
-    """
-    Plot the calibration curve based on the results
-
-    Args:
-        results: The results
-        save_string: The save string
-        dataset: The dataset
-        config: The configuration dictionary
-        bins: The number of bins
-
-    Returns:
-        None
-    """
-    plt.figure()
-    for durations, events, predictions in results:
-        # Convert predicted log hazards to predicted risks
-        predictions = np.exp(predictions)
-        predictions = predictions / (1 + predictions)
-
-        true_prob, pred_prob = calibration_curve(events, predictions, n_bins=bins, strategy='uniform')
-        plt.plot(pred_prob, true_prob, marker='o', linewidth=1, label=f'{dataset}')
-
-    plt.plot([0, 1], [0, 1], linestyle='--', label='Perfectly calibrated')
-    plt.title('Calibration Curve')
-    plt.xlabel('Predicted Probability')
-    plt.ylabel('Observed Probability')
-    plt.legend()
-
-    os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations", exist_ok=True)
-    plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/calibration_{save_string}_{dataset}.png")
-    plt.close()
-
-def plot_residuals_across_folds(results : pd.DataFrame, save_string : str, dataset : sf.Dataset, config : dict):
-    """
-    Plot the residuals across folds based on the results
-
-    Args:
-        results: The results
-        save_string: The save string
-        dataset: The dataset
-        config: The configuration dictionary
-    
-    Returns:
-        None
-    """
-
-    all_residuals = []
-
-    for y_true, y_pred in results:
-        residuals = y_true - y_pred
-        all_residuals.append(residuals)
-
-    all_residuals = np.array(all_residuals)
-    mean_residuals = np.mean(all_residuals, axis=0)
-    std_residuals = np.std(all_residuals, axis=0)
-
-    plt.figure()
-    plt.errorbar(np.arange(len(mean_residuals)), mean_residuals, yerr=std_residuals, fmt='o', ecolor='r', capsize=2, label='Mean Residuals')
-    plt.axhline(0, color='red', linestyle='--')
-    plt.xlabel('Predicted Values')
-    plt.ylabel('Residuals')
-    plt.title('Residual Plot')
-    plt.legend()
-
-    os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations", exist_ok=True)
-    plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/residuals_{save_string}_{dataset}.png")
-    plt.close()
-
-def plot_qq_across_folds(results : pd.DataFrame, save_string : str, dataset : sf.Dataset, config : dict):
-    """
-    Plot the Q-Q plot across folds based on the results
-    Args:
-        results: The results
-        save_string: The save string
-        dataset: The dataset
-        config: The configuration dictionary
-
-    Returns:
-        None
-    """
-    plt.figure()
-    for i, (y_true, y_pred) in enumerate(results):
-        residuals = y_true - y_pred
-        stats.probplot(residuals, dist="norm", plot=plt)
-    
-    plt.title('Q-Q Plot')
-    
-    os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations", exist_ok=True)
-    plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/qq_{save_string}_{dataset}.png")
-    plt.close()
-
-def plot_calibration_across_splits(results : pd.DataFrame, save_string : str, dataset : sf.Dataset, config : dict, bins : int = 10):
-    """
-    Plot the calibration curve across splits based on the results
-
-    Args:
-        results: The results
-        save_string: The save string
-        dataset: The dataset
-        config: The configuration dictionary
-        bins: The number of bins
-
-    Returns:
-        None
-    """
-    mean_pred_probs = []
-    mean_true_probs = []
-    all_pred_probs = []
-    all_true_probs = []
-    
-    for durations, events, predictions in results:
-        # Convert predicted log hazards to predicted risks
-        predictions = np.exp(predictions)
-        predictions = predictions / (1 + predictions)
-
-        true_prob, pred_prob = calibration_curve(events, predictions, n_bins=bins, strategy='uniform')
-        mean_pred_probs.append(pred_prob)
-        mean_true_probs.append(true_prob)
-        all_pred_probs.append(pred_prob)
-        all_true_probs.append(true_prob)
-
-    # Calculate the mean and standard error across splits
-    mean_pred_probs = np.mean(mean_pred_probs, axis=0)
-    mean_true_probs = np.mean(mean_true_probs, axis=0)
-    std_true_probs = np.std(all_true_probs, axis=0)
-    
-    plt.figure()
-    plt.plot(mean_pred_probs, mean_true_probs, marker='o', linewidth=1, label='Mean Calibration')
-    plt.fill_between(mean_pred_probs, mean_true_probs - std_true_probs, mean_true_probs + std_true_probs, alpha=0.2, label='±1 std. dev.')
-    plt.plot([0, 1], [0, 1], linestyle='--', label='Perfectly calibrated')
-
-    plt.title('Calibration Curve')
-    plt.xlabel('Predicted Probability')
-    plt.ylabel('Observed Probability')
-    plt.legend()
-
-    os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations", exist_ok=True)
-    plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/calibration_{save_string}_{dataset}.png")
-    plt.close()
-
-def calculate_uncertainty(result : pd.DataFrame, save_string : str, dataset : sf.Dataset, config : dict):
-    """
-    Calculate the uncertainty based on the results
-
-    Args:
-        result: The results dataframe
-        save_string: The save string
-        dataset: The dataset
-        config: The configuration dictionary
-    
-    Returns:
-        None
-    """
-    os.makedirs(f"experiments/{config['experiment']['project_name']}/results", exist_ok=True)
-    result['uncertainty'] = result.apply(calculate_entropy, axis=1)
-    result['certainty'] = 1 - result['uncertainty']
-    result['group'] = result['certainty'].apply(assign_group)
-    result.to_csv(f"experiments/{config['experiment']['project_name']}/results/{dataset}_results_{save_string}.csv")
-    logging.info(f"Uncertainty calculated for {dataset} dataset and saved to experiments/{config['experiment']['project_name']}/results/{dataset}_results_{save_string}.csv")
-
-def calculate_entropy(row : pd.Series):
-    """
-    Calculate the entropy based on the row (instance prediction).
-    We calculate entropy as:
-    -p * log2(p) - (1 - p) * log2(1 - p)
-    where p is the probability of the positive class
-
-    Args:
-        row: The row of the prediction dataframe in question
-    
-    Returns:
-        The entropy
-    """
-    p0 = row['y_pred0']
-    p1 = row['y_pred1']
-    # Ensure the probabilities are valid to avoid log(0)
-    if p0 > 0 and p1 > 0:
-        return - (p0 * np.log2(p0) + p1 * np.log2(p1))
-    else:
-        return 0.0
-
-def assign_group(certainty : float):
-    """
-    Assign a group based on the certainty
-
-    Args:
-        certainty: The certainty value
-
-    Returns:
-        The group
-    """
-    if certainty <= 0.25:
-        return '0-25'
-    elif certainty <= 0.50:
-        return '25-50'
-    elif certainty <= 0.75:
-        return '50-75'
-    else:
-        return '75-100'
 
 """
 def get_top5_annotation_tiles_per_class(attention_map, bag_index, tile_directory, slide_name, diagnosis):
@@ -1700,6 +993,7 @@ def optimize_parameters(config, project):
         config['experiment']['batch_size'] = batch_size
         config['experiment']['balancing'] = balancing
 
+        
     
     sampler_class = getattr(optuna.samplers, config['optimization']['sampler'])
     pruner_class = getattr(optuna.pruners, config['optimization']['pruner'])
@@ -1707,8 +1001,7 @@ def optimize_parameters(config, project):
     study = optuna.create_study(sampler=optuna.samplers.config['optimization']['sampler']())
 
     # Create the study with the specified sampler and pruner
-    study = optuna.create_study(sampler=sampler_class())
+    study = optuna.create_study(sampler=sampler_class(), pruner=pruner_class())
 
     # Optimize the study
-    study.optimize(objective, n_trials=config['optimization']['trials'],
-                pruner=pruner_class())
+    study.optimize(objective, n_trials=config['optimization']['trials'])

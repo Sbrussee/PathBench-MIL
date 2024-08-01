@@ -22,7 +22,6 @@ import functools
 from functools import reduce
 from operator import mul
 
-keys = yaml.load(open("keys.yaml"), Loader=yaml.FullLoader)
 
 # Directory to save pretrained weights
 WEIGHTS_DIR = "pretrained_weights"
@@ -389,6 +388,7 @@ class swav(TorchFeatureExtractor):
         }
     
 
+#NEEDS KEY
 @register_torch
 class uni(TorchFeatureExtractor):
     """
@@ -452,6 +452,7 @@ class uni(TorchFeatureExtractor):
             'class': 'uni',
             'kwargs': {}
         }
+
 
 @register_torch
 class phikon(TorchFeatureExtractor):
@@ -522,6 +523,8 @@ class phikon(TorchFeatureExtractor):
             'class': 'phikon',
             'kwargs': {}
         }
+
+#NEEDS KEY
 @register_torch
 class gigapath(TorchFeatureExtractor):
     """
@@ -1044,6 +1047,7 @@ class VisionTransformerMoCoWithoutHead(VisionTransformer):
         self.pos_embed = nn.Parameter(torch.cat([pe_token, pos_emb], dim=1))
         self.pos_embed.requires_grad = False
         
+#NEEDS LOCAL WEIGHTS
 @register_torch
 class pathoduet_he(TorchFeatureExtractor):
     """
@@ -1098,6 +1102,8 @@ class pathoduet_he(TorchFeatureExtractor):
             'kwargs': {}
         }
 
+
+#NEEDS LOCAL WEIGHTS
 @register_torch
 class pathoduet_ihc(TorchFeatureExtractor):
     """
@@ -1232,6 +1238,7 @@ class hibou_b(TorchFeatureExtractor):
             'kwargs': {}
         }
 
+#GATED
 @register_torch
 class virchow(TorchFeatureExtractor):
     """
@@ -1339,36 +1346,19 @@ class h_optimus_0(TorchFeatureExtractor):
     def __init__(self, tile_px=256):
         super().__init__()
 
-        params = {
-            'patch_size': 14, 
-            'embed_dim': 1536, 
-            'depth': 40, 
-            'num_heads': 24, 
-            'init_values': 1e-05, 
-            'mlp_ratio': 5.33334, 
-            'mlp_layer': functools.partial(
-                timm.layers.mlp.GluMlp, act_layer=torch.nn.modules.activation.SiLU, gate_last=False
-            ), 
-            'act_layer': torch.nn.modules.activation.SiLU, 
-            'reg_tokens': 4, 
-            'no_embed_class': True, 
-            'img_size': 224, 
-            'num_classes': 0, 
-            'in_chans': 3
-        }
-
-        self.model = timm.models.VisionTransformer(**params)
-        self.model.load_state_dict(torch.load(f"{WEIGHTS_DIR}/h_optimus_0.pth"))
-        self.model.to('cuda')
-        self.num_features = 768
-        self.transform = transforms.Compose(
-            [
-                transforms.Resize(224),
-                transforms.ConvertImageDtype(torch.float32),
-                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-            ]
+        self.model = timm.create_model(
+            "hf-hub:bioptimus/H-optimus-0", pretrained=True, init_values=1e-5, dynamic_img_size=False
         )
+        self.model.to("cuda")
         self.model.eval()
+
+        self.transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=(0.707223, 0.578729, 0.703617), 
+                std=(0.211883, 0.230117, 0.177517)
+            ),
+        ])
         # Slideflow standardization
         self.preprocess_kwargs = {'standardize': False}
 

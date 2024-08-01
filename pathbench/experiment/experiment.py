@@ -85,11 +85,15 @@ class Experiment():
         #Create project based on first dataset
         #Check if project exists
         if os.path.exists(f"experiments/{self.project_name}"):
+            logging.info(f"Loading project {self.project_name}")
             self.project = sf.Project(f"experiments/{self.project_name}",
             annotations=self.config['experiment']['annotation_file'])
             logging.info(f"Project {self.project_name} loaded")
             logging.info(f"Annotations in project: {self.project.annotations}")
         else:
+            logging.info(f"Creating project {self.project_name}")
+            os.makedirs(f"experiments", exist_ok=True)
+            os.makedirs(f"experiments/{self.project_name}", exist_ok=True)
             self.project = sf.create_project(
                 name=self.project_name,
                 root=f"experiments/{self.project_name}",
