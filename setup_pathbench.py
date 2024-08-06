@@ -18,6 +18,18 @@ def install_base_packages(env_name):
     # Install wheel, versioneer, cython, and ruamel
     subprocess.check_call([pip_executable, 'install', 'wheel', 'versioneer', 'cython', 'ruamel.yaml<0.18.0'])
 
+def upgrade_pip(env_name):
+    # Determine the paths for the virtual environment
+    if os.name == 'nt':
+        bin_path = os.path.join(env_name, 'Scripts')
+    else:
+        bin_path = os.path.join(env_name, 'bin')
+    
+    pip_executable = os.path.join(bin_path, 'pip')
+
+    # Upgrade pip
+    subprocess.check_call([pip_executable, 'install', '--upgrade', 'pip'])
+
 def run_setup_py(env_name):
     # Activate the virtual environment and run setup.py
     if os.name == 'nt':
@@ -36,6 +48,8 @@ def main():
 
     create_virtualenv(env_name)
     print(f"Created virtual environment in {env_name}")
+    upgrade_pip(env_name)
+    print("Upgraded pip")
     install_base_packages(env_name)
     print("Installed base packages")
     run_setup_py(env_name)
