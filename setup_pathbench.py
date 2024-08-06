@@ -18,7 +18,7 @@ def install_wheel_and_versioneer(env_name):
     pip_executable = os.path.join(bin_path, 'pip')
 
     # Install wheel and versioneer
-    subprocess.check_call([pip_executable, 'install', 'wheel', 'versioneer'])
+    subprocess.check_call([pip_executable, 'install', 'wheel', 'versioneer', 'cython'])
 
 def run_setup_py(env_name):
     if os.name == 'nt':
