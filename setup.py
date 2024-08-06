@@ -7,7 +7,7 @@ def read_requirements():
         return f.read().splitlines()
 
 setup(
-    name='PathBench',
+    name='pathbench',
     version='0.1.0',
     description='Easy benchmarking for MIL models in Histopathology',
     long_description=open('README.md').read() if os.path.exists('README.md') else '',
