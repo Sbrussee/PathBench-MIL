@@ -3,6 +3,9 @@
 </div>
 
 # PathBench
+
+PATHBENCH IS CURRENTLY UNDER DEVELOPMENT, SOME FEATURES MAY NOT WORK AS INTENDED
+
 PathBench is a Python package designed to facilitate benchmarking, experimentation, and optimization of Multiple Instance Learning (MIL) for computational histopathology. It provides tools for conducting experiments, evaluating performance, visualizing results, and optimizing hyperparameters. PathBench is built on top of the excellent [SlideFlow](https://github.com/jamesdolezal/slideflow) package for handling Whole Slide images and integrates Optuna for hyperparameter optimization. PathBench is useful for researchers aiming to benchmarking different pipeline parameters / models for use in their subdomain (in which case the benchmark mode is more suitable) and users starting a Computational Pathology project and wanting to find a suitable pipeline architecture (in which case the optimization mode is more suitable).
 
 PathBench operates in two modes: Benchmark-mode and Optimization-mode. Benchmark mode takes in different options for the computational pipeline (e.g. normalization methods, feature extractors) and benchmarks all possible combinations, outputting a performance table sorted on mode performance. Optimization mode simply aims to find the optimal set of computational pipeline hyperparameters to optimize a set performance objective, it will not test all possible combinations.
@@ -122,6 +125,7 @@ experiment:
   split_technique: k-fold # Splitting technique, can be k-fold or fixed
   epochs: 5 # Number of training epochs
   batch_size: 32 # Batch size
+  bag_size : 512 # Bag size for MIL
   k: 2 # Number of folds, if split-technique is k-fold
   val_fraction: 0.1 # Fraction of the training set used for validation
   aggregation_level: slide # Aggregation level, can be slide or patient
@@ -216,6 +220,9 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 # - distributionpooling_mil
 # - dsmil
 # - varmil
+
+weights_dir : ./pretrained_weights
+
 ```
 
 ## Extending PathBench
