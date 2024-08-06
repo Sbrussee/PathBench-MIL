@@ -16,7 +16,7 @@ def install_base_packages(env_name):
     pip_executable = os.path.join(bin_path, 'pip')
 
     # Install wheel, versioneer, cython, and ruamel
-    subprocess.check_call([pip_executable, 'install', 'wheel', 'versioneer', 'cython', 'ruamel.yaml==0.15.8'])
+    subprocess.check_call([pip_executable, 'install', 'wheel', 'versioneer', 'cython', 'ruamel.yaml'])
 
 def upgrade_pip(env_name):
     # Determine the paths for the virtual environment
