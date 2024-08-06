@@ -1,4 +1,5 @@
 from setuptools import setup, find_packages
+import os
 
 #Read requirements
 def read_requirements():
