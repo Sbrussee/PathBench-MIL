@@ -9,6 +9,48 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+
+class simple_linear_mil(nn.Module):
+    """
+    Simple Multiple instance learning model with linear layers, useful for linear evaluation.
+    
+    Parameters
+    ----------
+    n_feats : int
+        Number of input features
+    n_out : int
+        Number of output classes
+    z_dim : int
+        Dimensionality of the hidden layer
+    dropout_p : float
+        Dropout probability
+    
+    Attributes
+    ----------
+    encoder : nn.Sequential
+        Encoder network
+    head : nn.Sequential
+        Prediction head network
+
+    Methods
+    -------
+    forward(bags)
+        Forward pass through the model
+    """
+
+
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1) -> None:
+        super().__init__()
+        self.encoder = nn.Linear(n_feats, n_out)
+        self.head = nn.Linear(n_out, n_out)
+
+    def forward(self, bags):
+        embeddings = self.encoder(bags)
+        pooled_embeddings = embeddings.mean(dim=1)
+        scores = self.head(pooled_embeddings)
+        return scores
+        
+
 class linear_mil(nn.Module):
     """
     Multiple instance learning model with linear layers.

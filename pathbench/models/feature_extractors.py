@@ -179,7 +179,7 @@ def resnet50(pretrained : bool, progress : bool, key : str, **kwargs):
 class dino(TorchFeatureExtractor):
     """
     Lunit-IO DINO feature extractor, with ViT-Small backbone
-
+    https://openaccess.thecvf.com/content/CVPR2023/html/Kang_Benchmarking_Self-Supervised_Learning_on_Diverse_Pathology_Datasets_CVPR_2023_paper.html
     Parameters
     ----------
     tile_px : int

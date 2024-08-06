@@ -4,7 +4,7 @@ import os
 import torch
 from ..optimization.hpo import HyperParameterOptimizer
 from ..benchmarking.benchmark import benchmark
-from ..models.ssl import train_ssl_model
+from ..benchmarking.benchmark import optimize_parameters
 import random
 import shutil
 import logging
@@ -68,13 +68,18 @@ class Experiment():
         self.config = read_config(config_file)
         self.load_datasets()
 
-        WEIGHTS_DIR = self.config['experiment']['weights_dir']
+        WEIGHTS_DIR = self.config['weights_dir']
         # Set environment variables
         os.environ['TORCH_HOME'] = WEIGHTS_DIR
         os.environ['HF_HOME'] = WEIGHTS_DIR
 
     def run(self):
-        self.benchmark()
+        if self.config['experiment']['mode'] == 'benchmark':
+            self.benchmark()
+        elif self.config['experiment']['mode'] == 'optimization':
+            self.optimize_parameters()
+        else:
+            raise ValueError("Invalid mode. Mode must be either 'benchmark' or 'optimization'")
 
     def load_datasets(self):
         """
@@ -175,6 +180,9 @@ class Experiment():
     def benchmark(self):
         #Iterate over all possible combinations of hyperparameters
         benchmark(self.config, self.project)
+
+    def optimize_parameters(self):
+        optimize_parameters(self.config, self.project)
 
     """
     def hpo(self):
