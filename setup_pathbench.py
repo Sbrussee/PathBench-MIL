@@ -1,59 +1,33 @@
-import os
 import subprocess
-import sys
+import os
 import venv
 
 def create_virtualenv(env_name):
     venv.create(env_name, with_pip=True)
+    print(f"Created virtual environment in {env_name}")
 
-def install_base_packages(env_name):
-    # Determine the paths for the virtual environment
-    if os.name == 'nt':
-        bin_path = os.path.join(env_name, 'Scripts')
-    else:
-        bin_path = os.path.join(env_name, 'bin')
-    
+def upgrade_pip_and_install_tools(env_name):
+    bin_path = os.path.join(env_name, 'Scripts' if os.name == 'nt' else 'bin')
     pip_executable = os.path.join(bin_path, 'pip')
-
-    # Install wheel, versioneer, cython, and ruamel
-    subprocess.check_call([pip_executable, 'install', 'wheel', 'versioneer', 'cython', 'ruamel.yaml', 'numpy==1.22'])
-
-def upgrade_pip(env_name):
-    # Determine the paths for the virtual environment
-    if os.name == 'nt':
-        bin_path = os.path.join(env_name, 'Scripts')
-    else:
-        bin_path = os.path.join(env_name, 'bin')
     
-    pip_executable = os.path.join(bin_path, 'pip')
+    try:
+        subprocess.check_call([pip_executable, 'install', '--upgrade', 'pip'])
+        print("Pip upgraded successfully.")
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to upgrade pip: {e}")
 
-    # Upgrade pip
-    subprocess.check_call([pip_executable, 'install', '--upgrade', 'pip'])
-
-def run_setup_py(env_name):
-    # Activate the virtual environment and run setup.py
-    if os.name == 'nt':
-        activate_script = os.path.join(env_name, 'Scripts', 'activate')
-        python_executable = os.path.join(env_name, 'Scripts', 'python')
-    else:
-        activate_script = os.path.join(env_name, 'bin', 'activate')
-        python_executable = os.path.join(env_name, 'bin', 'python')
-
-    # Source the virtual environment activation script and run setup.py
-    command = f'source {activate_script} && {python_executable} setup.py install'
-    subprocess.check_call(command, shell=True, executable='/bin/bash')
+    try:
+        subprocess.check_call([pip_executable, 'install', 'setuptools', 'wheel', 'versioneer'])
+        print("Setuptools, Wheel, and Versioneer installed successfully.")
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to install setuptools, wheel, and versioneer: {e}")
 
 def main():
     env_name = 'pathbench_env'
-
     create_virtualenv(env_name)
-    print(f"Created virtual environment in {env_name}")
-    upgrade_pip(env_name)
-    print("Upgraded pip")
-    install_base_packages(env_name)
-    print("Installed base packages")
-    run_setup_py(env_name)
-    print("Installed PathBench")
+    upgrade_pip_and_install_tools(env_name)
+    print(f"To activate the virtual environment, use:\nsource {env_name}/bin/activate (on macOS/Linux) or {env_name}\\Scripts\\activate (on Windows)")
+    print("After activating the virtual environment, run `pip install -e .` to install the package.")
 
 if __name__ == "__main__":
     main()
