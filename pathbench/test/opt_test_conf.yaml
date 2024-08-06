@@ -1,0 +1,61 @@
+experiment:
+  project_name: MF_TEST
+  annotation_file: ../../MF_annotations_corrected.csv
+  balancing: category
+  split_technique: k-fold
+  k: 3
+  val_fraction: 0.1
+  aggregation_level: slide
+  task: classification
+
+  evaluation:
+    - balanced_accuracy
+    - auc
+
+  visualization:
+    - confusion_matrix
+    - roc_curve
+
+optimization:
+  objective_metric: balanced_accuracy
+  objective_mode: maximize
+  sampler: TPESampler
+  pruner: HyperbandPruner
+  trials: 20
+
+datasets:
+  - name: int_MF
+    slide_path: ../../../Thom_Doeleman/CLAM_train_cropped
+    tfrecord_path: int_MF/tfrecrods
+    tile_path: int_MF/tiles
+    used_for: training
+
+  - name: ext_MF
+    slide_path: ../../../Thom_Doeleman/CLAM_validate_cropped
+    tfrecord_path: ext_MF/tfrecrods
+    tile_path: ext_MF/tiles
+    used_for: testing
+
+benchmark_parameters:
+  tile_px:
+    - 256
+  tile_um:
+    - 20x
+  normalization:
+    - macenko
+    - reinhard
+  feature_extraction:
+    - resnet50_imagenet
+    - CTransPath
+    - RetCCL
+    - PLIP
+    - uni
+  mil:
+    - CLAM_SB
+    - dsmil
+    - varmil
+    - attention_mil
+
+mode: optimization
+
+weights_dir: ../../PathDev/Pathdev/pretrained_weights
