@@ -1,20 +1,25 @@
 from setuptools import setup, find_packages
 
+#Read requirements
+def read_requirements():
+    with open('requirements.txt') as f:
+        return f.read().splitlines()
+
 setup(
     name='PathBench',
     version='0.1.0',
-    description='Easy benchmarking for MIL models for Histopathology',
+    description='Easy benchmarking for MIL models in Histopathology',
+    long_description=open('README.md').read() if os.path.exists('README.md') else '',
+    long_description_content_type='text/markdown',
     author='S Brussee',
     author_email='s.brussee@lumc.nl',
-    url='https://github.com/your-username/your-repo',
+    url='https://github.com/sbrussee/PathBench',
     packages=find_packages(),
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Developers',
-        'License :: OSI Approved :: MIT License',
+        'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
         'Programming Language :: Python :: 3.8',
     ],
-    install_requires=[
-        # Add any dependencies your package requires
-    ],
+    install_requires=read_requirements(),
 )

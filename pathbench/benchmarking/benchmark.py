@@ -38,6 +38,10 @@ from ..models import aggregators
 from ..utils.utils import *
 from ..visualization.visualization import *
 
+import optuna
+from optuna.samplers import *
+from optuna.pruners import *
+
 
 
 #Set logging level
@@ -348,13 +352,13 @@ def set_mil_config(config : dict, combination_dict : dict):
     if combination_dict['mil'].lower() not in BUILT_IN_MIL:
         mil_method = get_model_class(aggregators, combination_dict['mil'].lower())
         mil_conf = mil_config(mil_method, aggregation_level=config['experiment']['aggregation_level'], trainer="fastai",
-                            epochs=config['experiment']['epochs'], drop_last=False,
+                            epochs=config['experiment']['epochs'], drop_last=True,
                             batch_size=config['experiment']['batch_size'], bag_size=config['experiment']['bag_size'])
     else:
         mil_method = combination_dict['mil'].lower()
         #Check whether multiclass and CLAM problem
         mil_conf = mil_config(mil_method, aggregation_level=config['experiment']['aggregation_level'], trainer="fastai",
-                    epochs=config['experiment']['epochs'], drop_last=False,
+                    epochs=config['experiment']['epochs'], drop_last=True,
                     batch_size=config['experiment']['batch_size'], bag_size=config['experiment']['bag_size'])
     return mil_conf
 
@@ -391,6 +395,8 @@ def plot_across_splits(config : dict, survival_results_per_split : list, test_su
         plot_residuals_across_folds(test_results_per_split, save_string, 'test', config)
         plot_predicted_vs_actual_across_folds(val_results_per_split, save_string, 'val', config)
         plot_predicted_vs_actual_across_folds(test_results_per_split, save_string, 'test', config)
+        plot_qq_across_folds(val_results_per_split, save_string, 'val', config)
+        plot_qq_across_folds(test_results_per_split, save_string, 'test', config)
 
     elif config['experiment']['task'] == 'classification':    
         plot_roc_curve_across_splits(val_results_per_split, save_string, "val", config)
@@ -437,13 +443,13 @@ def build_aggregated_results(val_df : pd.DataFrame, test_df: pd.DataFrame, confi
         test_df_agg = test_df_agg.sort_values(by='c_index_mean', ascending=False)
 
     # Save all dataframes
-    os.makedirs(f"{config['experiment']['project_name']}/results", exist_ok=True)
-    val_df_agg.to_csv(f"{config['experiment']['project_name']}/results/val_results_agg.csv")
-    test_df_agg.to_csv(f"{config['experiment']['project_name']}/results/test_results_agg.csv")
+    os.makedirs(f"experiments/{config['experiment']['project_name']}/results", exist_ok=True)
+    val_df_agg.to_csv(f"experiments/{config['experiment']['project_name']}/results/val_results_agg.csv")
+    test_df_agg.to_csv(f"experiments/{config['experiment']['project_name']}/results/test_results_agg.csv")
 
     # Save the dataframes as HTML
-    val_df_agg.to_html(f"{config['experiment']['project_name']}/results/val_results_agg.html")
-    test_df_agg.to_html(f"{config['experiment']['project_name']}/results/test_results_agg.html")
+    val_df_agg.to_html(f"experiments/{config['experiment']['project_name']}/results/val_results_agg.html")
+    test_df_agg.to_html(f"experiments/{config['experiment']['project_name']}/results/test_results_agg.html")
 
     return val_df_agg, test_df_agg
 
@@ -499,28 +505,26 @@ def find_and_apply_best_model(config : dict, val_df_agg : pd.DataFrame, test_df_
     best_test_weights = test_df['weights'].iloc[0]
 
     #Get best model dict
-    best_test_model_dict = json.loads(test_df['mil_params'].iloc[0])
+    with open(test_df['mil_params'].iloc[0], 'r') as f:
+        best_test_model_dict = json.load(f)
+        # Set model in best_test_model_dict
+        if best_test_model_dict['params']['model'] not in ['attention_mil', 'transmil','bistro.transformer']:
+            best_test_model_dict['params']['model'] = getattr(aggregators, best_test_model_dict['params']['model'])
+        print(best_test_model_dict)
+        best_test_model_config = sf.mil.mil_config(trainer=best_test_model_dict['trainer'], **best_test_model_dict['params'])
 
     logging.info("BEST TEST MODEL CONFIG:")
     logging.info(best_test_model_dict)
 
     # Run the best model (on the test set)
-    run_best_model(config, 'test', test, bags, best_test_model_dict, target, best_test_weights)
+    run_best_model(config, 'test', test, bags, best_test_model_config, target, best_test_weights)
 
     # Save the best configurations
-    with open(f"experiments/{config['experiment']['project_name']}/saved_models/best_val_model_{date_string}.pkl", 'wb') as f:
-        pickle.dump(best_val_model_dict, f)
     with open(f"experiments/{config['experiment']['project_name']}/saved_models/best_test_model_{date_string}.pkl", 'wb') as f:
         pickle.dump(best_test_model_dict, f)
-
-    string_to_search = f"{best_test_model_dict['tile_px']}_{best_test_model_dict['tile_um']}_{best_test_model_dict['normalization']}_{best_test_model_dict['feature_extraction']}_{best_test_model_dict['mil']}"
-    dir_to_search = f"experiments/{config['experiment']['project_name']}/mil"
-    # Get the subdirectories which contain the string
-    subdirs = [f.path for f in os.scandir(dir_to_search) if f.is_dir() and string_to_search in f.path]
-    # Copy these directories into a best model directory
-    os.makedirs(f"experiments/{config['experiment']['project_name']}/saved_models/best_model_{date_string}", exist_ok=True)
-    for subdir in subdirs:
-        shutil.copytree(subdir, f"experiments/{config['experiment']['project_name']}/saved_models/best_model_{date_string}/{os.path.basename(subdir)}")
+    
+    #Copy weights directory of best model to saved_models
+    os.system(f"cp -r {best_test_weights} experiments/{config['experiment']['project_name']}/saved_models/best_test_model_{date_string}")
 
 
 def benchmark(config, project):
@@ -581,7 +585,9 @@ def benchmark(config, project):
             target = determine_target_variable(task, config)
 
             annotation_df = pd.read_csv(project.annotations)
-            n_class = len(annotation_df[target].unique())
+
+            if task == 'classification':
+                n_class = len(annotation_df[target].unique())
 
             #Split datasets into train, val and test
             all_data = project.dataset(tile_px=combination_dict['tile_px'],
@@ -637,8 +643,7 @@ def benchmark(config, project):
                     val_dataset=val,
                     bags=bags,
                     exp_label=f"{save_string}_{index}",
-                    pb_config=config,
-                    proj_dir=project_directory
+                    pb_config=config
                 )
                 #Get current newest MIL model number
                 number = get_highest_numbered_filename(f"experiments/{config['experiment']['project_name']}/mil/")
@@ -647,7 +652,7 @@ def benchmark(config, project):
                 #Print the unique values in y_pred0:
                 print(val_result)
                 if config['experiment']['task'] == 'survival':
-                    metrics, durations, events, predictions = calculate_survival_results(val_result, config, save_string, "val")
+                    metrics, durations, events, predictions = calculate_survival_results(val_result)
                     survival_results_per_split.append((durations, events, predictions))
                 elif config['experiment']['task'] == 'regression':
                     metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, save_string, "val")
@@ -672,8 +677,7 @@ def benchmark(config, project):
                     bags=bags,
                     config=mil_conf,
                     outdir=f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}",
-                    pb_config=config,
-                    proj_dir=project_directory
+                    pb_config=config
                 )   
                 if combination_dict['mil'].lower() in ['clam_sb', 'clam_mb', 'attention_mil', 'mil_fc', 'mil_fc_mc', 'transmil', 'bistro.transformer']:
                     model_string = combination_dict['mil'].lower()
@@ -682,10 +686,10 @@ def benchmark(config, project):
                 test_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}/00000-{model_string}/predictions.parquet")
                 print(test_result)
                 if config['experiment']['task'] == 'survival':
-                    metrics, durations, events, predictions = calculate_survival_results(test_result, config, save_string, "test")
+                    metrics, durations, events, predictions = calculate_survival_results(test_result)
                     test_survival_results_per_split.append((durations, events, predictions))
                 elif config['experiment']['task'] == 'regression':
-                    metrics, tpr, fprr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
+                    metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
                     y_true, y_pred = test_result['y_true'], test_result['y_pred0']
                     test_results_per_split.append((y_true, y_pred))
                 else:
@@ -699,6 +703,7 @@ def benchmark(config, project):
                 #Add weights directory to test dict
                 test_dict['weights'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}"
                 test_dict['mil_params'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/mil_params.json"
+                # Visualize the activations, if applicable
                 if 'umap' in config['experiment']['visualization'] or 'mosaic' in config['experiment']['visualization']:
                     visualize_activations(config, val, f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}", bags, target, save_string)
                     visualize_activations(config, test, f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}", bags, target, save_string)
@@ -717,11 +722,10 @@ def benchmark(config, project):
             val_df.to_csv(f"experiments/{config['experiment']['project_name']}/results/val_results.csv")
             test_df.to_csv(f"experiments/{config['experiment']['project_name']}/results/test_results.csv")
 
-            # Check if there was more than one split
-            if len(splits) > 1:
-                plot_across_splits(config, survival_results_per_split, test_survival_results_per_split,
-                                    val_results_per_split, test_results_per_split, val_pr_per_split, test_pr_per_split,
-                                    save_string)
+            plot_across_splits(config, survival_results_per_split, test_survival_results_per_split,
+                                val_results_per_split, test_results_per_split, val_pr_per_split, test_pr_per_split,
+                                save_string)
+                                    
         except Exception as e:
             logging.warning(f"Combination {save_string} was not succesfully trained due to Error {e}")
             logging.warning(traceback.format_exc())
@@ -739,8 +743,10 @@ def benchmark(config, project):
         pickle.dump({}, f)
 
     # Empty the val and test results
-    os.remove(f"experiments/{config['experiment']['project_name']}/results/val_results.csv")
-    os.remove(f"experiments/{config['experiment']['project_name']}/results/test_results.csv")
+    if os.path.exists(f"experiments/{config['experiment']['project_name']}/results/val_results.csv"):
+        os.remove(f"experiments/{config['experiment']['project_name']}/results/val_results.csv")
+    if os.path.exists(f"experiments/{config['experiment']['project_name']}/results/test_results.csv"):
+        os.remove(f"experiments/{config['experiment']['project_name']}/results/test_results.csv")
     logging.info("Benchmarking finished...")
 
 
@@ -771,10 +777,10 @@ def run_best_model(config: dict, split : int, dataset : sf.Dataset, bags : str, 
         bags=bags,
         config=mil_conf,
         outdir=f"experiments/{config['experiment']['project_name']}/best_model_eval_{split}_{date}",
-        task=config['experiment']['task'],
         attention_heatmaps=True,
         cmap="jet",
-        norm="linear"
+        norm="linear",
+        pb_config=config
     )
 
 
@@ -898,14 +904,12 @@ def calculate_results(result: pd.DataFrame, config: dict, save_string: str, data
     return metrics, tpr, fpr, precision_recall_data
 
 
-def calculate_survival_results(result : pd.DataFrame, config : dict, save_string : str):
+def calculate_survival_results(result : pd.DataFrame):
     """
     Calculate the survival results based on the configuration, given the results dataframe
 
     Args:
         result: The results dataframe
-        config: The configuration dictionary
-        save_string: The save string
 
     Returns:
         The metrics, durations, events and predictions
@@ -951,6 +955,7 @@ def calculate_brier_score(durations : np.array, events : np.array, predictions :
 
     return np.mean(brier_scores)
 
+
 def optimize_parameters(config, project):
     def objective(trial):
         # Load hyperparameters from the config file
@@ -962,7 +967,6 @@ def optimize_parameters(config, project):
         normalization = trial.suggest_categorical('normalization', config['benchmark_parameters']['normalization'])
         feature_extraction = trial.suggest_categorical('feature_extraction', config['benchmark_parameters']['feature_extraction'])
         mil = trial.suggest_categorical('mil', config['benchmark_parameters']['mil'])
-
         logging.info(f"Using suggested hyperparameters: epochs={epochs}, batch_size={batch_size}, balancing={balancing}, tile_px={tile_px}, tile_um={tile_um}, normalization={normalization}, feature_extraction={feature_extraction}, mil={mil}")
 
         # Update config with suggested hyperparameters
@@ -970,15 +974,223 @@ def optimize_parameters(config, project):
         config['experiment']['batch_size'] = batch_size
         config['experiment']['balancing'] = balancing
 
-        
-    
-    sampler_class = getattr(optuna.samplers, config['optimization']['sampler'])
-    pruner_class = getattr(optuna.pruners, config['optimization']['pruner'])
+        combination_dict = {
+            'tile_px': tile_px,
+            'tile_um': tile_um,
+            'normalization': normalization,
+            'feature_extraction': feature_extraction,
+            'mil': mil
+        }
+        try:
+            #Get all column values
+            columns = list(config['benchmark_parameters'].keys())
+            columns.extend(list(config['experiment']['evaluation']))                   
+            val_df = pd.DataFrame(columns=columns, index=None)
+            test_df = pd.DataFrame(columns=columns, index=None)
+            
+            target = determine_target_variable(task, config)
 
-    study = optuna.create_study(sampler=optuna.samplers.config['optimization']['sampler']())
+            annotation_df = pd.read_csv(project.annotations)
+            if task == 'classification':
+                n_class = len(annotation_df[target].unique())
 
+
+            #Split datasets into train, val and test
+            all_data = project.dataset(tile_px=combination_dict['tile_px'],
+                                    tile_um=combination_dict['tile_um'],
+                                    )
+            
+            logging.info("Extracting tiles...")
+            #Extract tiles with QC for all datasets
+            all_data.extract_tiles(enable_downsample=False,
+                                    save_tiles=False,
+                                    qc="both")
+                                
+            train_set = all_data.filter(filters={'dataset' : 'train'})
+
+            #Balance the training dataset
+            train_set = balance_dataset(train_set, task, config)
+
+            test_set = all_data.filter(filters={'dataset' : 'validate'})
+
+            logging.info("Splitting datasets...")
+            splits = split_datasets(config, project, splits_file, target, project_directory, train_set)
+
+            save_string = "_".join([f"{value}" for value in combination_dict.values()])
+            string_without_mil = "_".join([f"{value}" for key, value in combination_dict.items() if key != 'mil'])
+            
+            logging.debug(f"Save string: {save_string}") 
+            #Run with current parameters
+            
+            logging.info("Feature extraction...")
+            feature_extractor = build_feature_extractor(combination_dict['feature_extraction'].lower(),
+                                                        tile_px=combination_dict['tile_px'])
+            
+
+
+            logging.info("Training MIL model...")
+            #Generate bags
+            bags = generate_bags(config, project, all_data, combination_dict, string_without_mil, feature_extractor)
+            #Set MIL configuration
+            mil_conf = set_mil_config(config, combination_dict)
+
+            index = 1
+            val_results_per_split, test_results_per_split = [], []
+            val_pr_per_split, test_pr_per_split = [], []
+            survival_results_per_split, test_survival_results_per_split = [], []
+            logging.info("Starting training...")
+            for train, val in splits:
+                logging.info(f"Split {index} started...")
+
+                val_result = project.train_mil(
+                    config=mil_conf,
+                    outcomes=target,
+                    train_dataset=train,
+                    val_dataset=val,
+                    bags=bags,
+                    exp_label=f"{save_string}_{index}",
+                    pb_config=config
+                )
+                #Get current newest MIL model number
+                number = get_highest_numbered_filename(f"experiments/{config['experiment']['project_name']}/mil/")
+                #Get the corresponding validation results
+                val_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/predictions.parquet")
+                #Print the unique values in y_pred0:
+                print(val_result)
+                if config['experiment']['task'] == 'survival':
+                    metrics, durations, events, predictions = calculate_survival_results(val_result)
+                    survival_results_per_split.append((durations, events, predictions))
+                elif config['experiment']['task'] == 'regression':
+                    metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, save_string, "val")
+                    y_true, y_pred = val_result['y_true'], val_result['y_pred0']
+                    val_results_per_split.append((y_true, y_pred))
+                else:
+                    metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, save_string, "val")
+                    val_results_per_split.append([tpr, fpr])
+                    val_pr_per_split.append(val_pr_curves)
+                
+                if config['experiment']['task'] == 'classification':
+                    save_correct(val_result, save_string, "val", config)
+                val_dict = combination_dict.copy()
+                val_dict.update(metrics)
+
+                val_df = val_df.append(val_dict, ignore_index=True)
+                # Test the trained model
+                test_result = eval_mil(
+                    weights=f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}",
+                    outcomes=target,
+                    dataset=test_set,
+                    bags=bags,
+                    config=mil_conf,
+                    outdir=f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}",
+                    pb_config=config
+                )   
+                if combination_dict['mil'].lower() in ['clam_sb', 'clam_mb', 'attention_mil', 'mil_fc', 'mil_fc_mc', 'transmil', 'bistro.transformer']:
+                    model_string = combination_dict['mil'].lower()
+                else:
+                    model_string = f"<class 'pathbench.models.aggregators.{combination_dict['mil'].lower()}'>"
+                test_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}/00000-{model_string}/predictions.parquet")
+                print(test_result)
+                if config['experiment']['task'] == 'survival':
+                    metrics, durations, events, predictions = calculate_survival_results(test_result)
+                    test_survival_results_per_split.append((durations, events, predictions))
+                elif config['experiment']['task'] == 'regression':
+                    metrics, tpr, fprr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
+                    y_true, y_pred = test_result['y_true'], test_result['y_pred0']
+                    test_results_per_split.append((y_true, y_pred))
+                else:
+                    metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
+                    test_results_per_split.append([tpr, fpr])
+                    test_pr_per_split.append(test_pr_curves)
+                if config['experiment']['task'] == 'classification':
+                    save_correct(test_result, save_string, "test", config)
+                test_dict = combination_dict.copy()
+                test_dict.update(metrics)
+                #Add weights directory to test dict
+                test_dict['weights'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}"
+                test_dict['mil_params'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/mil_params.json"
+                # Visualize the activations, if applicable
+                if 'umap' in config['experiment']['visualization'] or 'mosaic' in config['experiment']['visualization']:
+                    visualize_activations(config, val, f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}", bags, target, save_string)
+                    visualize_activations(config, test, f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}", bags, target, save_string)
+
+                test_df = test_df.append(test_dict, ignore_index=True)
+                print(test_df)
+                index += 1
+
+                trial.report(np.mean(metrics[objective_metric]), index)
+                if trial.should_prune():
+                    raise optuna.TrialPruned()
+
+            logging.info(f"Combination {save_string} finished...")
+            # Save which combinations were finished
+            finished_combination_dict[combination] = 1
+            with open(f"experiments/{config['experiment']['project_name']}/finished_combinations.pkl", 'wb') as f:
+                pickle.dump(finished_combination_dict, f)
+
+            # Save the combination results up to this point, and mark it as finished
+            val_df.to_csv(f"experiments/{config['experiment']['project_name']}/results/val_results.csv")
+            test_df.to_csv(f"experiments/{config['experiment']['project_name']}/results/test_results.csv")
+
+            # Check if there was more than one split
+            plot_across_splits(config, survival_results_per_split, test_survival_results_per_split,
+                                val_results_per_split, test_results_per_split, val_pr_per_split, test_pr_per_split,
+                                save_string)
+
+        except Exception as e:
+            logging.warning(f"Combination {save_string} was not succesfully trained due to Error {e}")
+            logging.warning(traceback.format_exc())
+
+        if config['optimization']['objective_dataset'] == 'test':
+            measure_df = test_df
+        elif config['optimization']['objective_dataset'] == 'val':
+            measure_df = val_df
+        else:
+            raise ValueError("Objective dataset should be either 'test' or 'val'")
+
+        return np.mean(measure_df[objective_metric])  # Return the mean of the objective metric
+
+    objective_metric = config['optimization']['objective_metric']
+
+    task = config['experiment']['task']
+    benchmark_parameters = config['benchmark_parameters']
+    project_directory = f"experiments/{config['experiment']['project_name']}"
+    annotations = project.annotations
+    logging.info(f"Using {project_directory} for project directory...")
+    logging.info(f"Using {annotations} for annotations...")
+    #Determine splits file
+    splits_file = determine_splits_file(config, project_directory)
+
+    #Set the evaluation metrics
+    config, evaluation_metrics, aggregation_functions = set_metrics(config)
+
+    logging.info(f"Using {splits_file} splits for benchmarking...")
+
+    sampler = config['optimization'].get('sampler', 'TPESampler')
+    pruner = config['optimization'].get('pruner', 'MedianPruner')
+    sampler_class = getattr(optuna.samplers, sampler, TPESampler)()
+    pruner_class = getattr(optuna.pruners, pruner, MedianPruner)()
+
+    logging.info(f"Using {sampler} sampler and {pruner} pruner...")
+
+    if config['optimization']['objective_mode'] == 'max':
+        direction = 'maximize'
+    elif config['optimization']['objective_mode'] == 'min':
+        direction = 'minimize'
+    else:
+        raise ValueError("Objective mode should be either 'max' or 'min'")
     # Create the study with the specified sampler and pruner
-    study = optuna.create_study(sampler=sampler_class(), pruner=pruner_class())
+    study = optuna.create_study(sampler=sampler_class, pruner=pruner_class, direction=direction)
 
     # Optimize the study
     study.optimize(objective, n_trials=config['optimization']['trials'])
+
+    # Save the best parameters
+    best_params = study.best_params
+    # Create optimization directory
+    os.makedirs(f"experiments/{config['experiment']['project_name']}/optimization", exist_ok=True)
+    with open(f"experiments/{config['experiment']['project_name']}/optimization/best_params.json", 'w') as f:
+        json.dump(best_params, f)
+
+    logging.info(f"Best parameters: {best_params} found in trial {study.best_trial}, with value: {study.best_value}")
+    logging.info("Optimization finished...")
