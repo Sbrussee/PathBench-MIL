@@ -5,7 +5,6 @@ import venv
 
 def create_virtualenv(env_name):
     venv.create(env_name, with_pip=True)
-    print(f"Created virtual environment in {env_name}")
 
 def install_base_packages(env_name):
     # Determine the paths for the virtual environment
@@ -16,8 +15,8 @@ def install_base_packages(env_name):
     
     pip_executable = os.path.join(bin_path, 'pip')
 
-    # Install wheel, versioneer, cython, and ruamel_yaml
-    subprocess.check_call([pip_executable, 'install', 'wheel', 'versioneer', 'cython', 'ruamel_yaml'])
+    # Install wheel, versioneer, cython, and ruamel
+    subprocess.check_call([pip_executable, 'install', 'wheel', 'versioneer', 'cython', 'ruamel'])
 
 def run_setup_py(env_name):
     # Activate the virtual environment and run setup.py
@@ -36,8 +35,11 @@ def main():
     env_name = 'pathbench_env'
 
     create_virtualenv(env_name)
+    print(f"Created virtual environment in {env_name}")
     install_base_packages(env_name)
+    print("Installed base packages")
     run_setup_py(env_name)
+    print("Installed PathBench")
 
 if __name__ == "__main__":
     main()
