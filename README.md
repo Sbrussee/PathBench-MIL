@@ -86,7 +86,37 @@ PathBench is being developed at the Leiden University Medical Center: Department
     ```bash
     pip install .
     ```
-    
+
+## Getting Started
+To run pathbench once installed using default setting, one can simply run
+```bash
+./run_pathbench.sh
+```
+
+Note that this script can set your huggingface token for gated models and the configuration file as well as the name of the virtual environment can be changed:
+```bash
+#If virtual environment does not exist, construct one using pip
+if [ ! -d "pathbench_env" ]; then
+    python3 -m venv pathbench_env
+    source pathbench_env/bin/activate
+    pip install --upgrade pip
+    pip install -r requirements.txt
+else
+    source pathbench_env/bin/activate
+fi
+
+#Set slideflow backends
+export SF_SLIDE_BACKEND=cucim
+export SF_BACKEND=torch
+#Token required to access the gated models
+export HF_TOKEN=YOUR_HUGGINGFACE_TOKEN
+
+#Set the config file
+CONFIG_FILE=conf.yaml
+
+#Run the program
+python3 main.py $CONFIG_FILE
+```
 ## Features
 
 - Benchmarking w.r.t.
@@ -102,28 +132,37 @@ PathBench is being developed at the Leiden University Medical Center: Department
 ## Package Structure
 
 - pathbench/
-  - pathbench/
+  - pathbench/ 
     - benchmarking/
-      - benchmark.py
+      - benchmark.py # Main benchmarking script
     - experiment/
-      - experiment.py
+      - experiment.py # Initialization of experiments
     - models/
-      - aggregators.py
-      - feature_extractors.py
+      - aggregators.py # MIL aggregation methods
+      - feature_extractors.py # Feature extractors
     - utils
-      - calculate_feature_similarity.py
+      - calculate_feature_similarity.py # Calculate feature extractor similarity
+      - utils.py # Util functions
+      - losses.py # Houses custom losses for training models
+    - visualization
+      - visualization.py # Houses visualization functions
+    - test
+      - test.py # Calls testing functions
+      - binary_test_conf.yaml # tests binary classification
+      - classification_test_conf.yaml # tests multiclass classification
+      - opt_test_conf.yaml # tests optimization mode
+      - regression_test_conf.yaml # tests regresison
+      - survival_test_conf.yaml # tests survival prediciton
+  - slideflow_fork # Forked Slideflow package
+    - ...
   - requirements.txt
   - README.md
   - LICENSE
-  - setup.py
+  - setup.py # Main setup script for pip
+  - setup_pathbench.py # Script to setup a virtual environment and install base packages
+  - run_pathbench.sh # Bash script to run pathbench
+  - conf.yaml # Default configuration
 
-## Installation
-
-You can install PathBench and its dependencies using pip:
-
-```bash
-pip install pathbench
-```
 ## Normalization
 PathBench currently supports:
 - Macenko
