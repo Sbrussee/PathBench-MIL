@@ -11,8 +11,6 @@ fi
 #Set slideflow backends
 export SF_SLIDE_BACKEND=cucim
 export SF_BACKEND=torch
-#Token required to access the gated models
-export HF_TOKEN=YOUR_HUGGINGFACE_TOKEN
 
 #Set the config file
 CONFIG_FILE=conf.yaml

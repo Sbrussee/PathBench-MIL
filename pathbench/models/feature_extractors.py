@@ -28,6 +28,8 @@ WEIGHTS_DIR = "pretrained_weights"
 os.environ['TORCH_HOME'] = WEIGHTS_DIR
 os.environ['HF_HOME'] = WEIGHTS_DIR
 
+# Get Hugging Face API keys from environment variables
+key = os.getenv('HF_TOKEN')
 
 def get_pretrained_url_vit(key : str):
     """
@@ -419,7 +421,7 @@ class uni(TorchFeatureExtractor):
     def __init__(self, tile_px=256):
         super().__init__()
 
-        login(token=keys['uni'])
+        login(token=key)
 
         local_dir = WEIGHTS_DIR
         model_name = "uni.bin"

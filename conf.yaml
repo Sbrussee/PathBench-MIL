@@ -58,3 +58,4 @@ benchmark_parameters:
 
 
 weights_dir: /exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/pretrained_weights # Path to pretrained weights and/or where to save retrieved weights
+hf_key: YOUR_HUGGINGFACE_TOKEN # Token for Hugging Face model hub to access gated models, if you do not have one, just set to None

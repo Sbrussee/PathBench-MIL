@@ -43,19 +43,20 @@ benchmark_parameters:
   tile_um:
     - 20x
   normalization:
-    - macenko
+    #- macenko
     - reinhard
   feature_extraction:
     - resnet50_imagenet
-    - CTransPath
-    - RetCCL
-    - PLIP
-    - uni
+    #- CTransPath
+    #- RetCCL
+    #- PLIP
+    #- uni
   mil:
     - CLAM_SB
-    - dsmil
-    - varmil
+    #- dsmil
+    #- varmil
     - attention_mil
 
 
 weights_dir: /exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/pretrained_weights
+hf_token: None
