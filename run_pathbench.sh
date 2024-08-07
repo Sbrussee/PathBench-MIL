@@ -16,4 +16,4 @@ export SF_BACKEND=torch
 CONFIG_FILE=conf.yaml
 
 #Run the program
-python3 main.py $CONFIG_FILE
+python3 main.py --config $CONFIG_FILE

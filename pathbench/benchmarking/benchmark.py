@@ -568,13 +568,13 @@ def benchmark(config, project):
     logging.info(f"Using {splits_file} splits for benchmarking...")
 
     #Get custom metrics and losses as objects
-    if 'custom_metrics' in config['experiment'] is not 'None':
+    if 'custom_metrics' in config['experiment'] is not None:
         if isinstance(config['experiment']['custom_metrics'], list):
             custom_metrics = [load_class("pathbench.utils.metrics", metric.capitalize()) for metric in config['experiment']['custom_metrics']]
         else:
             custom_metrics = [load_class("pathbench.utils.metrics", config['experiment']['custom_metrics'].capitalize())]
 
-    if 'custom_loss' in config['experiment'] is not 'None':
+    if 'custom_loss' in config['experiment'] is not None:
         custom_loss = load_class("pathbench.utils.losses", config['experiment']['custom_loss'])
 
     config['experiment']['custom_metrics'] = custom_metrics
