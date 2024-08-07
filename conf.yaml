@@ -1,29 +1,34 @@
 experiment:
-  project_name: MF_TEST
-  annotation_file: ../../MF_annotations.csv
-  balancing: category
-  split_technique: k-fold
-  k: 10
-  val_fraction: 0.1
-  n_splits: 10
-  aggregation_level: slide
+  project_name: MF_TEST # Name of the project
+  annotation_file: /exports/path-cutane-lymfomen-hpc/siemen/MF_annotations_corrected.csv # Path to the annotation file
+  balancing: category # Balancing can be 'tile', 'slide', 'patient' or 'category'
+  split_technique: k-fold # Split technique can be 'k-fold' or 'fixed'
+  k: 3 # Number of folds for k-fold cross-validation
+  val_fraction: 0.1 # Fraction of the training data to be used for validation
+  epochs: 5 # Number of epochs for training
+  batch_size: 32 # Batch size for training
+  bag_size: 512 # Bag size for MIL models
+  with_continue: True # If True, the model will continue training from the last checkpoint.
+  aggregation_level: slide # Aggregation level can be 'slide' or 'patient'
+  task: classification # Task can be 'classification', 'regression' or 'survival'
+  mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
+  custom_loss: None # Can be any loss as specified in utils/losses.py, or None, in which case the default task loss will be used.
+  custom_metrics: None # Can be any metric as specified in utils/metrics.py, or None, in which case the default task metrics will be used.
 
-  evaluation:
+  evaluation: # Evaluation metrics to be used
     - balanced_accuracy
     - auc
 
-  visualization:
-    - learning_curve
+  visualization: # Visualization methods to be used
     - confusion_matrix
     - roc_curve
-    - layer_activations
 
-datasets:
-  - name: int_MF
-    slide_path: ../../../Thom_Doeleman/CLAM_train_cropped
-    tfrecord_path: int_MF/tfrecrods
-    tile_path: int_MF/tiles
-    used_for: training
+datasets: # List of datasets to be used
+  - name: int_MF # Name of the dataset
+    slide_path: ../../../Thom_Doeleman/CLAM_train_cropped # Path to the slide data
+    tfrecord_path: int_MF/tfrecrods # Path to save tfrecords
+    tile_path: int_MF/tiles # Path to save tiles
+    used_for: training # Whether the dataset is used for training or testing
 
   - name: ext_MF
     slide_path: ../../../Thom_Doeleman/CLAM_validate_cropped
@@ -32,43 +37,24 @@ datasets:
     used_for: testing
 
 benchmark_parameters:
-  tile_px:
-    - 256
-  tile_um:
-    - 40x
-  normalization:
+  tile_px: # Tile sizes in pixels
+    - 256 
+  tile_um: # Magnifications (e.g. 40x, 20x, 10x)
+    - 20x
+  normalization: # Normalization methods, can be 'macenko', 'reinhard' or 'cyclegan'
     - macenko
     - reinhard
-    - vahadane
-  feature_extraction:
+  feature_extraction: # Feature extraction methods
     - resnet50_imagenet
     - CTransPath
     - RetCCL
     - PLIP
-    - HistoSSL
-    - BarlowTwins
-  mil:
+    - uni
+  mil: # MIL models
     - CLAM_SB
-    - CLAM_MB
-    - TransMIL
-    - AttMIL
+    - dsmil
+    - varmil
+    - attention_mil
 
-  
-model_specific_parameters:
-  -BarlowTwins:
-    weight_path: ""
-    backbone: resnet50
-  
-hpo:
-  method: grid_search
-  hyperparameter_file: conf.yaml
 
-ssl:
-  method: BarlowTwins
-  train_path: experiments/MF_test/tiles/256px
-  val_path: None
-  val_split: 0.1
-  backbone: "resnet18"
-  ssl_model_name: BT_test
-
-mode: exploration
+weights_dir: /exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/pretrained_weights # Path to pretrained weights and/or where to save retrieved weights

@@ -23,6 +23,7 @@ import traceback
 import pickle
 import datetime
 import json
+import importlib
 
 from slideflow.model import build_feature_extractor
 
@@ -37,6 +38,9 @@ from ..models import aggregators
 
 from ..utils.utils import *
 from ..visualization.visualization import *
+
+from ..utils.losses import *
+from ..utils.metrics import *
 
 import optuna
 from optuna.samplers import *
@@ -402,8 +406,8 @@ def plot_across_splits(config : dict, survival_results_per_split : list, test_su
         plot_roc_curve_across_splits(val_results_per_split, save_string, "val", config)
         plot_roc_curve_across_splits(test_results_per_split, save_string, "test", config)
         #TODO: Correctly implement precision-recall curve
-        #plot_precision_recall_curve_across_splits(val_pr_per_split, save_string, "val", config)
-        #plot_precision_recall_curve_across_splits(test_pr_per_split, save_string, "test", config)
+        plot_precision_recall_curve_across_splits(val_pr_per_split, save_string, "val", config)
+        plot_precision_recall_curve_across_splits(test_pr_per_split, save_string, "test", config)
 
 
 def build_aggregated_results(val_df : pd.DataFrame, test_df: pd.DataFrame, config : dict,
@@ -515,7 +519,7 @@ def find_and_apply_best_model(config : dict, val_df_agg : pd.DataFrame, test_df_
         else:
             #We infer the config
             best_test_model_config = None
-            
+
     logging.info("BEST TEST MODEL CONFIG:")
     logging.info(best_test_model_dict)
 
@@ -529,6 +533,10 @@ def find_and_apply_best_model(config : dict, val_df_agg : pd.DataFrame, test_df_
     #Copy weights directory of best model to saved_models
     os.system(f"cp -r {best_test_weights} experiments/{config['experiment']['project_name']}/saved_models/best_test_model_{date_string}")
 
+def load_class(module_name, class_name):
+    module = importlib.import_module(module_name)
+    class_ = getattr(module, class_name)
+    return class_
 
 def benchmark(config, project):
     """
@@ -554,9 +562,17 @@ def benchmark(config, project):
     
     #Set the evaluation metrics
     config, evaluation_metrics, aggregation_functions = set_metrics(config)
-
     logging.info(f"Using {splits_file} splits for benchmarking...")
 
+    #Get custom metrics and losses as objects
+    if 'custom_metrics' in config['experiment'] is not None:
+        custom_metrics = {metric: load_class(*config['experiment']['custom_metrics'][metric]) for metric in config['experiment']['custom_metrics']}
+    if 'custom_loss' in config['experiment'] is not None:
+        custom_loss = load_class(*config['experiment']['custom_loss'])
+
+    config['experiment']['custom_metrics'] = custom_metrics
+    config['experiment']['custom_loss'] = custom_loss
+    
     #Get all column values
     columns = list(config['benchmark_parameters'].keys())
     columns.extend(list(config['experiment']['evaluation']))                   
@@ -889,7 +905,6 @@ def calculate_results(result: pd.DataFrame, config: dict, save_string: str, data
         precision, recall, _ = precision_recall_curve(y_true_binary, y_pred_prob_binary)
         
         precision_recall_data.append((precision.flatten(), recall.flatten()))
-        plot_precision_recall_curve(y_true_binary, y_pred_prob_binary, save_path, save_string, dataset_type)
 
         # Store metrics
         metrics['balanced_accuracy'] = np.mean(balanced_accuracies)
