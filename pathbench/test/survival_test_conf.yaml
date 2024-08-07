@@ -1,12 +1,17 @@
 experiment:
   project_name: MF_TEST
-  annotation_file: ../../fake_survival_prediction_data.csv
+  annotation_file: /exports/path-cutane-lymfomen-hpc/siemen/fake_survival_prediction_data.csv
   balancing: category
   split_technique: k-fold
   k: 3
   val_fraction: 0.1
+  epochs: 5
+  batch_size: 32
+  bag_size: 512
+  with_continue: True
   aggregation_level: slide
   task: survival
+  mode: benchmark
 
 
   evaluation:
@@ -49,7 +54,5 @@ benchmark_parameters:
     - dsmil
     - varmil
     - attention_mil
-
-mode: benchmarking
 
 weights_dir: pretrained_weights

@@ -510,9 +510,12 @@ def find_and_apply_best_model(config : dict, val_df_agg : pd.DataFrame, test_df_
         # Set model in best_test_model_dict
         if best_test_model_dict['params']['model'] not in ['attention_mil', 'transmil','bistro.transformer']:
             best_test_model_dict['params']['model'] = getattr(aggregators, best_test_model_dict['params']['model'])
-        print(best_test_model_dict)
-        best_test_model_config = sf.mil.mil_config(trainer=best_test_model_dict['trainer'], **best_test_model_dict['params'])
-
+            print(best_test_model_dict)
+            best_test_model_config = sf.mil.mil_config(trainer=best_test_model_dict['trainer'], **best_test_model_dict['params'])
+        else:
+            #We infer the config
+            best_test_model_config = None
+            
     logging.info("BEST TEST MODEL CONFIG:")
     logging.info(best_test_model_dict)
 
