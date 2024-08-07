@@ -240,8 +240,7 @@ experiment:
   aggregation_level: slide # Aggregation level, can be slide or patient
   with_continue: True # Continue training from a previous checkpoint, if available
   task: classification # Task, can be classification, regression or survival
-  weights_dir: /path/to/your/pretrained_weights # Path to the model weights
-  visualization: # Visualization options, options: learning_curve, confusion_matrix, roc_curve, umap, mosaic
+  visualization: # Visualization options, options: CLASSIFICATION: confusion_matrix, precision_recall_curve, roc_curve, umap, mosaic SURVIVAL: survival_roc, concordance_index, calibration REGRESSION: predicted_vs_actual, residuals, qq
     - learning_curve
     - confusion_matrix
     - roc_curve
@@ -253,7 +252,7 @@ optimization:
   objective_metric: balanced_accuracy # Objective metric to optimize
   sampler: TPESampler # Algorithm to use for optimization: grid_search, TPE, Bayesian
   trials: 100 # Number of optimization trials
-  pruner: HyperbandPruner
+  pruner: HyperbandPruner # Pruner for optimization, can be Hyperband, Median etc.
 
 datasets: # List of datasets to use, each dataset should have a name, slide_path, tfrecord_path, tile_path and used_for.
   - name: dataset_1
@@ -286,7 +285,6 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 # Available normalization methods:
 # - macenko
 # - reinhard
-# - ruifrok
 # - cyclegan
 
 # Available feature extraction methods:
@@ -330,8 +328,8 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 # - dsmil
 # - varmil
 
-weights_dir : ./pretrained_weights
-
+weights_dir : ./pretrained_weights # Path to the model weights, and where newly retrieved model weights will be saved
+hf_key: YOUR_HUGGINGFACE_TOKEN # Token for Hugging Face model hub to access gated models, if you do not have one, just set to None
 ```
 
 ## Extending PathBench
