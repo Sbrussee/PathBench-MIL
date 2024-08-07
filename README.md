@@ -144,6 +144,7 @@ python3 main.py $CONFIG_FILE
       - calculate_feature_similarity.py # Calculate feature extractor similarity
       - utils.py # Util functions
       - losses.py # Houses custom losses for training models
+      - metrics.py # Houses custom metrics to calculate during training
     - visualization
       - visualization.py # Houses visualization functions
     - test
