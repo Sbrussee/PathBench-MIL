@@ -534,6 +534,9 @@ def find_and_apply_best_model(config : dict, val_df_agg : pd.DataFrame, test_df_
     os.system(f"cp -r {best_test_weights} experiments/{config['experiment']['project_name']}/saved_models/best_test_model_{date_string}")
 
 def load_class(module_name, class_name):
+    if module_name == 'None' or class_name == 'None':
+        return None
+    
     module = importlib.import_module(module_name)
     class_ = getattr(module, class_name)
     return class_
@@ -565,14 +568,18 @@ def benchmark(config, project):
     logging.info(f"Using {splits_file} splits for benchmarking...")
 
     #Get custom metrics and losses as objects
-    if 'custom_metrics' in config['experiment'] is not None:
-        custom_metrics = {metric: load_class(*config['experiment']['custom_metrics'][metric]) for metric in config['experiment']['custom_metrics']}
-    if 'custom_loss' in config['experiment'] is not None:
-        custom_loss = load_class(*config['experiment']['custom_loss'])
+    if 'custom_metrics' in config['experiment'] is not 'None':
+        if isinstance(config['experiment']['custom_metrics'], list):
+            custom_metrics = [load_class("pathbench.utils.metrics", metric.capitalize()) for metric in config['experiment']['custom_metrics']]
+        else:
+            custom_metrics = [load_class("pathbench.utils.metrics", config['experiment']['custom_metrics'].capitalize())]
+
+    if 'custom_loss' in config['experiment'] is not 'None':
+        custom_loss = load_class("pathbench.utils.losses", config['experiment']['custom_loss'])
 
     config['experiment']['custom_metrics'] = custom_metrics
     config['experiment']['custom_loss'] = custom_loss
-    
+
     #Get all column values
     columns = list(config['benchmark_parameters'].keys())
     columns.extend(list(config['experiment']['evaluation']))                   

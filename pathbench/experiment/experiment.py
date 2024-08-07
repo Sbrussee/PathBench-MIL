@@ -2,7 +2,6 @@ import yaml
 import slideflow as sf
 import os
 import torch
-from ..optimization.hpo import HyperParameterOptimizer
 from ..benchmarking.benchmark import benchmark
 from ..benchmarking.benchmark import optimize_parameters
 import random
@@ -67,7 +66,11 @@ class Experiment():
     def __init__(self, config_file : str):
         self.config = read_config(config_file)
         self.load_datasets()
-
+        #Set Hugging Face token
+        if self.config['hf_token'] is not None:
+            HF_TOKEN = self.config['hf_token']
+            os.environ['HF_TOKEN'] = HF_TOKEN
+        #Set pretrained weights directory
         WEIGHTS_DIR = self.config['weights_dir']
         # Set environment variables
         os.environ['TORCH_HOME'] = WEIGHTS_DIR
