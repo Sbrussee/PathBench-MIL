@@ -1,7 +1,7 @@
 pathbench.test
 ==============
 
-.. automodule:: pathbench.test
+.. automodule:: pathbench.test.test
    :members:
    :undoc-members:
    :private-members:
