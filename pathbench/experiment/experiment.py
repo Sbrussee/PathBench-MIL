@@ -67,9 +67,10 @@ class Experiment():
         self.config = read_config(config_file)
         self.load_datasets()
         #Set Hugging Face token
-        if self.config['hf_token'] is not None:
-            HF_TOKEN = self.config['hf_token']
-            os.environ['HF_TOKEN'] = HF_TOKEN
+        if 'hf_token' in self.config:
+            if self.config['hf_token'] is not None:
+                HF_TOKEN = self.config['hf_token']
+                os.environ['HF_TOKEN'] = HF_TOKEN
         #Set pretrained weights directory
         WEIGHTS_DIR = self.config['weights_dir']
         # Set environment variables

@@ -12,8 +12,8 @@ experiment:
   aggregation_level: slide # Aggregation level can be 'slide' or 'patient'
   task: classification # Task can be 'classification', 'regression' or 'survival'
   mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
-  custom_loss: None # Can be any loss as specified in utils/losses.py, or None, in which case the default task loss will be used.
-  custom_metrics: None # Can be any metric as specified in utils/metrics.py, or None, in which case the default task metrics will be used.
+  #custom_loss:  # Can be any loss as specified in utils/losses.py, or None, in which case the default task loss will be used.
+  #custom_metrics: # Can be any list of metrics as specified in utils/metrics.py, or None, in which case the default task metrics will be used.
 
   evaluation: # Evaluation metrics to be used
     - balanced_accuracy

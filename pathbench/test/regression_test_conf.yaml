@@ -12,8 +12,8 @@ experiment:
   aggregation_level: slide
   task: regression
   mode: benchmark
-  custom_loss: None # Can be any loss as specified in utils/losses.py, or None, in which case the default task loss will be used.
-  custom_metrics: None # Can be any metric as specified in utils/metrics.py, or None, in which case the default task metrics will be used.
+  #custom_loss: # Can be any loss as specified in utils/losses.py, or None, in which case the default task loss will be used.
+  #custom_metrics:  # Can be any lists of metrics as specified in utils/metrics.py, or None, in which case the default task metrics will be used.
 
 
 
@@ -23,8 +23,9 @@ experiment:
     - r2_score
 
   visualization:
-    - confusion_matrix
-    - roc_curve
+    - qq
+    - predicted_vs_actual
+    - residuals
 
 datasets:
   - name: int_MF
@@ -54,7 +55,7 @@ benchmark_parameters:
     #- PLIP
     - uni
   mil:
-    - CLAM_SB
+    #- CLAM_SB
     - dsmil
     - varmil
     - attention_mil

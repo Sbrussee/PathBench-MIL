@@ -1,6 +1,7 @@
 from fastai.learner import Metric
 from lifelines.utils import concordance_index
 import torch
+from fastai.torch_core import to_detach, flatten_check
 
 class ConcordanceIndex(Metric):
     """Concordance index metric for survival analysis."""

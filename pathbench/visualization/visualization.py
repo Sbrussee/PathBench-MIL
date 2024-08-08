@@ -14,7 +14,8 @@ import logging
 import sys
 
 def visualize_activations(config : dict, dataset : str,
-                          tfrecord_dir : str, bag_dir : str, target : str, save_string : str):
+                          tfrecord_dir : str, bag_dir : str, target : str, save_string : str,
+                          project: sf.Project):
     """
     Visualize the activations based on the configuration
 
@@ -25,6 +26,7 @@ def visualize_activations(config : dict, dataset : str,
         bag_dir: Directory with bags
         target: The target variable
         save_string: The save string
+        Project: The slideflow project object
     
     Returns:
         None
@@ -42,7 +44,7 @@ def visualize_activations(config : dict, dataset : str,
                 #TOFIX: DOES NOT WORK NOW
                 slide_map.label_by_preds(index=index)
                 slide_map.save_plot(
-                    filename=f"experiments/{config['experiment']['project_name']}/visualizations/slide_level_umap_pred_{save_string}_{index}",
+                    filename=f"experiments/{config['experiment']['project_name']}/visualizations/patch_level_umap_pred_{save_string}_{index}_{dataset}",
                     title=f"Feature UMAP, by prediction of class {index}"
                 )
 
@@ -53,25 +55,35 @@ def visualize_activations(config : dict, dataset : str,
             
         slide_map.label_by_slide(labels)
         #Make a new directory inside visualizations
-        if not os.path.exists(f"experiments/{config['experiment']['project_name']}/visualizations/slide_level_umap_label_{save_string}"):
-            os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations/slide_level_umap_label_{save_string}")
+        if not os.path.exists(f"experiments/{config['experiment']['project_name']}/visualizations/patch_level_umap_label_{save_string}_{dataset}"):
+            os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations/patch_level_umap_label_{save_string}_{dataset}")
         slide_map.save_plot(
-            filename=f"experiments/{config['experiment']['project_name']}/visualizations/slide_level_umap_label_{save_string}",
+            filename=f"experiments/{config['experiment']['project_name']}/visualizations/patch_level_umap_label_{save_string}_{dataset}",
             title="Feature UMAP, by label",
             subsample=2000
         )
 
         plt.close()
     
+        print(dts_ftrs)
+        #Take mean of features, to get slide-level features
+        slide_ftrs = dts_ftrs.mean(axis=1)
+        print(slide_ftrs)
+        #Create a new slide map
+        slide_map = sf.SlideMap.from_features(slide_ftrs)
+        slide_map.label_by_slide(labels)
+        slide_map.save_plot(
+            filename=f"experiments/{config['experiment']['project_name']}/visualizations/slide_level_umap_label_{save_string}_{dataset}",
+            title="Slide-level UMAP, by label"
+        )
+        plt.close()
     if 'mosaic' in config['experiment']['visualization']:
 
         #TOFIX: DOES NOT WORK NOW!
         logging.info("Building mosaic...")
         # Get list of all directories in the tfrecords dir with full path
         try:
-            dir_list = [os.path.join(tfrecord_dir, x) for x in os.listdir(tfrecord_dir) if x.endswith('.tfrecord')]
-            print(dir_list)
-            mosaic = slide_map.build_mosaic(tfrecords=dir_list)
+            mosaic = project.generate_mosaic(dts_ftrs)
             mosaic.save(
                 filename=f"experiments/{config['experiment']['project_name']}/visualizations/slide_level_mosaic_{save_string}.png"
             )
@@ -81,65 +93,6 @@ def visualize_activations(config : dict, dataset : str,
             pass
 
 
-def plot_roc_auc(y_true, y_pred_prob, save_path, save_string, dataset_type):
-    """
-    Plots the ROC-AUC curve along with a diagonal baseline and the legend showing the AUC score.
-
-    Args:
-        y_true: The true labels
-        y_pred_prob: The predicted probabilities
-        save_path: Path to save the plot
-        save_string: String to append to the saved plot filename
-        dataset_type: Type of the dataset (e.g., train, test, validation)
-    """
-    fpr, tpr, _ = roc_curve(y_true, y_pred_prob)
-    roc_auc = auc(fpr, tpr)
-
-    plt.figure()
-    plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
-    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title(f'Receiver Operating Characteristic - {dataset_type}')
-    plt.legend(loc="lower right")
-    plt.grid(True)
-
-    os.makedirs(save_path, exist_ok=True)
-    plt.savefig(f"{save_path}/roc_auc_{save_string}_{dataset_type}.png")
-    plt.close()
-
-    logging.info(f"ROC-AUC plot saved at {save_path}/roc_auc_{save_string}_{dataset_type}.png")
-
-def plot_precision_recall_curve(y_true : np.array, y_pred_prob : np.array, save_path : str, save_string : str, dataset_type : str):
-    """
-    Plot the precision-recall curve based on the true labels and predicted probabilities
-
-    Args:
-        y_true: The true labels
-        y_pred_prob: The predicted probabilities
-        save_path: The save path
-        save_string: The save string
-        dataset_type: The dataset type
-    
-    Returns:
-        None
-    """
-    precision, recall, _ = precision_recall_curve(y_true, y_pred_prob)
-    average_precision = average_precision_score(y_true, y_pred_prob)
-
-    plt.figure(figsize=(10, 6))
-    plt.plot(recall, precision, label=f'Precision-Recall curve (AP = {average_precision:.2f})', color='b')
-    #Add baseline precision
-    plt.plot([0, 1], [np.mean(y_true), np.mean(y_true)], linestyle='--', color='r', label='Baseline (random)')
-    plt.xlabel('Recall')
-    plt.ylabel('Precision')
-    plt.title('Precision-Recall Curve')
-    plt.legend(loc="lower left")
-    plt.grid(True)
-    plt.savefig(f"{save_path}/precision_recall_curve_{save_string}_{dataset_type}.png")
-    plt.close()
 
 def plot_roc_curve_across_splits(rates : list, save_string : str, dataset : str, config : dict):
     """
@@ -249,8 +202,9 @@ def plot_survival_auc_across_folds(results: pd.DataFrame, save_string: str, data
 
         # Add random model baseline (0.5)
         ax.plot(times, [0.5] * len(times), 'r--', label='Random Model (AUC = 0.5)')
-
-        ax.set_xlabel('Time')
+        ax.set_xlim([0, max_duration])
+        ax.set_ylim([0, 1])
+        ax.set_xlabel('Time')  
         ax.set_ylabel('AUC')
         ax.set_title(f'Time-dependent ROC-AUC for Fold {fold_idx + 1}')
         ax.legend(loc="lower right")
@@ -307,7 +261,7 @@ def ensure_monotonic(recall : list, precision : list):
             precision[i] = precision[i - 1]
     return recall, precision
 """
-def plot_precision_recall_across_splits(pr_per_split : list, save_string : str, dataset : str, config : dict):
+def plot_precision_recall_across_splits(pr_per_split: list, save_string: str, dataset: str, config: dict):
     """
     Plot the precision-recall curve across splits based on the results
 
@@ -326,8 +280,15 @@ def plot_precision_recall_across_splits(pr_per_split : list, save_string : str, 
     all_precisions = []
     all_recalls = []
 
-    for split_idx, (precisions, recalls) in enumerate(pr_per_split):
-        ax.plot(recalls, precisions, alpha=0.3, label=f'Split {split_idx + 1}')
+    for split_idx, pr_tuple in enumerate(pr_per_split):
+        # Check and unpack the tuple
+        if isinstance(pr_tuple, list) and len(pr_tuple) == 1:
+            pr_tuple = pr_tuple[0]
+
+        if not isinstance(pr_tuple, tuple) or len(pr_tuple) != 2:
+            raise ValueError(f"Expected a tuple of (precision, recall) for split {split_idx + 1}, but got {pr_tuple}")
+
+        precisions, recalls = pr_tuple
         mean_precisions.append(np.interp(np.linspace(0, 1, 100), recalls[::-1], precisions[::-1]))
         mean_recalls.append(np.linspace(0, 1, 100))
         all_precisions.append(precisions)
@@ -336,12 +297,11 @@ def plot_precision_recall_across_splits(pr_per_split : list, save_string : str, 
     mean_precision = np.mean(mean_precisions, axis=0)
     std_precision = np.std(mean_precisions, axis=0)
 
+    fig, ax = plt.subplots()
+    ax.set_xlim([0.0, 1.0])
+    ax.set_ylim([0.0, 1.0])
     ax.plot(mean_recalls[0], mean_precision, label='Mean Precision-Recall', color='blue')
     ax.fill_between(mean_recalls[0], mean_precision - std_precision, mean_precision + std_precision, color='blue', alpha=0.2, label='Std Dev')
-
-    # Add random model baseline (precision = positive class ratio)
-    baseline_precision = sum([len(p) for p in all_precisions]) / sum([len(r) for r in all_recalls])
-    ax.plot([0, 1], [baseline_precision, baseline_precision], linestyle='--', label='Random Model')
 
     ax.set_title('Precision-Recall Curve')
     ax.set_xlabel('Recall')
@@ -387,13 +347,17 @@ def plot_concordance_index_across_folds(results: pd.DataFrame, save_string: str,
     mean_concordances = np.nanmean(all_concordances, axis=0)
     std_concordances = np.nanstd(all_concordances, axis=0)
 
+    
     ax.plot(times, mean_concordances, marker='o', linewidth=1, label='Mean Concordance Index', markersize=3)
     ax.fill_between(times, mean_concordances - std_concordances, mean_concordances + std_concordances, alpha=0.2)
-
+    ax.set_xlim([0, times[-1]])
+    ax.set_ylim([0, 1])
     ax.set_title('Concordance Index Over Time')
     ax.set_xlabel('Time')
     ax.set_ylabel('Concordance Index')
     ax.legend()
+
+
 
     os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations", exist_ok=True)
     plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/concordance_index_{save_string}_{dataset}.png")
@@ -476,6 +440,8 @@ def plot_calibration(results : pd.DataFrame, save_string : str, dataset : str, c
     plt.xlabel('Predicted Probability')
     plt.ylabel('Observed Probability')
     plt.legend()
+    plt.xlim([0, 1])
+    plt.ylim([0, 1])
 
     os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations", exist_ok=True)
     plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/calibration_{save_string}_{dataset}.png")
@@ -594,7 +560,10 @@ def plot_calibration_across_splits(results: pd.DataFrame, save_string: str, data
     plt.plot(mean_pred_probs, mean_true_probs, marker='o', linewidth=1, label='Mean Calibration')
     plt.fill_between(mean_pred_probs, mean_true_probs - std_true_probs, mean_true_probs + std_true_probs, alpha=0.2, label='±1 std. dev.')
     plt.plot([0, 1], [0, 1], linestyle='--', label='Perfectly calibrated')
-
+    
+    plt.xlim([0, 1])
+    plt.ylim([0, 1])
+    
     plt.title('Calibration Curve')
     plt.xlabel('Predicted Probability')
     plt.ylabel('Observed Probability')
