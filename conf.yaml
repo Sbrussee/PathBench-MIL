@@ -23,6 +23,15 @@ experiment:
     - confusion_matrix
     - roc_curve
 
+optimization: # Optimization parameters
+  objective_metric: balanced_accuracy # Objective metric to be optimized
+  objective_mode: max # Optimization mode, can be 'max' or 'min'
+  objective_dataset: test # Dataset to be used for the objective metric, can be 'val' or 'test'
+  sampler: TPESampler # Sampler to be used, inherets from optuna.samplers
+  pruner: HyperbandPruner # Pruner to be used, inherets from optuna.pruners
+  trials: 20 # Number of trials to be run
+
+
 datasets: # List of datasets to be used
   - name: int_MF # Name of the dataset
     slide_path: ../../../Thom_Doeleman/CLAM_train_cropped # Path to the slide data

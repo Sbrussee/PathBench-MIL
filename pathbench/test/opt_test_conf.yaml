@@ -26,7 +26,8 @@ experiment:
 
 optimization:
   objective_metric: balanced_accuracy
-  objective_mode: maximize
+  objective_mode: max
+  objective_dataset: test
   sampler: TPESampler
   pruner: HyperbandPruner
   trials: 20

@@ -1,28 +1,30 @@
 .. PathBench documentation master file, created by
-   sphinx-quickstart on Thu Aug  8 15:22:32 2024.
+   sphinx-quickstart on Fri Aug 6 14:36:23 2023.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-PathBench documentation
-=======================
+Welcome to PathBench's documentation!
+=====================================
 
-Add your content using ``reStructuredText`` syntax. See the
-`reStructuredText <https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html>`_
-documentation for details.
+.. raw:: html
 
+    <div style="text-align: center;">
+    <img src="thumbnail_PathBench-logo-horizontaal.png" alt="PathBench" width="800" height="200">
+    </div>
+
+Contents:
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
+   installation
+   getting_started
+   benchmarking_mode
+   optimization_mode
+   visualization_application
+   ensemble_model_creation
+   extending_pathbench
    modules
 
-.. automodule:: pathbench
-   :members:
-   :undoc-members:
-   :show-inheritance:
-   :inherited-members:
-   :exclude-members: __weakref__
-
-   
 
