@@ -169,7 +169,6 @@ PathBench currently supports:
 - Macenko
 - Reinhard
 - CycleGan
-- Ruifrok
 
 normalization.
 ## Feature Extractors
