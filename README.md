@@ -240,8 +240,7 @@ experiment:
   aggregation_level: slide # Aggregation level, can be slide or patient
   with_continue: True # Continue training from a previous checkpoint, if available
   task: classification # Task, can be classification, regression or survival
-  weights_dir: /path/to/your/pretrained_weights # Path to the model weights
-  visualization: # Visualization options, options: learning_curve, confusion_matrix, roc_curve, umap, mosaic
+  visualization: # Visualization options, options: CLASSIFICATION: confusion_matrix, precision_recall_curve, roc_curve, umap, mosaic SURVIVAL: survival_roc, concordance_index, calibration REGRESSION: predicted_vs_actual, residuals, qq
     - learning_curve
     - confusion_matrix
     - roc_curve
@@ -253,7 +252,7 @@ optimization:
   objective_metric: balanced_accuracy # Objective metric to optimize
   sampler: TPESampler # Algorithm to use for optimization: grid_search, TPE, Bayesian
   trials: 100 # Number of optimization trials
-  pruner: HyperbandPruner
+  pruner: HyperbandPruner # Pruner for optimization, can be Hyperband, Median etc.
 
 datasets: # List of datasets to use, each dataset should have a name, slide_path, tfrecord_path, tile_path and used_for.
   - name: dataset_1
@@ -286,7 +285,6 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 # Available normalization methods:
 # - macenko
 # - reinhard
-# - ruifrok
 # - cyclegan
 
 # Available feature extraction methods:
@@ -330,12 +328,14 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 # - dsmil
 # - varmil
 
-weights_dir : ./pretrained_weights
-
+weights_dir : ./pretrained_weights # Path to the model weights, and where newly retrieved model weights will be saved
+hf_key: YOUR_HUGGINGFACE_TOKEN # Token for Hugging Face model hub to access gated models, if you do not have one, just set to None
 ```
 
 ## Extending PathBench
-PathBench is designed such that it easy to add new feature extractors and MIL aggregation models. New feature extractors are added to pathbench/models/feature_extractors.py and follow this format:
+PathBench is designed such that it easy to add new feature extractors and MIL aggregation models. 
+1. **Custom Feature Extractors**
+New feature extractors are added to pathbench/models/feature_extractors.py and follow this format:
 ```python
 @register_torch
 class kaiko_s8(TorchFeatureExtractor):
@@ -389,7 +389,7 @@ class kaiko_s8(TorchFeatureExtractor):
         }
 ```
 Feature extractor models require a @register_torch descriptor to be recognizable by PathBench as a specifiable feature extractor. Furthermore, the class requires a model to be specified, the embedding size to be specified and a transformation pipeline. For more information, please see the [slideflow documentation](https://slideflow.dev/).
-
+2. **Custom MIL aggregators**
 Adding MIL aggregation methods is done similarly, but in the pathbench/models/aggregators.py script:
 ```python
 class lse_mil(nn.Module):
@@ -455,7 +455,93 @@ The MIL aggregation function should take the bags in its forward function and ou
         return attention_scores
 ```
 Which calculates attention for the input bags. This can then be used to generate attention heatmaps.
+3. **Custom Losses**
+Custom losses can be added to pathbench/utils/losses.py and need to be specified in the configuration file under custom_loss to be active during benchmarking. An example:
+```python
+class CoxPHLoss(nn.Module):
+    """Loss function for CoxPH model."""
+    def __init__(self):
+        super().__init__()
 
+    def forward(self, preds, targets):
+        """
+        Args:
+            preds (torch.Tensor): Predictions from the model.
+            targets (torch.Tensor): Target values.
+        
+        Returns:
+            torch.Tensor: Loss value.
+        """
+        durations = targets[:, 0]
+        events = targets[:, 1]
+        
+        # Check for zero events and handle accordingly
+        if torch.sum(events) == 0:
+            logging.warning("No events in batch, returning near zero loss")
+            return torch.tensor(1e-6, dtype=preds.dtype, device=preds.device)
+        
+        loss = cox_ph_loss(preds, durations, events).float()
+        return loss
+```
+4. **Custom Training Metrics**
+Similarly, one can add custom training metrics which will be measured during training. The metrics needs to inheret from fastai's Metric class and have the methods as given down below:
+```python
+class ConcordanceIndex(Metric):
+    """Concordance index metric for survival analysis."""
+    def __init__(self):
+        self.name = "concordance_index"
+        self.reset()
+
+    def reset(self):
+        """Reset the metric."""
+        self.preds, self.durations, self.events = [], [], []
+
+    def accumulate(self, learn):
+        """Accumulate predictions and targets from a batch."""
+        preds = learn.pred
+        targets = learn.y
+        self.accum_values(preds, targets)
+
+    def accum_values(self, preds, targets):
+        """Accumulate predictions and targets from a batch."""
+        preds, targets = to_detach(preds), to_detach(targets)
+
+        # Ensure preds are tensors, handle dict, tuple, and list cases
+        if isinstance(preds, dict):
+            preds = torch.cat([torch.tensor(v).view(-1) if not isinstance(v, torch.Tensor) else v.view(-1) for v in preds.values()])
+        elif isinstance(preds, tuple):
+            preds = torch.cat([torch.tensor(p).view(-1) if not isinstance(p, torch.Tensor) else p.view(-1) for p in preds])
+        elif isinstance(preds, list):
+            preds = torch.cat([torch.tensor(p).view(-1) if not isinstance(p, torch.Tensor) else p.view(-1) for p in preds])
+        else:
+            preds = preds.view(-1) if isinstance(preds, torch.Tensor) else torch.tensor(preds).view(-1)
+
+        # Handle survival targets (durations and events)
+        durations = targets[:, 0].view(-1)
+        events = targets[:, 1].view(-1)
+        
+        self.preds.append(preds)
+        self.durations.append(durations)
+        self.events.append(events)
+
+    @property
+    def value(self):
+        """Calculate the concordance index."""
+        if len(self.preds) == 0: return None
+        preds = torch.cat(self.preds).cpu().numpy()
+        durations = torch.cat(self.durations).cpu().numpy()
+        events = torch.cat(self.events).cpu().numpy()
+        ci = concordance_index(durations, preds, events)
+        return ci
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, value):
+        self._name = value
+```
 ## Futher extension
 For more fundamental changes, and adding new normalization methods, one needs to change the underlying slideflow code. PathBench uses a [forked version](https://github.com/Sbrussee/slideflow_fork) of the slideflow code, which needs to be changed in order to implement these major changes.
 <div style="text-align: center;">
