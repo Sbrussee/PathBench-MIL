@@ -18,14 +18,8 @@ extensions = [
     'sphinx.ext.intersphinx',
     'sphinx.ext.todo',
     'sphinx.ext.viewcode',
+    'sphinx.ext.napoleon',
 ]
-
-
-
-
-
-
-
 
 
 project = 'PathBench'
@@ -41,6 +35,14 @@ extensions = []
 templates_path = ['_templates']
 exclude_patterns = []
 
+autodoc_default_options = {
+    'members': True,
+    'undoc-members': True,
+    'private-members': True,
+    'special-members': True,
+    'inherited-members': True,
+    'show-inheritance': True,
+}
 
 
 # -- Options for HTML output -------------------------------------------------

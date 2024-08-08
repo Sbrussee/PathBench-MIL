@@ -1,0 +1,59 @@
+
+Optimization Mode
+=================
+
+Optimization mode aims to find the optimal set of computational pipeline hyperparameters to optimize a set performance objective; it will not test all possible combinations.
+
+To configure optimization mode, you need to create a configuration file in YAML format. Below is an example configuration file:
+
+```yaml
+experiment:
+  project_name: Example_Project
+  annotation_file: /path/to/your/annotation_file.csv
+  balancing: category
+  split_technique: k-fold
+  epochs: 5
+  batch_size: 32
+  bag_size : 512
+  k: 2
+  val_fraction: 0.1
+  aggregation_level: slide
+  with_continue: True
+  task: classification
+  visualization:
+    - learning_curve
+    - confusion_matrix
+    - roc_curve
+    - umap
+    - mosaic
+  mode: optimization
+
+optimization:
+  objective_metric: balanced_accuracy
+  sampler: TPESampler
+  trials: 100
+  pruner: HyperbandPruner
+
+datasets:
+  - name: dataset_1
+    slide_path: /path/to/your/dataset_1/slides
+    tfrecord_path: /path/to/your/dataset_1/tfrecords
+    tile_path: /path/to/your/dataset_1/tiles
+    used_for: training
+
+  - name: dataset_2
+    slide_path: /path/to/your/dataset_2/slides
+    tfrecord_path: /path/to/your/dataset_2/tfrecords
+    tile_path: /path/to/your/dataset_2/tiles
+    used_for: testing
+
+```
+
+When in the appropriate virtual environment:
+```bash
+python3 main.py /path/to/your/config_file.yaml
+```
+or using the provided script:
+```bash
+./run_pathbench.sh /path/to/your/config_file.yaml
+```
