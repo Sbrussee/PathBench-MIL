@@ -94,12 +94,98 @@
 <h1>Modules<a class="headerlink" href="#modules" title="Link to this heading"></a></h1>
 <div class="toctree-wrapper compound">
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="pathbench_benchmarking.html">pathbench.benchmarking</a></li>
-<li class="toctree-l1"><a class="reference internal" href="pathbench_experiment.html">pathbench.experiment</a></li>
-<li class="toctree-l1"><a class="reference internal" href="pathbench_models.html">pathbench.models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pathbench_benchmarking.html">pathbench.benchmarking</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_benchmarking.html#pathbench.benchmarking.benchmark.balance_dataset"><code class="docutils literal notranslate"><span class="pre">balance_dataset()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_benchmarking.html#pathbench.benchmarking.benchmark.benchmark"><code class="docutils literal notranslate"><span class="pre">benchmark()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_benchmarking.html#pathbench.benchmarking.benchmark.build_aggregated_results"><code class="docutils literal notranslate"><span class="pre">build_aggregated_results()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_benchmarking.html#pathbench.benchmarking.benchmark.calculate_brier_score"><code class="docutils literal notranslate"><span class="pre">calculate_brier_score()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_benchmarking.html#pathbench.benchmarking.benchmark.calculate_combinations"><code class="docutils literal notranslate"><span class="pre">calculate_combinations()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_benchmarking.html#pathbench.benchmarking.benchmark.calculate_results"><code class="docutils literal notranslate"><span class="pre">calculate_results()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_benchmarking.html#pathbench.benchmarking.benchmark.calculate_survival_results"><code class="docutils literal notranslate"><span class="pre">calculate_survival_results()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_benchmarking.html#pathbench.benchmarking.benchmark.determine_splits_file"><code class="docutils literal notranslate"><span class="pre">determine_splits_file()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_benchmarking.html#pathbench.benchmarking.benchmark.determine_target_variable"><code class="docutils literal notranslate"><span class="pre">determine_target_variable()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_benchmarking.html#pathbench.benchmarking.benchmark.find_and_apply_best_model"><code class="docutils literal notranslate"><span class="pre">find_and_apply_best_model()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_benchmarking.html#pathbench.benchmarking.benchmark.generate_bags"><code class="docutils literal notranslate"><span class="pre">generate_bags()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_benchmarking.html#pathbench.benchmarking.benchmark.load_class"><code class="docutils literal notranslate"><span class="pre">load_class()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_benchmarking.html#pathbench.benchmarking.benchmark.optimize_parameters"><code class="docutils literal notranslate"><span class="pre">optimize_parameters()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_benchmarking.html#pathbench.benchmarking.benchmark.plot_across_splits"><code class="docutils literal notranslate"><span class="pre">plot_across_splits()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_benchmarking.html#pathbench.benchmarking.benchmark.run_best_model"><code class="docutils literal notranslate"><span class="pre">run_best_model()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_benchmarking.html#pathbench.benchmarking.benchmark.set_metrics"><code class="docutils literal notranslate"><span class="pre">set_metrics()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_benchmarking.html#pathbench.benchmarking.benchmark.set_mil_config"><code class="docutils literal notranslate"><span class="pre">set_mil_config()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_benchmarking.html#pathbench.benchmarking.benchmark.should_continue"><code class="docutils literal notranslate"><span class="pre">should_continue()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_benchmarking.html#pathbench.benchmarking.benchmark.split_datasets"><code class="docutils literal notranslate"><span class="pre">split_datasets()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="pathbench_experiment.html">pathbench.experiment</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_experiment.html#pathbench.experiment.experiment.Experiment"><code class="docutils literal notranslate"><span class="pre">Experiment</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_experiment.html#pathbench.experiment.experiment.read_config"><code class="docutils literal notranslate"><span class="pre">read_config()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="pathbench_models.html">pathbench.models</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.aggregators.deepset_mil"><code class="docutils literal notranslate"><span class="pre">deepset_mil</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.aggregators.distributionpooling_mil"><code class="docutils literal notranslate"><span class="pre">distributionpooling_mil</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.aggregators.dsmil"><code class="docutils literal notranslate"><span class="pre">dsmil</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.aggregators.linear_mil"><code class="docutils literal notranslate"><span class="pre">linear_mil</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.aggregators.lse_mil"><code class="docutils literal notranslate"><span class="pre">lse_mil</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.aggregators.lstm_mil"><code class="docutils literal notranslate"><span class="pre">lstm_mil</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.aggregators.max_mil"><code class="docutils literal notranslate"><span class="pre">max_mil</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.aggregators.mean_mil"><code class="docutils literal notranslate"><span class="pre">mean_mil</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.aggregators.simple_linear_mil"><code class="docutils literal notranslate"><span class="pre">simple_linear_mil</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.aggregators.varmil"><code class="docutils literal notranslate"><span class="pre">varmil</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.ResNetTrunk"><code class="docutils literal notranslate"><span class="pre">ResNetTrunk</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.VisionTransformerMoCoWithoutHead"><code class="docutils literal notranslate"><span class="pre">VisionTransformerMoCoWithoutHead</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.barlow_twins"><code class="docutils literal notranslate"><span class="pre">barlow_twins</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.beph"><code class="docutils literal notranslate"><span class="pre">beph</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.dino"><code class="docutils literal notranslate"><span class="pre">dino</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.download_pretrained_weights"><code class="docutils literal notranslate"><span class="pre">download_pretrained_weights()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.get_pretrained_url"><code class="docutils literal notranslate"><span class="pre">get_pretrained_url()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.get_pretrained_url_vit"><code class="docutils literal notranslate"><span class="pre">get_pretrained_url_vit()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.gigapath"><code class="docutils literal notranslate"><span class="pre">gigapath</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.h_optimus_0"><code class="docutils literal notranslate"><span class="pre">h_optimus_0</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.hibou_b"><code class="docutils literal notranslate"><span class="pre">hibou_b</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.kaiko_b16"><code class="docutils literal notranslate"><span class="pre">kaiko_b16</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.kaiko_b8"><code class="docutils literal notranslate"><span class="pre">kaiko_b8</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.kaiko_l14"><code class="docutils literal notranslate"><span class="pre">kaiko_l14</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.kaiko_s16"><code class="docutils literal notranslate"><span class="pre">kaiko_s16</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.kaiko_s8"><code class="docutils literal notranslate"><span class="pre">kaiko_s8</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.mocov2"><code class="docutils literal notranslate"><span class="pre">mocov2</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.pathoduet_he"><code class="docutils literal notranslate"><span class="pre">pathoduet_he</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.pathoduet_ihc"><code class="docutils literal notranslate"><span class="pre">pathoduet_ihc</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.phikon"><code class="docutils literal notranslate"><span class="pre">phikon</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.resnet50"><code class="docutils literal notranslate"><span class="pre">resnet50()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.swav"><code class="docutils literal notranslate"><span class="pre">swav</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.transpath_mocov3"><code class="docutils literal notranslate"><span class="pre">transpath_mocov3</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.uni"><code class="docutils literal notranslate"><span class="pre">uni</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.virchow"><code class="docutils literal notranslate"><span class="pre">virchow</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_models.html#pathbench.models.feature_extractors.vit_small"><code class="docutils literal notranslate"><span class="pre">vit_small()</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="pathbench_test.html">pathbench.test</a></li>
-<li class="toctree-l1"><a class="reference internal" href="pathbench_utils.html">pathbench.utils</a></li>
-<li class="toctree-l1"><a class="reference internal" href="pathbench_visualization.html">pathbench.visualization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pathbench_utils.html">pathbench.utils</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_utils.html#pathbench.utils.losses.CoxPHLoss"><code class="docutils literal notranslate"><span class="pre">CoxPHLoss</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_utils.html#pathbench.utils.losses.cox_ph_loss"><code class="docutils literal notranslate"><span class="pre">cox_ph_loss()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_utils.html#pathbench.utils.losses.cox_ph_loss_sorted"><code class="docutils literal notranslate"><span class="pre">cox_ph_loss_sorted()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_utils.html#pathbench.utils.metrics.ConcordanceIndex"><code class="docutils literal notranslate"><span class="pre">ConcordanceIndex</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_utils.html#pathbench.utils.utils.assign_group"><code class="docutils literal notranslate"><span class="pre">assign_group()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_utils.html#pathbench.utils.utils.calculate_entropy"><code class="docutils literal notranslate"><span class="pre">calculate_entropy()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_utils.html#pathbench.utils.utils.get_highest_numbered_filename"><code class="docutils literal notranslate"><span class="pre">get_highest_numbered_filename()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_utils.html#pathbench.utils.utils.get_model_class"><code class="docutils literal notranslate"><span class="pre">get_model_class()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_utils.html#pathbench.utils.utils.save_correct"><code class="docutils literal notranslate"><span class="pre">save_correct()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="pathbench_visualization.html">pathbench.visualization</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_visualization.html#pathbench.visualization.visualization.plot_calibration"><code class="docutils literal notranslate"><span class="pre">plot_calibration()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_visualization.html#pathbench.visualization.visualization.plot_calibration_across_splits"><code class="docutils literal notranslate"><span class="pre">plot_calibration_across_splits()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_visualization.html#pathbench.visualization.visualization.plot_concordance_index_across_folds"><code class="docutils literal notranslate"><span class="pre">plot_concordance_index_across_folds()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_visualization.html#pathbench.visualization.visualization.plot_precision_recall_across_splits"><code class="docutils literal notranslate"><span class="pre">plot_precision_recall_across_splits()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_visualization.html#pathbench.visualization.visualization.plot_predicted_vs_actual_across_folds"><code class="docutils literal notranslate"><span class="pre">plot_predicted_vs_actual_across_folds()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_visualization.html#pathbench.visualization.visualization.plot_qq_across_folds"><code class="docutils literal notranslate"><span class="pre">plot_qq_across_folds()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_visualization.html#pathbench.visualization.visualization.plot_residuals_across_folds"><code class="docutils literal notranslate"><span class="pre">plot_residuals_across_folds()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_visualization.html#pathbench.visualization.visualization.plot_roc_curve_across_splits"><code class="docutils literal notranslate"><span class="pre">plot_roc_curve_across_splits()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_visualization.html#pathbench.visualization.visualization.plot_survival_auc_across_folds"><code class="docutils literal notranslate"><span class="pre">plot_survival_auc_across_folds()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="pathbench_visualization.html#pathbench.visualization.visualization.visualize_activations"><code class="docutils literal notranslate"><span class="pre">visualize_activations()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </div>
 </section>

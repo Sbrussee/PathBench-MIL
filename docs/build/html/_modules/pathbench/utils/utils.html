@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>pathbench.utils.utils &mdash; PathBench 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="../../../_static/documentation_options.js?v=01f34227"></script>
+        <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            PathBench
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../benchmarking_mode.html">Benchmarking Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../optimization_mode.html">Optimization Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../visualization_application.html">Visualization Application</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../ensemble_model_creation.html">Ensemble Model Creation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../extending_pathbench.html">Extending PathBench</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../feature_extractors.html">Feature Extractors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../mil_aggregators.html">MIL Aggregators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">Modules</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">PathBench</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">pathbench.utils.utils</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for pathbench.utils.utils</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+
+<div class="viewcode-block" id="calculate_entropy">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.utils.calculate_entropy">[docs]</a>
+<span class="k">def</span> <span class="nf">calculate_entropy</span><span class="p">(</span><span class="n">row</span> <span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculate the entropy based on the row (instance prediction).</span>
+<span class="sd">    We calculate entropy as:</span>
+<span class="sd">    -p * log2(p) - (1 - p) * log2(1 - p)</span>
+<span class="sd">    where p is the probability of the positive class</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        row: The row of the prediction dataframe in question</span>
+<span class="sd">    </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        The entropy</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">p0</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;y_pred0&#39;</span><span class="p">]</span>
+    <span class="n">p1</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;y_pred1&#39;</span><span class="p">]</span>
+    <span class="c1"># Ensure the probabilities are valid to avoid log(0)</span>
+    <span class="k">if</span> <span class="n">p0</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">p1</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="o">-</span> <span class="p">(</span><span class="n">p0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log2</span><span class="p">(</span><span class="n">p0</span><span class="p">)</span> <span class="o">+</span> <span class="n">p1</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log2</span><span class="p">(</span><span class="n">p1</span><span class="p">))</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mf">0.0</span></div>
+
+
+<div class="viewcode-block" id="assign_group">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.utils.assign_group">[docs]</a>
+<span class="k">def</span> <span class="nf">assign_group</span><span class="p">(</span><span class="n">certainty</span> <span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Assign a group based on the certainty</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        certainty: The certainty value</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        The group</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">certainty</span> <span class="o">&lt;=</span> <span class="mf">0.25</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s1">&#39;0-25&#39;</span>
+    <span class="k">elif</span> <span class="n">certainty</span> <span class="o">&lt;=</span> <span class="mf">0.50</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s1">&#39;25-50&#39;</span>
+    <span class="k">elif</span> <span class="n">certainty</span> <span class="o">&lt;=</span> <span class="mf">0.75</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s1">&#39;50-75&#39;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s1">&#39;75-100&#39;</span></div>
+
+
+<div class="viewcode-block" id="get_model_class">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.utils.get_model_class">[docs]</a>
+<span class="k">def</span> <span class="nf">get_model_class</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">class_name</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get the class from the module based on the class name</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        module: The module to get the class from</span>
+<span class="sd">        class_name: The name of the class to get</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        The class from the module</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">class_name</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="get_highest_numbered_filename">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.utils.get_highest_numbered_filename">[docs]</a>
+<span class="k">def</span> <span class="nf">get_highest_numbered_filename</span><span class="p">(</span><span class="n">directory_path</span> <span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get the highest numbered filename in the directory</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        directory_path: The path to the directory</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        The highest numbered filename</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># List all files in the directory</span>
+    <span class="n">files</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">directory_path</span><span class="p">)</span>
+
+    <span class="c1"># Initialize variables to keep track of the highest number and corresponding filename</span>
+    <span class="n">highest_number</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s1">&#39;-inf&#39;</span><span class="p">)</span>
+    <span class="n">highest_number_filename</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1"># Iterate over each file</span>
+    <span class="k">for</span> <span class="n">filename</span> <span class="ow">in</span> <span class="n">files</span><span class="p">:</span>
+        <span class="c1"># Get the part before the first &#39;-&#39;</span>
+        <span class="n">first_part</span> <span class="o">=</span> <span class="n">filename</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;-&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="c1"># Try to convert the first part to a number</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">number</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">first_part</span><span class="p">)</span>
+            <span class="c1"># If the converted number is higher than the current highest, update the variables</span>
+            <span class="k">if</span> <span class="n">number</span> <span class="o">&gt;</span> <span class="n">highest_number</span><span class="p">:</span>
+                <span class="n">highest_number</span> <span class="o">=</span> <span class="n">number</span>
+                <span class="n">highest_number_part</span> <span class="o">=</span> <span class="n">first_part</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="k">pass</span>  <span class="c1"># Ignore non-numeric parts</span>
+
+    <span class="k">return</span> <span class="n">highest_number_part</span></div>
+
+
+<div class="viewcode-block" id="save_correct">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.utils.save_correct">[docs]</a>
+<span class="k">def</span> <span class="nf">save_correct</span><span class="p">(</span><span class="n">result</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">save_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dataset_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Save CSV files with correct and incorrect predictions.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        result: The results dataframe</span>
+<span class="sd">        save_string: The save string</span>
+<span class="sd">        dataset_type: Type of dataset (e.g., &quot;val&quot; or &quot;test&quot;)</span>
+<span class="sd">        config: The configuration dictionary</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        None</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Identify correct predictions</span>
+    <span class="n">y_true</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s1">&#39;y_true&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span>
+    <span class="n">y_pred_cols</span> <span class="o">=</span> <span class="p">[</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">columns</span> <span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;y_pred&#39;</span><span class="p">)]</span>
+    
+    <span class="c1"># For multiclass classification, find the column with the highest probability for each prediction</span>
+    <span class="n">y_pred_probs</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="n">y_pred_cols</span><span class="p">]</span><span class="o">.</span><span class="n">values</span>
+    <span class="n">y_pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">y_pred_probs</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="c1"># Add a column indicating whether the prediction is correct</span>
+    <span class="n">result</span><span class="p">[</span><span class="s1">&#39;correct&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">y_true</span> <span class="o">==</span> <span class="n">y_pred</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+    
+    <span class="c1"># Filter correct and incorrect predictions</span>
+    <span class="n">correct_predictions</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="n">result</span><span class="p">[</span><span class="s1">&#39;correct&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">]</span>
+    <span class="n">incorrect_predictions</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="n">result</span><span class="p">[</span><span class="s1">&#39;correct&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">]</span>
+
+    <span class="c1"># Save correct predictions to a CSV file</span>
+    <span class="n">correct_save_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;experiments/</span><span class="si">{</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;experiment&#39;</span><span class="p">][</span><span class="s1">&#39;project_name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">/results/</span><span class="si">{</span><span class="n">save_string</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">dataset_type</span><span class="si">}</span><span class="s2">_correct.csv&quot;</span>
+    <span class="n">incorrect_save_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;experiments/</span><span class="si">{</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;experiment&#39;</span><span class="p">][</span><span class="s1">&#39;project_name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">/results/</span><span class="si">{</span><span class="n">save_string</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">dataset_type</span><span class="si">}</span><span class="s2">_incorrect.csv&quot;</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">correct_save_path</span><span class="p">),</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    
+    <span class="n">correct_predictions</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">correct_save_path</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">incorrect_predictions</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">incorrect_save_path</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Correct predictions saved to </span><span class="si">{</span><span class="n">correct_save_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Incorrect predictions saved to </span><span class="si">{</span><span class="n">incorrect_save_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Siemen Brussee.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

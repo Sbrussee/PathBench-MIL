@@ -56,7 +56,28 @@
 <li class="toctree-l1"><a class="reference internal" href="feature_extractors.html">Feature Extractors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="mil_aggregators.html">MIL Aggregators</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="modules.html">Modules</a><ul class="current">
-<li class="toctree-l2 current"><a class="current reference internal" href="#">pathbench.benchmarking</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">pathbench.benchmarking</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.balance_dataset"><code class="docutils literal notranslate"><span class="pre">balance_dataset()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.benchmark"><code class="docutils literal notranslate"><span class="pre">benchmark()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.build_aggregated_results"><code class="docutils literal notranslate"><span class="pre">build_aggregated_results()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.calculate_brier_score"><code class="docutils literal notranslate"><span class="pre">calculate_brier_score()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.calculate_combinations"><code class="docutils literal notranslate"><span class="pre">calculate_combinations()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.calculate_results"><code class="docutils literal notranslate"><span class="pre">calculate_results()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.calculate_survival_results"><code class="docutils literal notranslate"><span class="pre">calculate_survival_results()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.determine_splits_file"><code class="docutils literal notranslate"><span class="pre">determine_splits_file()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.determine_target_variable"><code class="docutils literal notranslate"><span class="pre">determine_target_variable()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.find_and_apply_best_model"><code class="docutils literal notranslate"><span class="pre">find_and_apply_best_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.generate_bags"><code class="docutils literal notranslate"><span class="pre">generate_bags()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.load_class"><code class="docutils literal notranslate"><span class="pre">load_class()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.optimize_parameters"><code class="docutils literal notranslate"><span class="pre">optimize_parameters()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.plot_across_splits"><code class="docutils literal notranslate"><span class="pre">plot_across_splits()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.run_best_model"><code class="docutils literal notranslate"><span class="pre">run_best_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.set_metrics"><code class="docutils literal notranslate"><span class="pre">set_metrics()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.set_mil_config"><code class="docutils literal notranslate"><span class="pre">set_mil_config()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.should_continue"><code class="docutils literal notranslate"><span class="pre">should_continue()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.split_datasets"><code class="docutils literal notranslate"><span class="pre">split_datasets()</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="pathbench_experiment.html">pathbench.experiment</a></li>
 <li class="toctree-l2"><a class="reference internal" href="pathbench_models.html">pathbench.models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="pathbench_test.html">pathbench.test</a></li>
@@ -91,8 +112,331 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="pathbench-benchmarking">
-<h1>pathbench.benchmarking<a class="headerlink" href="#pathbench-benchmarking" title="Link to this heading"></a></h1>
+  <section id="module-pathbench.benchmarking.benchmark">
+<span id="pathbench-benchmarking"></span><h1>pathbench.benchmarking<a class="headerlink" href="#module-pathbench.benchmarking.benchmark" title="Link to this heading"></a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.balance_dataset">
+<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">balance_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">task</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#balance_dataset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.balance_dataset" title="Link to this definition"></a></dt>
+<dd><p>Determine the balancing strategy based on the task amd apply balancing</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dataset</strong> – The training dataset</p></li>
+<li><p><strong>task</strong> – The task</p></li>
+<li><p><strong>config</strong> – The configuration dictionary</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The balanced dataset</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.benchmark">
+<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">benchmark</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#benchmark"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.benchmark" title="Link to this definition"></a></dt>
+<dd><p>Main benchmarking script, which runs the benchmarking based on the configuration</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config</strong> – The configuration dictionary</p></li>
+<li><p><strong>project</strong> – The project</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.build_aggregated_results">
+<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">build_aggregated_results</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">val_df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">test_df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">benchmark_parameters</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aggregation_functions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#build_aggregated_results"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.build_aggregated_results" title="Link to this definition"></a></dt>
+<dd><p>Aggregate the results across splits, based on the relevant metric for each task</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>val_df</strong> – The validation results dataframe</p></li>
+<li><p><strong>test_df</strong> – The test results dataframe</p></li>
+<li><p><strong>benchmark_parameters</strong> – The benchmark parameters</p></li>
+<li><p><strong>aggregation_functions</strong> – The aggregation functions</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The aggregated validation results dataframe and the aggregated test results dataframe</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.calculate_brier_score">
+<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">calculate_brier_score</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">durations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">events</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">predictions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#calculate_brier_score"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.calculate_brier_score" title="Link to this definition"></a></dt>
+<dd><p>Calculate the Brier score based on the durations, events and predictions</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>durations</strong> – The durations</p></li>
+<li><p><strong>events</strong> – The events</p></li>
+<li><p><strong>predictions</strong> – The predictions</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The Brier score</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.calculate_combinations">
+<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">calculate_combinations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#calculate_combinations"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.calculate_combinations" title="Link to this definition"></a></dt>
+<dd><p>Calculate all combinations based on the benchmark parameters in the configuration</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>config</strong> – The configuration dictionary</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The list of all combinations</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.calculate_results">
+<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">calculate_results</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_string</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#calculate_results"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.calculate_results" title="Link to this definition"></a></dt>
+<dd><p>Calculate the results based on the configuration, given the results dataframe and the
+task.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>result</strong> – The results dataframe</p></li>
+<li><p><strong>config</strong> – The configuration dictionary</p></li>
+<li><p><strong>save_string</strong> – The save string</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The metrics, true positive rate, false positive rate and precision-recall curves</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.calculate_survival_results">
+<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">calculate_survival_results</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#calculate_survival_results"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.calculate_survival_results" title="Link to this definition"></a></dt>
+<dd><p>Calculate the survival results based on the configuration, given the results dataframe</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>result</strong> – The results dataframe</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The metrics, durations, events and predictions</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.determine_splits_file">
+<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">determine_splits_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project_directory</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#determine_splits_file"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.determine_splits_file" title="Link to this definition"></a></dt>
+<dd><p>Determine the splits file based on the configuration</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config</strong> – The configuration dictionary</p></li>
+<li><p><strong>project_directory</strong> – The project directory</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The splits file</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.determine_target_variable">
+<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">determine_target_variable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">task</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#determine_target_variable"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.determine_target_variable" title="Link to this definition"></a></dt>
+<dd><p>Determine the target variable based on the task</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>task</strong> – The task</p></li>
+<li><p><strong>config</strong> – The configuration dictionary</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The target variable</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.find_and_apply_best_model">
+<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">find_and_apply_best_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">val_df_agg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">test_df_agg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">benchmark_parameters</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">val_df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">test_df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">val</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">test</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#find_and_apply_best_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.find_and_apply_best_model" title="Link to this definition"></a></dt>
+<dd><p>Find and apply the best model based on the relevant metric for each task</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config</strong> – The configuration dictionary</p></li>
+<li><p><strong>val_df_agg</strong> – The aggregated validation results dataframe</p></li>
+<li><p><strong>test_df_agg</strong> – The aggregated test results dataframe</p></li>
+<li><p><strong>benchmark_parameters</strong> – The benchmark parameters</p></li>
+<li><p><strong>val_df</strong> – The validation results dataframe</p></li>
+<li><p><strong>test_df</strong> – The test results dataframe</p></li>
+<li><p><strong>target</strong> – The target variable</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.generate_bags">
+<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">generate_bags</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Project</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">all_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">combination_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">string_without_mil</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">feature_extractor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#generate_bags"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.generate_bags" title="Link to this definition"></a></dt>
+<dd><p>Generate feature bags based on the configuration</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config</strong> – The configuration dictionary</p></li>
+<li><p><strong>project</strong> – The project</p></li>
+<li><p><strong>all_data</strong> – The dataset</p></li>
+<li><p><strong>combination_dict</strong> – The combination dictionary</p></li>
+<li><p><strong>string_without_mil</strong> – The string without the MIL method</p></li>
+<li><p><strong>feature_extractor</strong> – The feature extractor</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The feature bags</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.load_class">
+<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">load_class</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">class_name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#load_class"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.load_class" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.optimize_parameters">
+<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">optimize_parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#optimize_parameters"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.optimize_parameters" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.plot_across_splits">
+<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">plot_across_splits</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">survival_results_per_split</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">test_survival_results_per_split</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">val_results_per_split</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">test_results_per_split</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">val_pr_per_split</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">test_pr_per_split</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_string</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#plot_across_splits"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.plot_across_splits" title="Link to this definition"></a></dt>
+<dd><p>Plot the results across splits, depending on the task</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config</strong> – The configuration dictionary</p></li>
+<li><p><strong>survival_results_per_split</strong> – The survival results per split, only relevant for survival task</p></li>
+<li><p><strong>test_survival_results_per_split</strong> – The test survival results per split, only relevant for survival task</p></li>
+<li><p><strong>val_results_per_split</strong> – The validation results per split</p></li>
+<li><p><strong>test_results_per_split</strong> – The test results per split</p></li>
+<li><p><strong>val_pr_per_split</strong> – The validation precision-recall curves per split, only relevant for classification</p></li>
+<li><p><strong>test_pr_per_split</strong> – The test precision-recall curves per split, only relevant for classification</p></li>
+<li><p><strong>save_string</strong> – The save string</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.run_best_model">
+<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">run_best_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">split</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bags</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mil_conf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#run_best_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.run_best_model" title="Link to this definition"></a></dt>
+<dd><p>Run the best model based on the configuration, including heatmaps</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config</strong> – The configuration dictionary</p></li>
+<li><p><strong>split</strong> – The split</p></li>
+<li><p><strong>dataset</strong> – The dataset</p></li>
+<li><p><strong>bags</strong> – The bags</p></li>
+<li><p><strong>mil_conf</strong> – The MIL configuration</p></li>
+<li><p><strong>target</strong> – The target variable</p></li>
+<li><p><strong>model_weights</strong> – Path to the model weights</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.set_metrics">
+<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">set_metrics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#set_metrics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.set_metrics" title="Link to this definition"></a></dt>
+<dd><p>Set the evaluation metrics based on the configuration</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>config</strong> – The configuration dictionary</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The updated configuration, evaluation metrics and aggregation functions</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.set_mil_config">
+<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">set_mil_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">combination_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#set_mil_config"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.set_mil_config" title="Link to this definition"></a></dt>
+<dd><p>Set the MIL configuration based on the configuration</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config</strong> – The configuration dictionary</p></li>
+<li><p><strong>combination_dict</strong> – The combination dictionary</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The MIL configuration</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.should_continue">
+<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">should_continue</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">all_combinations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#should_continue"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.should_continue" title="Link to this definition"></a></dt>
+<dd><p>Check if the benchmarking should continue based on the finished combinations</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config</strong> – The configuration dictionary</p></li>
+<li><p><strong>all_combinations</strong> – The list of all combinations</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A boolean indicating whether the benchmarking should continue, the filtered list of all combinations, the validation results and the test results
+all_combinations: The filtered list of all combinations
+val_df: The validation results dataframe
+test_df: The test results dataframe</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.split_datasets">
+<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">split_datasets</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Project</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">splits_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project_directory</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">train_set</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dataset</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#split_datasets"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.split_datasets" title="Link to this definition"></a></dt>
+<dd><p>Split the datasets based on the configuration</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config</strong> – The configuration dictionary</p></li>
+<li><p><strong>project</strong> – The project</p></li>
+<li><p><strong>splits_file</strong> – The splits file</p></li>
+<li><p><strong>target</strong> – The target variable</p></li>
+<li><p><strong>project_directory</strong> – The project directory</p></li>
+<li><p><strong>train_set</strong> – The training dataset</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The splits</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 
 

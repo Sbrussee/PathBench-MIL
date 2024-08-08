@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>pathbench.models.aggregators &mdash; PathBench 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="../../../_static/documentation_options.js?v=01f34227"></script>
+        <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            PathBench
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../benchmarking_mode.html">Benchmarking Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../optimization_mode.html">Optimization Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../visualization_application.html">Visualization Application</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../ensemble_model_creation.html">Ensemble Model Creation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../extending_pathbench.html">Extending PathBench</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../feature_extractors.html">Feature Extractors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../mil_aggregators.html">MIL Aggregators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">Modules</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">PathBench</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">pathbench.models.aggregators</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for pathbench.models.aggregators</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Here one can use pytorch modules as custom MIL aggregator models instead of the ones included in slideflow.</span>
+<span class="sd">The construted modules can be imported into the benchmark.py script to be used in the benchmarking process.</span>
+<span class="sd">As an example, we added some simple MIL methods (linear + mean, linear + max) below.</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
+<span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>
+
+
+<div class="viewcode-block" id="simple_linear_mil">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.simple_linear_mil">[docs]</a>
+<span class="k">class</span> <span class="nc">simple_linear_mil</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Simple Multiple instance learning model with linear layers, useful for linear evaluation.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_feats : int</span>
+<span class="sd">        Number of input features</span>
+<span class="sd">    n_out : int</span>
+<span class="sd">        Number of output classes</span>
+<span class="sd">    z_dim : int</span>
+<span class="sd">        Dimensionality of the hidden layer</span>
+<span class="sd">    dropout_p : float</span>
+<span class="sd">        Dropout probability</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    encoder : nn.Sequential</span>
+<span class="sd">        Encoder network</span>
+<span class="sd">    head : nn.Sequential</span>
+<span class="sd">        Prediction head network</span>
+
+<span class="sd">    Methods</span>
+<span class="sd">    -------</span>
+<span class="sd">    forward(bags)</span>
+<span class="sd">        Forward pass through the model</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="simple_linear_mil.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.simple_linear_mil.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_out</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span> <span class="n">dropout_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_feats</span><span class="p">,</span> <span class="n">n_out</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">head</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_out</span><span class="p">,</span> <span class="n">n_out</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="simple_linear_mil.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.simple_linear_mil.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">):</span>
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">bags</span><span class="p">)</span>
+        <span class="n">pooled_embeddings</span> <span class="o">=</span> <span class="n">embeddings</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="n">pooled_embeddings</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">scores</span></div>
+</div>
+
+        
+
+<div class="viewcode-block" id="linear_mil">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.linear_mil">[docs]</a>
+<span class="k">class</span> <span class="nc">linear_mil</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Multiple instance learning model with linear layers.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_feats : int</span>
+<span class="sd">        Number of input features</span>
+<span class="sd">    n_out : int</span>
+<span class="sd">        Number of output classes</span>
+<span class="sd">    z_dim : int</span>
+<span class="sd">        Dimensionality of the hidden layer</span>
+<span class="sd">    dropout_p : float</span>
+<span class="sd">        Dropout probability</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    encoder : nn.Sequential</span>
+<span class="sd">        Encoder network</span>
+<span class="sd">    head : nn.Sequential</span>
+<span class="sd">        Prediction head network</span>
+
+<span class="sd">    Methods</span>
+<span class="sd">    -------</span>
+<span class="sd">    forward(bags)</span>
+<span class="sd">        Forward pass through the model</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="linear_mil.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.linear_mil.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_out</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span> <span class="n">dropout_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_feats</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">head</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Flatten</span><span class="p">(),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm1d</span><span class="p">(</span><span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">n_out</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="linear_mil.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.linear_mil.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">):</span>
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">bags</span><span class="p">)</span>
+        <span class="n">pooled_embeddings</span> <span class="o">=</span> <span class="n">embeddings</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="n">pooled_embeddings</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">scores</span></div>
+</div>
+
+
+<div class="viewcode-block" id="mean_mil">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.mean_mil">[docs]</a>
+<span class="k">class</span> <span class="nc">mean_mil</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Multiple instance learning model with mean pooling.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_feats : int</span>
+<span class="sd">        Number of input features</span>
+<span class="sd">    n_out : int</span>
+<span class="sd">        Number of output classes</span>
+<span class="sd">    z_dim : int</span>
+<span class="sd">        Dimensionality of the hidden layer</span>
+<span class="sd">    dropout_p : float</span>
+<span class="sd">        Dropout probability</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    encoder : nn.Sequential</span>
+<span class="sd">        Encoder network</span>
+<span class="sd">    head : nn.Sequential</span>
+<span class="sd">        Prediction head network</span>
+
+<span class="sd">    Methods</span>
+<span class="sd">    -------</span>
+<span class="sd">    forward(bags)</span>
+<span class="sd">        Forward pass through the model</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+<div class="viewcode-block" id="mean_mil.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.mean_mil.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_out</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span> <span class="n">dropout_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_feats</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">head</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Flatten</span><span class="p">(),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm1d</span><span class="p">(</span><span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">n_out</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="mean_mil.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.mean_mil.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">):</span>
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">bags</span><span class="p">)</span>
+        <span class="n">pooled_embeddings</span> <span class="o">=</span> <span class="n">embeddings</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="n">pooled_embeddings</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">scores</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="max_mil">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.max_mil">[docs]</a>
+<span class="k">class</span> <span class="nc">max_mil</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Multiple instance learning model with max pooling.</span>
+<span class="sd">    </span>
+<span class="sd">        Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_feats : int</span>
+<span class="sd">        Number of input features</span>
+<span class="sd">    n_out : int</span>
+<span class="sd">        Number of output classes</span>
+<span class="sd">    z_dim : int</span>
+<span class="sd">        Dimensionality of the hidden layer</span>
+<span class="sd">    dropout_p : float</span>
+<span class="sd">        Dropout probability</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    encoder : nn.Sequential</span>
+<span class="sd">        Encoder network</span>
+<span class="sd">    head : nn.Sequential</span>
+<span class="sd">        Prediction head network</span>
+
+<span class="sd">    Methods</span>
+<span class="sd">    -------</span>
+<span class="sd">    forward(bags)</span>
+<span class="sd">        Forward pass through the model</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="max_mil.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.max_mil.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_out</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span> <span class="n">dropout_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_feats</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">head</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Flatten</span><span class="p">(),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm1d</span><span class="p">(</span><span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">n_out</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="max_mil.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.max_mil.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">):</span>
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">bags</span><span class="p">)</span>
+        <span class="n">pooled_embeddings</span> <span class="o">=</span> <span class="n">embeddings</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="n">pooled_embeddings</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">scores</span></div>
+</div>
+
+
+<div class="viewcode-block" id="lse_mil">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.lse_mil">[docs]</a>
+<span class="k">class</span> <span class="nc">lse_mil</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Multiple instance learning model with log-sum-exp pooling.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_feats : int</span>
+<span class="sd">        Number of input features</span>
+<span class="sd">    n_out : int</span>
+<span class="sd">        Number of output classes</span>
+<span class="sd">    z_dim : int</span>
+<span class="sd">        Dimensionality of the hidden layer</span>
+<span class="sd">    dropout_p : float</span>
+<span class="sd">        Dropout probability</span>
+<span class="sd">    r : float</span>
+<span class="sd">        scaling factor for log-sum-exp pooling</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    encoder : nn.Sequential</span>
+<span class="sd">        Encoder network</span>
+<span class="sd">    head : nn.Sequential</span>
+<span class="sd">        Prediction head network</span>
+<span class="sd">    r : float</span>
+<span class="sd">        scaling factor for log-sum-exp pooling</span>
+
+<span class="sd">    Methods</span>
+<span class="sd">    -------</span>
+<span class="sd">    forward(bags)</span>
+<span class="sd">        Forward pass through the model</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="lse_mil.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.lse_mil.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_out</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span> <span class="n">dropout_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span> <span class="n">r</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_feats</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">head</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Flatten</span><span class="p">(),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm1d</span><span class="p">(</span><span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">n_out</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">r</span> <span class="o">=</span> <span class="n">r</span></div>
+
+
+<div class="viewcode-block" id="lse_mil.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.lse_mil.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">):</span>
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">bags</span><span class="p">)</span>
+        <span class="n">lse_pooling</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">r</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">logsumexp</span><span class="p">(</span><span class="n">embeddings</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="n">lse_pooling</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">scores</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="lstm_mil">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.lstm_mil">[docs]</a>
+<span class="k">class</span> <span class="nc">lstm_mil</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Multiple instance learning model with LSTM-based pooling.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_feats : int</span>
+<span class="sd">        Number of input features</span>
+<span class="sd">    n_out : int</span>
+<span class="sd">        Number of output classes</span>
+<span class="sd">    z_dim : int</span>
+<span class="sd">        Dimensionality of the hidden layer</span>
+<span class="sd">    lstm_dim : int</span>
+<span class="sd">        Dimensionality of the LSTM hidden state</span>
+<span class="sd">    dropout_p : float</span>
+<span class="sd">        Dropout probability</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    encoder : nn.Sequential</span>
+<span class="sd">        Encoder network</span>
+<span class="sd">    lstm : nn.LSTM</span>
+<span class="sd">        LSTM network</span>
+<span class="sd">    head : nn.Sequential</span>
+<span class="sd">        Prediction head network</span>
+<span class="sd">    </span>
+
+<span class="sd">    Methods</span>
+<span class="sd">    -------</span>
+<span class="sd">    forward(bags)</span>
+<span class="sd">        Forward pass through the model</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">use_lens</span><span class="o">=</span><span class="kc">True</span>
+
+<div class="viewcode-block" id="lstm_mil.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.lstm_mil.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_out</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span> <span class="n">lstm_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">128</span><span class="p">,</span> <span class="n">dropout_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_feats</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">LSTM</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">lstm_dim</span><span class="p">,</span> <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">head</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm1d</span><span class="p">(</span><span class="n">lstm_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">lstm_dim</span><span class="p">,</span> <span class="n">n_out</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="lstm_mil.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.lstm_mil.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">,</span> <span class="n">lens</span><span class="p">):</span>
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">bags</span><span class="p">)</span>  <span class="c1"># Shape: (batch_size, num_instances, z_dim)</span>
+        <span class="n">lens_cpu</span> <span class="o">=</span> <span class="n">lens</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>  <span class="c1"># Ensure lengths are on CPU and of type int64 for packing</span>
+        <span class="n">packed_embeddings</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">rnn</span><span class="o">.</span><span class="n">pack_padded_sequence</span><span class="p">(</span><span class="n">embeddings</span><span class="p">,</span> <span class="n">lens_cpu</span><span class="p">,</span> <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">enforce_sorted</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">packed_output</span><span class="p">,</span> <span class="p">(</span><span class="n">hidden</span><span class="p">,</span> <span class="n">cell</span><span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="p">(</span><span class="n">packed_embeddings</span><span class="p">)</span>
+        <span class="n">lstm_output</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">rnn</span><span class="o">.</span><span class="n">pad_packed_sequence</span><span class="p">(</span><span class="n">packed_output</span><span class="p">,</span> <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="c1"># Use the last hidden state of the LSTM as the pooled representation</span>
+        <span class="n">pooled_embeddings</span> <span class="o">=</span> <span class="n">hidden</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="n">pooled_embeddings</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">scores</span></div>
+</div>
+
+
+<div class="viewcode-block" id="deepset_mil">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.deepset_mil">[docs]</a>
+<span class="k">class</span> <span class="nc">deepset_mil</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Multiple instance learning model with DeepSet-based pooling.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_feats : int</span>
+<span class="sd">        Number of input features</span>
+<span class="sd">    n_out : int</span>
+<span class="sd">        Number of output classes</span>
+<span class="sd">    z_dim : int</span>
+<span class="sd">        Dimensionality of the hidden layer</span>
+<span class="sd">    dropout_p : float</span>
+<span class="sd">        Dropout probability</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    encoder : nn.Sequential</span>
+<span class="sd">        Encoder network</span>
+<span class="sd">    deepset_phi : nn.Sequential</span>
+<span class="sd">        DeepSet phi network</span>
+<span class="sd">    deepset_rho : nn.Sequential</span>
+<span class="sd">        DeepSet rho network</span>
+<span class="sd">    </span>
+<span class="sd">    Methods</span>
+<span class="sd">    -------</span>
+<span class="sd">    forward(bags)</span>
+<span class="sd">        Forward pass through the model</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="deepset_mil.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.deepset_mil.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_out</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span> <span class="n">dropout_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_feats</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">deepset_phi</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">(),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">deepset_rho</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">(),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">n_out</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="deepset_mil.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.deepset_mil.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">):</span>
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">bags</span><span class="p">)</span>
+        <span class="n">phi_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">deepset_phi</span><span class="p">(</span><span class="n">embeddings</span><span class="p">)</span>
+        <span class="n">pooled_embeddings</span> <span class="o">=</span> <span class="n">phi_output</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">deepset_rho</span><span class="p">(</span><span class="n">pooled_embeddings</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">scores</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="distributionpooling_mil">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.distributionpooling_mil">[docs]</a>
+<span class="k">class</span> <span class="nc">distributionpooling_mil</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Multiple instance learning model with distribution pooling (mean and variance).</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_feats : int</span>
+<span class="sd">        Number of input features</span>
+<span class="sd">    n_out : int</span>
+<span class="sd">        Number of output classes</span>
+<span class="sd">    z_dim : int</span>
+<span class="sd">        Dimensionality of the hidden layer</span>
+<span class="sd">    dropout_p : float</span>
+<span class="sd">        Dropout probability</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    encoder : nn.Sequential</span>
+<span class="sd">        Encoder network</span>
+<span class="sd">    head : nn.Sequential</span>
+<span class="sd">        Prediction head network</span>
+<span class="sd">    </span>
+<span class="sd">    Methods</span>
+<span class="sd">    -------</span>
+<span class="sd">    forward(bags)</span>
+<span class="sd">        Forward pass through the model</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="distributionpooling_mil.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.distributionpooling_mil.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_out</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span> <span class="n">dropout_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="c1"># Encoder to transform raw features into a higher-dimensional space</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_feats</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="c1"># Head network to produce final classification scores</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">head</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm1d</span><span class="p">(</span><span class="n">z_dim</span> <span class="o">*</span> <span class="mi">2</span><span class="p">),</span>  <span class="c1"># Since we&#39;ll concatenate mean and variance</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span> <span class="n">n_out</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="distributionpooling_mil.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.distributionpooling_mil.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">):</span>
+        <span class="c1"># Encode each instance in the bag</span>
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">bags</span><span class="p">)</span>
+        <span class="c1"># Calculate the mean and variance of the embeddings</span>
+        <span class="n">mean_embeddings</span> <span class="o">=</span> <span class="n">embeddings</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">variance_embeddings</span> <span class="o">=</span> <span class="n">embeddings</span><span class="o">.</span><span class="n">var</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="c1"># Concatenate the mean and variance</span>
+        <span class="n">pooled_embeddings</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">mean_embeddings</span><span class="p">,</span> <span class="n">variance_embeddings</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="c1"># Pass through the head network to get final scores</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="n">pooled_embeddings</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">scores</span></div>
+</div>
+
+
+<div class="viewcode-block" id="dsmil">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.dsmil">[docs]</a>
+<span class="k">class</span> <span class="nc">dsmil</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Dual-Stream Multiple Instance Learning model with attention mechanism and Conv1D bag-level classifier.</span>
+<span class="sd">    DSMIL first computes instance-level embeddings and scores, then aggregates them into bag-level embeddings,</span>
+<span class="sd">    based on an attention mechanism. Finally, a Conv1D classifier is used to predict the bag-level label.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_feats : int</span>
+<span class="sd">        Number of input features</span>
+<span class="sd">    n_out : int</span>
+<span class="sd">        Number of output classes</span>
+<span class="sd">    z_dim : int</span>
+<span class="sd">        Dimensionality of the hidden layer</span>
+<span class="sd">    dropout_p : float</span>
+<span class="sd">        Dropout probability</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    instance_encoder : nn.Sequential</span>
+<span class="sd">        Instance encoder network</span>
+<span class="sd">    instance_classifier : nn.Linear</span>
+<span class="sd">        Instance classifier network</span>
+<span class="sd">    </span>
+<span class="sd">    attention : nn.Sequential</span>
+<span class="sd">        Attention network</span>
+<span class="sd">    conv1d : nn.Conv1d</span>
+<span class="sd">        Conv1D network</span>
+<span class="sd">    bag_classifier : nn.Sequential</span>
+<span class="sd">        Bag-level classifier network</span>
+<span class="sd">    </span>
+<span class="sd">    Methods</span>
+<span class="sd">    -------</span>
+<span class="sd">    forward(bags, return_attention)</span>
+<span class="sd">        Forward pass through the model</span>
+<span class="sd">    </span>
+<span class="sd">    calculate_attention(bags, lens, apply_softmax)</span>
+<span class="sd">        Calculate attention scores for the given bags</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="dsmil.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.dsmil.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_out</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span> <span class="n">dropout_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">instance_encoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_feats</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">instance_classifier</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attention</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span><span class="p">(),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conv1d</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Conv1d</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bag_classifier</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm1d</span><span class="p">(</span><span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">n_out</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="dsmil.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.dsmil.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">,</span> <span class="n">return_attention</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="n">batch_size</span><span class="p">,</span> <span class="n">num_instances</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">bags</span><span class="o">.</span><span class="n">size</span><span class="p">()</span>
+
+        <span class="c1"># Instance-level encoding and classification</span>
+        <span class="n">instance_features</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">instance_encoder</span><span class="p">(</span><span class="n">bags</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">bags</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)))</span>
+        <span class="n">instance_scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">instance_classifier</span><span class="p">(</span><span class="n">instance_features</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">num_instances</span><span class="p">)</span>
+
+        <span class="c1"># Max pooling stream</span>
+        <span class="n">max_score</span><span class="p">,</span> <span class="n">max_idx</span> <span class="o">=</span> <span class="n">instance_scores</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">critical_instance</span> <span class="o">=</span> <span class="n">bags</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">batch_size</span><span class="p">),</span> <span class="n">max_idx</span><span class="p">]</span>
+
+        <span class="c1"># Attention mechanism</span>
+        <span class="n">instance_embeddings</span> <span class="o">=</span> <span class="n">instance_features</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">num_instances</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">critical_embeddings</span> <span class="o">=</span> <span class="n">instance_embeddings</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">batch_size</span><span class="p">),</span> <span class="n">max_idx</span><span class="p">]</span>
+        <span class="n">attention_weights</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">attention</span><span class="p">(</span><span class="n">instance_embeddings</span> <span class="o">-</span> <span class="n">critical_embeddings</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">bag_embeddings</span> <span class="o">=</span> <span class="p">(</span><span class="n">attention_weights</span> <span class="o">*</span> <span class="n">instance_embeddings</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Bag-level classification</span>
+        <span class="n">bag_embeddings</span> <span class="o">=</span> <span class="n">bag_embeddings</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">conv_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conv1d</span><span class="p">(</span><span class="n">bag_embeddings</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bag_classifier</span><span class="p">(</span><span class="n">conv_out</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">return_attention</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">scores</span><span class="p">,</span> <span class="n">attention_weights</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">scores</span></div>
+
+
+
+<div class="viewcode-block" id="dsmil.calculate_attention">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.dsmil.calculate_attention">[docs]</a>
+    <span class="k">def</span> <span class="nf">calculate_attention</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">,</span> <span class="n">lens</span><span class="p">,</span> <span class="n">apply_softmax</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">batch_size</span><span class="p">,</span> <span class="n">num_instances</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">bags</span><span class="o">.</span><span class="n">size</span><span class="p">()</span>
+        
+        <span class="c1"># Instance-level encoding</span>
+        <span class="n">instance_features</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">instance_encoder</span><span class="p">(</span><span class="n">bags</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">bags</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)))</span>
+        <span class="n">instance_embeddings</span> <span class="o">=</span> <span class="n">instance_features</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">num_instances</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Get critical instance</span>
+        <span class="n">instance_scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">instance_classifier</span><span class="p">(</span><span class="n">instance_features</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">num_instances</span><span class="p">)</span>
+        <span class="n">max_score</span><span class="p">,</span> <span class="n">max_idx</span> <span class="o">=</span> <span class="n">instance_scores</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">critical_embeddings</span> <span class="o">=</span> <span class="n">instance_embeddings</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">batch_size</span><span class="p">),</span> <span class="n">max_idx</span><span class="p">]</span>
+        
+        <span class="c1"># Compute attention scores</span>
+        <span class="n">attention_scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">attention</span><span class="p">(</span><span class="n">instance_embeddings</span> <span class="o">-</span> <span class="n">critical_embeddings</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">apply_softmax</span><span class="p">:</span>
+            <span class="n">attention_scores</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="n">attention_scores</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">attention_scores</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="varmil">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.varmil">[docs]</a>
+<span class="k">class</span> <span class="nc">varmil</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Multiple instance learning model with attention-based mean and variance pooling.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_feats : int</span>
+<span class="sd">        Number of input features</span>
+<span class="sd">    n_out : int</span>
+<span class="sd">        Number of output classes</span>
+<span class="sd">    z_dim : int</span>
+<span class="sd">        Dimensionality of the hidden layer</span>
+<span class="sd">    dropout_p : float</span>
+<span class="sd">        Dropout probability</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    encoder : nn.Sequential</span>
+<span class="sd">        Encoder network</span>
+<span class="sd">    attention : nn.Sequential</span>
+<span class="sd">        Attention network</span>
+<span class="sd">    head : nn.Sequential</span>
+<span class="sd">        Prediction head network</span>
+<span class="sd">    </span>
+<span class="sd">    Methods</span>
+<span class="sd">    -------</span>
+<span class="sd">    forward(bags, return_attention)</span>
+<span class="sd">        Forward pass through the model</span>
+<span class="sd">        </span>
+<span class="sd">    calculate_attention(bags, lens, apply_softmax)</span>
+<span class="sd">        Calculate attention scores for the given bags</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="varmil.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.varmil.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_out</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span> <span class="n">dropout_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_feats</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attention</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span><span class="p">(),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">head</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Flatten</span><span class="p">(),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm1d</span><span class="p">(</span><span class="n">z_dim</span> <span class="o">*</span> <span class="mi">2</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span> <span class="n">n_out</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="varmil.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.varmil.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">,</span> <span class="n">return_attention</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">bags</span><span class="p">)</span>
+        <span class="n">attention_weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">attention</span><span class="p">(</span><span class="n">embeddings</span><span class="p">)</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">mean_embeddings</span> <span class="o">=</span> <span class="p">(</span><span class="n">embeddings</span> <span class="o">*</span> <span class="n">attention_weights</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">var_embeddings</span> <span class="o">=</span> <span class="p">((</span><span class="n">embeddings</span> <span class="o">-</span> <span class="n">mean_embeddings</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">attention_weights</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">aggregated_embeddings</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">mean_embeddings</span><span class="p">,</span> <span class="n">var_embeddings</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="n">aggregated_embeddings</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">return_attention</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">scores</span><span class="p">,</span> <span class="n">attention_weights</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">scores</span></div>
+
+
+<div class="viewcode-block" id="varmil.calculate_attention">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.varmil.calculate_attention">[docs]</a>
+    <span class="k">def</span> <span class="nf">calculate_attention</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">,</span> <span class="n">lens</span><span class="p">,</span> <span class="n">apply_softmax</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">bags</span><span class="p">)</span>
+        <span class="n">attention_scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">attention</span><span class="p">(</span><span class="n">embeddings</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">apply_softmax</span><span class="p">:</span>
+            <span class="n">attention_scores</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="n">attention_scores</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">attention_scores</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Siemen Brussee.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
