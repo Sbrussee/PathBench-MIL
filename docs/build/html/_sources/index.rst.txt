@@ -8,7 +8,7 @@ Welcome to PathBench's Documentation
 .. raw:: html
 
     <div style="text-align: center;">
-    <img src="thumbnail_PathBench-logo-horizontaal.png" alt="PathBench" width="800" height="200">
+    <img src="../../thumbnail_PathBench-logo-horizontaal.png" alt="PathBench" width="800" height="200">
     </div>
 
 ---
