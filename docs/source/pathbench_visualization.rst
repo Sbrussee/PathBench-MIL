@@ -1,7 +1,7 @@
 pathbench.visualization
 =======================
 
-.. automodule:: pathbench.visualization
+.. automodule:: pathbench.visualization.visualization
    :members:
    :undoc-members:
    :private-members:

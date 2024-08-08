@@ -1,7 +1,7 @@
 pathbench.benchmarking
 ======================
 
-.. automodule:: pathbench.benchmarking
+.. automodule:: pathbench.benchmarking.benchmark
    :members:
    :undoc-members:
    :private-members:

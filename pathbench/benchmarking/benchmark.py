@@ -1140,10 +1140,6 @@ def optimize_parameters(config, project):
                     raise optuna.TrialPruned()
 
             logging.info(f"Combination {save_string} finished...")
-            # Save which combinations were finished
-            finished_combination_dict[combination] = 1
-            with open(f"experiments/{config['experiment']['project_name']}/finished_combinations.pkl", 'wb') as f:
-                pickle.dump(finished_combination_dict, f)
 
             # Save the combination results up to this point, and mark it as finished
             val_df.to_csv(f"experiments/{config['experiment']['project_name']}/results/val_results.csv")
