@@ -18,7 +18,8 @@ python:
 
 formats:
   - pdf
-  - web
+  - htmlzip
+  - epub
 
 # Build the documentation
 sphinx:
