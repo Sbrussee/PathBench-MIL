@@ -542,7 +542,7 @@ class ConcordanceIndex(Metric):
         self._name = value
 ```
 ## Futher extension
-For more fundamental changes, and adding new normalization methods, one needs to change the underlying slideflow code. PathBench uses a [forked version](https://github.com/Sbrussee/slideflow_fork) of the slideflow code, which needs to be changed in order to implement these major changes.
+For more fundamental changes, and adding new normalization methods, one needs to change the underlying slideflow code. PathBench uses a [forked version](https://github.com/Sbrussee/slideflow_fork) of the slideflow code, which is added as a submodule in PathBench's repository.
 <div style="text-align: center;">
  <img src="PathBench-logo-gecentreerd.png" alt="PathBench Logo" width="550" height="400">
 </div>
