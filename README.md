@@ -17,7 +17,9 @@ The output of benchmarking experiments can be loaded into a plotly-based visuali
 PathBench is being developed at the Leiden University Medical Center: Department of Pathology.
 - Lead Developer: Siemen Brussee
 - Developers:
-- 
+
+PathBench's documentation is available [here](https://pathbench.readthedocs.io/en/latest/index.html)
+
 ## Installation
 # Installation Guide for PathBench
 
