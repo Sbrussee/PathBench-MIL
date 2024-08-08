@@ -1,6 +1,8 @@
 # .readthedocs.yaml
+# Read the Docs configuration file
+# See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
 
-version: 0.1.0
+version: 2
 
 # Build documentation in the main branch
 build:
@@ -12,6 +14,11 @@ build:
 python:
   install:
     - requirements: docs/requirements.txt
+
+
+formats:
+  - pdf
+  - web
 
 # Build the documentation
 sphinx:
