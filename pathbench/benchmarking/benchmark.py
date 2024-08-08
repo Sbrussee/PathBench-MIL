@@ -883,9 +883,6 @@ def calculate_results(result: pd.DataFrame, config: dict, save_string: str, data
             average_recalls.append(recall_score((all_y_true == class_label).astype(int), y_pred_binary_opt))
             f1_scores[col] = f1
 
-            plot_roc_auc((all_y_true == class_label).astype(int), y_pred_prob, save_path, save_string, f'class_{class_label}_{dataset_type}')
-  
-        
         # Compute overall class predictions
         all_y_pred_prob = np.vstack(all_y_pred_prob).T
         all_y_pred_class = np.argmax(all_y_pred_prob, axis=1)
