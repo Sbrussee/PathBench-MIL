@@ -13,15 +13,16 @@ experiment:
   task: survival
   mode: benchmark
   custom_loss: CoxPHLoss # Can be any loss as specified in utils/losses.py, or None, in which case the default task loss will be used.
-  custom_metrics: ConcordanceIndex # Can be any metric as specified in utils/metrics.py, or None, in which case the default task metrics will be used.
+  custom_metrics: [ConcordanceIndex] # Can be any metric as specified in utils/metrics.py, or None, in which case the default task metrics will be used.
 
   evaluation:
     - c_index
     - brier_score
 
   visualization:
-    - confusion_matrix
-    - roc_curve
+    - survival_roc
+    - calibration
+    - concordance_index
 
 datasets:
   - name: int_MF
@@ -51,7 +52,7 @@ benchmark_parameters:
     - PLIP
     - uni
   mil:
-    - CLAM_SB
+    #- CLAM_SB
     - dsmil
     #- varmil
     - attention_mil

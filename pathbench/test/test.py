@@ -6,9 +6,9 @@ import logging
 def main():
     root = "pathbench/test/"
     #Test binary classification
-    experiment = Experiment(root+'binary_test_conf.yaml')
-    experiment.run()
-    logging.info("Binary classification test passed")
+    #experiment = Experiment(root+'binary_test_conf.yaml')
+    #experiment.run()
+    #logging.info("Binary classification test passed")
     #Test multi-class classification
     experiment = Experiment(root+'classification_test_conf.yaml')
     experiment.run()

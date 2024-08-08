@@ -294,7 +294,7 @@ def split_datasets(config : dict, project : sf.Project, splits_file : str, targe
             splits = train_set.kfold_split(k=k, labels=target, splits=splits_file)
             logging.info(f"K-fold splits have been rewritten to {project_directory}/kfold_{splits}")
     else:
-        if os.path.exists(f"{project_directory}/fixed_{splits}"):
+        if os.path.exists(f"{project_directory}/fixed_{splits_file}"):
             train, val = train_set.split(labels=target,
                                     model_type = model_type,
                                     val_strategy=config['experiment']['split_technique'],
@@ -307,7 +307,7 @@ def split_datasets(config : dict, project : sf.Project, splits_file : str, targe
                                     val_strategy=config['experiment']['split_technique'],
                                     val_fraction=config['experiment']['val_fraction'],
                                     splits=splits_file)
-            logging.info(f"Fixed splits have been rewritten to {project_directory}/fixed_{splits}")
+            logging.info(f"Fixed splits have been rewritten to {project_directory}/fixed_{splits_file}")
         splits = [(train, val)]
     return splits
 
@@ -387,27 +387,34 @@ def plot_across_splits(config : dict, survival_results_per_split : list, test_su
         None
     """
     if config['experiment']['task'] == 'survival':
-        plot_survival_auc_across_folds(survival_results_per_split, save_string, 'val', config)
-        plot_survival_auc_across_folds(test_survival_results_per_split, save_string, 'test', config)
-        plot_concordance_index_across_folds(survival_results_per_split, save_string, 'val', config)
-        plot_concordance_index_across_folds(test_survival_results_per_split, save_string, 'test', config)
-        plot_calibration_across_splits(survival_results_per_split, save_string, 'val', config)
-        plot_calibration_across_splits(test_survival_results_per_split, save_string, 'test', config)
+        if 'survival_roc' in config['experiment']['visualization']:
+            plot_survival_auc_across_folds(survival_results_per_split, save_string, 'val', config)
+            plot_survival_auc_across_folds(test_survival_results_per_split, save_string, 'test', config)
+        if 'concordance_index' in config['experiment']['visualization']:
+            plot_concordance_index_across_folds(survival_results_per_split, save_string, 'val', config)
+            plot_concordance_index_across_folds(test_survival_results_per_split, save_string, 'test', config)
+        if 'calibration' in config['experiment']['visualization']:
+            plot_calibration_across_splits(survival_results_per_split, save_string, 'val', config)
+            plot_calibration_across_splits(test_survival_results_per_split, save_string, 'test', config)
     
     elif config['experiment']['task'] == 'regression':
-        plot_residuals_across_folds(val_results_per_split, save_string, 'val', config)
-        plot_residuals_across_folds(test_results_per_split, save_string, 'test', config)
-        plot_predicted_vs_actual_across_folds(val_results_per_split, save_string, 'val', config)
-        plot_predicted_vs_actual_across_folds(test_results_per_split, save_string, 'test', config)
-        plot_qq_across_folds(val_results_per_split, save_string, 'val', config)
-        plot_qq_across_folds(test_results_per_split, save_string, 'test', config)
+        if 'residuals' in config['experiment']['visualization']:
+            plot_residuals_across_folds(val_results_per_split, save_string, 'val', config)
+            plot_residuals_across_folds(test_results_per_split, save_string, 'test', config)
+        if 'predicted_vs_actual' in config['experiment']['visualization']:
+            plot_predicted_vs_actual_across_folds(val_results_per_split, save_string, 'val', config)
+            plot_predicted_vs_actual_across_folds(test_results_per_split, save_string, 'test', config)
+        if 'qq' in config['experiment']['visualization']:
+            plot_qq_across_folds(val_results_per_split, save_string, 'val', config)
+            plot_qq_across_folds(test_results_per_split, save_string, 'test', config)
 
     elif config['experiment']['task'] == 'classification':    
-        plot_roc_curve_across_splits(val_results_per_split, save_string, "val", config)
-        plot_roc_curve_across_splits(test_results_per_split, save_string, "test", config)
-        #TODO: Correctly implement precision-recall curve
-        plot_precision_recall_curve_across_splits(val_pr_per_split, save_string, "val", config)
-        plot_precision_recall_curve_across_splits(test_pr_per_split, save_string, "test", config)
+        if 'roc_curve' in config['experiment']['visualization']:
+            plot_roc_curve_across_splits(val_results_per_split, save_string, "val", config)
+            plot_roc_curve_across_splits(test_results_per_split, save_string, "test", config)
+        if 'precision_recall_curve' in config['experiment']['visualization']:
+            plot_precision_recall_across_splits(val_pr_per_split, save_string, "val", config)
+            plot_precision_recall_across_splits(test_pr_per_split, save_string, "test", config)
 
 
 def build_aggregated_results(val_df : pd.DataFrame, test_df: pd.DataFrame, config : dict,
@@ -460,7 +467,7 @@ def build_aggregated_results(val_df : pd.DataFrame, test_df: pd.DataFrame, confi
 
 def find_and_apply_best_model(config : dict, val_df_agg : pd.DataFrame, test_df_agg : pd.DataFrame,
                               benchmark_parameters : dict, val_df : pd.DataFrame, test_df : pd.DataFrame,
-                              val : sf.Dataset, test : sf.Dataset, bags : str, mil_conf : dict, target : str):
+                              val : sf.Dataset, test : sf.Dataset,  target : str):
     """
     Find and apply the best model based on the relevant metric for each task
 
@@ -471,7 +478,7 @@ def find_and_apply_best_model(config : dict, val_df_agg : pd.DataFrame, test_df_
         benchmark_parameters: The benchmark parameters
         val_df: The validation results dataframe
         test_df: The test results dataframe
-
+        target: The target variable
     Returns:
         None
     """
@@ -507,24 +514,27 @@ def find_and_apply_best_model(config : dict, val_df_agg : pd.DataFrame, test_df_
     #TODO: Find the corresponding test model for the best validation model, which has weights and config
     #Get best weights
     best_test_weights = test_df['weights'].iloc[0]
-
+    logging.info(f"Best test weights: {best_test_weights}")
     #Get best model dict
     with open(test_df['mil_params'].iloc[0], 'r') as f:
         best_test_model_dict = json.load(f)
         # Set model in best_test_model_dict
-        if best_test_model_dict['params']['model'] not in ['attention_mil', 'transmil','bistro.transformer']:
+        if best_test_model_dict['params']['model'].lower() not in ['attention_mil', 'transmil','bistro.transformer', 'clam_sb', 'clam_mb', 'mil_fc', 'mil_fc_mc']:
             best_test_model_dict['params']['model'] = getattr(aggregators, best_test_model_dict['params']['model'])
             print(best_test_model_dict)
             best_test_model_config = sf.mil.mil_config(trainer=best_test_model_dict['trainer'], **best_test_model_dict['params'])
+            print(best_test_model_config)
         else:
             #We infer the config
             best_test_model_config = None
 
+    bags = test_df['weights'].iloc[0]  # Get the bags directory
     logging.info("BEST TEST MODEL CONFIG:")
     logging.info(best_test_model_dict)
+    logging.info(f"BAGS DIRECTORY: {test_df['bag_dir'].iloc[0]}")
 
     # Run the best model (on the test set)
-    run_best_model(config, 'test', test, bags, best_test_model_config, target, best_test_weights)
+    run_best_model(config, 'test', test, test_df['bag_dir'].iloc[0], best_test_model_config, target, best_test_weights)
 
     # Save the best configurations
     with open(f"experiments/{config['experiment']['project_name']}/saved_models/best_test_model_{date_string}.pkl", 'wb') as f:
@@ -567,19 +577,6 @@ def benchmark(config, project):
     config, evaluation_metrics, aggregation_functions = set_metrics(config)
     logging.info(f"Using {splits_file} splits for benchmarking...")
 
-    #Get custom metrics and losses as objects
-    if 'custom_metrics' in config['experiment'] is not None:
-        if isinstance(config['experiment']['custom_metrics'], list):
-            custom_metrics = [load_class("pathbench.utils.metrics", metric.capitalize()) for metric in config['experiment']['custom_metrics']]
-        else:
-            custom_metrics = [load_class("pathbench.utils.metrics", config['experiment']['custom_metrics'].capitalize())]
-
-    if 'custom_loss' in config['experiment'] is not None:
-        custom_loss = load_class("pathbench.utils.losses", config['experiment']['custom_loss'])
-
-    config['experiment']['custom_metrics'] = custom_metrics
-    config['experiment']['custom_loss'] = custom_loss
-
     #Get all column values
     columns = list(config['benchmark_parameters'].keys())
     columns.extend(list(config['experiment']['evaluation']))                   
@@ -611,9 +608,6 @@ def benchmark(config, project):
             target = determine_target_variable(task, config)
 
             annotation_df = pd.read_csv(project.annotations)
-
-            if task == 'classification':
-                n_class = len(annotation_df[target].unique())
 
             #Split datasets into train, val and test
             all_data = project.dataset(tile_px=combination_dict['tile_px'],
@@ -662,6 +656,7 @@ def benchmark(config, project):
             for train, val in splits:
                 logging.info(f"Split {index} started...")
 
+                # Train the MIL model
                 val_result = project.train_mil(
                     config=mil_conf,
                     outcomes=target,
@@ -687,7 +682,7 @@ def benchmark(config, project):
                 else:
                     metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, save_string, "val")
                     val_results_per_split.append([tpr, fpr])
-                    val_pr_per_split.append(val_pr_curves)
+                    val_pr_per_split.extend(val_pr_curves)
                 
                 if config['experiment']['task'] == 'classification':
                     save_correct(val_result, save_string, "val", config)
@@ -721,7 +716,7 @@ def benchmark(config, project):
                 else:
                     metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
                     test_results_per_split.append([tpr, fpr])
-                    test_pr_per_split.append(test_pr_curves)
+                    test_pr_per_split.extend(test_pr_curves)
                 if config['experiment']['task'] == 'classification':
                     save_correct(test_result, save_string, "test", config)
                 test_dict = combination_dict.copy()
@@ -729,10 +724,11 @@ def benchmark(config, project):
                 #Add weights directory to test dict
                 test_dict['weights'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}"
                 test_dict['mil_params'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/mil_params.json"
+                test_dict['bag_dir'] = bags
                 # Visualize the activations, if applicable
                 if 'umap' in config['experiment']['visualization'] or 'mosaic' in config['experiment']['visualization']:
-                    visualize_activations(config, val, f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}", bags, target, save_string)
-                    visualize_activations(config, test, f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}", bags, target, save_string)
+                    visualize_activations(config, "val", f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}", bags, target, save_string)
+                    visualize_activations(config, "test", f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}", bags, target, save_string)
 
                 test_df = test_df.append(test_dict, ignore_index=True)
                 print(test_df)
@@ -762,7 +758,7 @@ def benchmark(config, project):
     val_df_agg, test_df_agg = build_aggregated_results(val_df, test_df, config, benchmark_parameters, aggregation_functions)
     
     find_and_apply_best_model(config, val_df_agg, test_df_agg, benchmark_parameters, val_df, test_df,
-                              val, test_set, bags, mil_conf, target)
+                              val, test_set, target)
     
     # Remove the finished combinations
     with open(f"experiments/{config['experiment']['project_name']}/finished_combinations.pkl", 'wb') as f:
@@ -898,13 +894,14 @@ def calculate_results(result: pd.DataFrame, config: dict, save_string: str, data
         all_cm = confusion_matrix(all_y_true, all_y_pred_class, labels=unique_classes)
 
         # Plot overall confusion matrix
-        save_path = f"experiments/{config['experiment']['project_name']}/visualizations"
-        os.makedirs(save_path, exist_ok=True)
-        disp = ConfusionMatrixDisplay(confusion_matrix=all_cm, display_labels=unique_classes)
-        disp.plot(cmap=plt.cm.Blues)
-        plt.title('Overall Confusion Matrix')
-        plt.savefig(f"{save_path}/confusion_matrix_{save_string}_overall.png")
-        plt.close()
+        if 'confusion_matrix' in config['experiment']['visualization']:
+            save_path = f"experiments/{config['experiment']['project_name']}/visualizations"
+            os.makedirs(save_path, exist_ok=True)
+            disp = ConfusionMatrixDisplay(confusion_matrix=all_cm, display_labels=unique_classes)
+            disp.plot(cmap=plt.cm.Blues)
+            plt.title('Overall Confusion Matrix')
+            plt.savefig(f"{save_path}/confusion_matrix_{save_string}_overall.png")
+            plt.close()
 
         # Plot precision-recall curve
         y_true_binary = np.isin(all_y_true, unique_classes[unique_classes != unique_classes[-1]]).astype(int)
@@ -1016,8 +1013,6 @@ def optimize_parameters(config, project):
             target = determine_target_variable(task, config)
 
             annotation_df = pd.read_csv(project.annotations)
-            if task == 'classification':
-                n_class = len(annotation_df[target].unique())
 
 
             #Split datasets into train, val and test
@@ -1136,8 +1131,8 @@ def optimize_parameters(config, project):
                 test_dict['mil_params'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/mil_params.json"
                 # Visualize the activations, if applicable
                 if 'umap' in config['experiment']['visualization'] or 'mosaic' in config['experiment']['visualization']:
-                    visualize_activations(config, val, f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}", bags, target, save_string)
-                    visualize_activations(config, test, f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}", bags, target, save_string)
+                    visualize_activations(config, "val", f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}", bags, target, save_string)
+                    visualize_activations(config, "test", f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}", bags, target, save_string)
 
                 test_df = test_df.append(test_dict, ignore_index=True)
                 print(test_df)
