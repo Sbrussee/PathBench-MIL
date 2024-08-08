@@ -60,7 +60,19 @@
 <li class="toctree-l2"><a class="reference internal" href="pathbench_models.html">pathbench.models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="pathbench_test.html">pathbench.test</a></li>
 <li class="toctree-l2"><a class="reference internal" href="pathbench_utils.html">pathbench.utils</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">pathbench.visualization</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">pathbench.visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.visualization.visualization.plot_calibration"><code class="docutils literal notranslate"><span class="pre">plot_calibration()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.visualization.visualization.plot_calibration_across_splits"><code class="docutils literal notranslate"><span class="pre">plot_calibration_across_splits()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.visualization.visualization.plot_concordance_index_across_folds"><code class="docutils literal notranslate"><span class="pre">plot_concordance_index_across_folds()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.visualization.visualization.plot_precision_recall_across_splits"><code class="docutils literal notranslate"><span class="pre">plot_precision_recall_across_splits()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.visualization.visualization.plot_predicted_vs_actual_across_folds"><code class="docutils literal notranslate"><span class="pre">plot_predicted_vs_actual_across_folds()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.visualization.visualization.plot_qq_across_folds"><code class="docutils literal notranslate"><span class="pre">plot_qq_across_folds()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.visualization.visualization.plot_residuals_across_folds"><code class="docutils literal notranslate"><span class="pre">plot_residuals_across_folds()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.visualization.visualization.plot_roc_curve_across_splits"><code class="docutils literal notranslate"><span class="pre">plot_roc_curve_across_splits()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.visualization.visualization.plot_survival_auc_across_folds"><code class="docutils literal notranslate"><span class="pre">plot_survival_auc_across_folds()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.visualization.visualization.visualize_activations"><code class="docutils literal notranslate"><span class="pre">visualize_activations()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -90,8 +102,199 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="pathbench-visualization">
-<h1>pathbench.visualization<a class="headerlink" href="#pathbench-visualization" title="Link to this heading"></a></h1>
+  <section id="module-pathbench.visualization.visualization">
+<span id="pathbench-visualization"></span><h1>pathbench.visualization<a class="headerlink" href="#module-pathbench.visualization.visualization" title="Link to this heading"></a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.visualization.visualization.plot_calibration">
+<span class="sig-prename descclassname"><span class="pre">pathbench.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">plot_calibration</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">results</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_string</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bins</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/visualization/visualization.html#plot_calibration"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.visualization.visualization.plot_calibration" title="Link to this definition"></a></dt>
+<dd><p>Plot the calibration curve based on the results</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>results</strong> – The results</p></li>
+<li><p><strong>save_string</strong> – The save string</p></li>
+<li><p><strong>dataset</strong> – The dataset</p></li>
+<li><p><strong>config</strong> – The configuration dictionary</p></li>
+<li><p><strong>bins</strong> – The number of bins</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.visualization.visualization.plot_calibration_across_splits">
+<span class="sig-prename descclassname"><span class="pre">pathbench.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">plot_calibration_across_splits</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">results</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_string</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bins</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/visualization/visualization.html#plot_calibration_across_splits"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.visualization.visualization.plot_calibration_across_splits" title="Link to this definition"></a></dt>
+<dd><p>Plot the calibration curve across splits based on the results</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>results</strong> – The results</p></li>
+<li><p><strong>save_string</strong> – The save string</p></li>
+<li><p><strong>dataset</strong> – The dataset</p></li>
+<li><p><strong>config</strong> – The configuration dictionary</p></li>
+<li><p><strong>bins</strong> – The number of bins</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.visualization.visualization.plot_concordance_index_across_folds">
+<span class="sig-prename descclassname"><span class="pre">pathbench.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">plot_concordance_index_across_folds</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">results</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_string</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/visualization/visualization.html#plot_concordance_index_across_folds"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.visualization.visualization.plot_concordance_index_across_folds" title="Link to this definition"></a></dt>
+<dd><p>Plot the concordance index across folds based on the results</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>results</strong> – The results</p></li>
+<li><p><strong>save_string</strong> – The save string</p></li>
+<li><p><strong>dataset</strong> – The dataset</p></li>
+<li><p><strong>config</strong> – The configuration dictionary</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.visualization.visualization.plot_precision_recall_across_splits">
+<span class="sig-prename descclassname"><span class="pre">pathbench.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">plot_precision_recall_across_splits</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pr_per_split</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_string</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/visualization/visualization.html#plot_precision_recall_across_splits"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.visualization.visualization.plot_precision_recall_across_splits" title="Link to this definition"></a></dt>
+<dd><p>Plot the precision-recall curve across splits based on the results</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pr_per_split</strong> – List of precision-recall curve results per split</p></li>
+<li><p><strong>save_string</strong> – The save string</p></li>
+<li><p><strong>dataset</strong> – The dataset</p></li>
+<li><p><strong>config</strong> – The configuration dictionary</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.visualization.visualization.plot_predicted_vs_actual_across_folds">
+<span class="sig-prename descclassname"><span class="pre">pathbench.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">plot_predicted_vs_actual_across_folds</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">results</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_string</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/visualization/visualization.html#plot_predicted_vs_actual_across_folds"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.visualization.visualization.plot_predicted_vs_actual_across_folds" title="Link to this definition"></a></dt>
+<dd><p>Plot the predicted vs actual values across folds based on the results</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>results</strong> – The results</p></li>
+<li><p><strong>save_string</strong> – The save string</p></li>
+<li><p><strong>dataset</strong> – The dataset</p></li>
+<li><p><strong>config</strong> – The configuration dictionary</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.visualization.visualization.plot_qq_across_folds">
+<span class="sig-prename descclassname"><span class="pre">pathbench.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">plot_qq_across_folds</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">results</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_string</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/visualization/visualization.html#plot_qq_across_folds"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.visualization.visualization.plot_qq_across_folds" title="Link to this definition"></a></dt>
+<dd><p>Plot the Q-Q plot across folds based on the results
+:param results: The results
+:param save_string: The save string
+:param dataset: The dataset
+:param config: The configuration dictionary</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.visualization.visualization.plot_residuals_across_folds">
+<span class="sig-prename descclassname"><span class="pre">pathbench.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">plot_residuals_across_folds</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">results</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_string</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/visualization/visualization.html#plot_residuals_across_folds"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.visualization.visualization.plot_residuals_across_folds" title="Link to this definition"></a></dt>
+<dd><p>Plot the residuals across folds based on the results</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>results</strong> – The results</p></li>
+<li><p><strong>save_string</strong> – The save string</p></li>
+<li><p><strong>dataset</strong> – The dataset</p></li>
+<li><p><strong>config</strong> – The configuration dictionary</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.visualization.visualization.plot_roc_curve_across_splits">
+<span class="sig-prename descclassname"><span class="pre">pathbench.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">plot_roc_curve_across_splits</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rates</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_string</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/visualization/visualization.html#plot_roc_curve_across_splits"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.visualization.visualization.plot_roc_curve_across_splits" title="Link to this definition"></a></dt>
+<dd><p>Plot the ROC curve across splits based on the rates</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>rates</strong> – The rates</p></li>
+<li><p><strong>save_string</strong> – The save string</p></li>
+<li><p><strong>dataset</strong> – The dataset</p></li>
+<li><p><strong>config</strong> – The configuration dictionary</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.visualization.visualization.plot_survival_auc_across_folds">
+<span class="sig-prename descclassname"><span class="pre">pathbench.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">plot_survival_auc_across_folds</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">results</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_string</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/visualization/visualization.html#plot_survival_auc_across_folds"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.visualization.visualization.plot_survival_auc_across_folds" title="Link to this definition"></a></dt>
+<dd><p>Plot the survival ROC-AUC across folds based on the results</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>results</strong> – The results</p></li>
+<li><p><strong>save_string</strong> – The save string</p></li>
+<li><p><strong>dataset</strong> – The dataset</p></li>
+<li><p><strong>config</strong> – The configuration dictionary</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="pathbench.visualization.visualization.visualize_activations">
+<span class="sig-prename descclassname"><span class="pre">pathbench.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">visualize_activations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tfrecord_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bag_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_string</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Project</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/visualization/visualization.html#visualize_activations"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.visualization.visualization.visualize_activations" title="Link to this definition"></a></dt>
+<dd><p>Visualize the activations based on the configuration</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config</strong> – The configuration dictionary</p></li>
+<li><p><strong>dataset</strong> – The dataset string</p></li>
+<li><p><strong>tfrecord_dir</strong> – Directory with tfrecords</p></li>
+<li><p><strong>bag_dir</strong> – Directory with bags</p></li>
+<li><p><strong>target</strong> – The target variable</p></li>
+<li><p><strong>save_string</strong> – The save string</p></li>
+<li><p><strong>Project</strong> – The slideflow project object</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 
 

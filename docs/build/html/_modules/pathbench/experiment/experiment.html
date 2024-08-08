@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>pathbench.experiment.experiment &mdash; PathBench 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="../../../_static/documentation_options.js?v=01f34227"></script>
+        <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            PathBench
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../benchmarking_mode.html">Benchmarking Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../optimization_mode.html">Optimization Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../visualization_application.html">Visualization Application</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../ensemble_model_creation.html">Ensemble Model Creation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../extending_pathbench.html">Extending PathBench</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../feature_extractors.html">Feature Extractors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../mil_aggregators.html">MIL Aggregators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">Modules</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">PathBench</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">pathbench.experiment.experiment</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for pathbench.experiment.experiment</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">yaml</span>
+<span class="kn">import</span> <span class="nn">slideflow</span> <span class="k">as</span> <span class="nn">sf</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">..benchmarking.benchmark</span> <span class="kn">import</span> <span class="n">benchmark</span>
+<span class="kn">from</span> <span class="nn">..benchmarking.benchmark</span> <span class="kn">import</span> <span class="n">optimize_parameters</span>
+<span class="kn">import</span> <span class="nn">random</span>
+<span class="kn">import</span> <span class="nn">shutil</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+
+<div class="viewcode-block" id="read_config">
+<a class="viewcode-back" href="../../../pathbench_experiment.html#pathbench.experiment.experiment.read_config">[docs]</a>
+<span class="k">def</span> <span class="nf">read_config</span><span class="p">(</span><span class="n">config_file</span> <span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Read the configuration file for the experiment</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        config_file (str): The path to the configuration file</span>
+<span class="sd">    </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: The configuration dictionary for the experiment</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">config_file</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">Loader</span><span class="o">=</span><span class="n">yaml</span><span class="o">.</span><span class="n">SafeLoader</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">config</span></div>
+
+
+<span class="c1"># Check if GPU is available</span>
+<span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+    <span class="c1"># Get the current GPU device</span>
+    <span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_device</span><span class="p">()</span>
+
+    <span class="c1"># Get the name of the GPU</span>
+    <span class="n">gpu_name</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">get_device_name</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Using GPU: </span><span class="si">{</span><span class="n">gpu_name</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;GPU not available. Using CPU.&#39;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Experiment">
+<a class="viewcode-back" href="../../../pathbench_experiment.html#pathbench.experiment.experiment.Experiment">[docs]</a>
+<span class="k">class</span> <span class="nc">Experiment</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Experiment class, designed to load the data and the configuration of a benchmarking</span>
+<span class="sd">    experiement and run the benchmarking experiment.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    config_file : str</span>
+<span class="sd">        The path to the configuration file for the experiment</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    config : dict</span>
+<span class="sd">        The configuration dictionary for the experiment</span>
+<span class="sd">    project : slideflow.Project</span>
+<span class="sd">        The slideflow project object</span>
+<span class="sd">    project_name : str</span>
+<span class="sd">        The name of the project</span>
+<span class="sd">    </span>
+<span class="sd">    Methods</span>
+<span class="sd">    -------</span>
+<span class="sd">    run()</span>
+<span class="sd">        Run the benchmarking experiment</span>
+<span class="sd">    load_datasets()</span>
+<span class="sd">        Load the datasets into the project</span>
+<span class="sd">    benchmark()</span>
+<span class="sd">        Run the benchmarking experiment</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+<div class="viewcode-block" id="Experiment.__init__">
+<a class="viewcode-back" href="../../../pathbench_experiment.html#pathbench.experiment.experiment.Experiment.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config_file</span> <span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="n">read_config</span><span class="p">(</span><span class="n">config_file</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">load_datasets</span><span class="p">()</span>
+        <span class="c1">#Set Hugging Face token</span>
+        <span class="k">if</span> <span class="s1">&#39;hf_token&#39;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;hf_token&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">HF_TOKEN</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;hf_token&#39;</span><span class="p">]</span>
+                <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;HF_TOKEN&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">HF_TOKEN</span>
+        <span class="c1">#Set pretrained weights directory</span>
+        <span class="n">WEIGHTS_DIR</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;weights_dir&#39;</span><span class="p">]</span>
+        <span class="c1"># Set environment variables</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;TORCH_HOME&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">WEIGHTS_DIR</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;HF_HOME&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">WEIGHTS_DIR</span></div>
+
+
+<div class="viewcode-block" id="Experiment.run">
+<a class="viewcode-back" href="../../../pathbench_experiment.html#pathbench.experiment.experiment.Experiment.run">[docs]</a>
+    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;experiment&#39;</span><span class="p">][</span><span class="s1">&#39;mode&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;benchmark&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">benchmark</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;experiment&#39;</span><span class="p">][</span><span class="s1">&#39;mode&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;optimization&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">optimize_parameters</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid mode. Mode must be either &#39;benchmark&#39; or &#39;optimization&#39;&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Experiment.load_datasets">
+<a class="viewcode-back" href="../../../pathbench_experiment.html#pathbench.experiment.experiment.Experiment.load_datasets">[docs]</a>
+    <span class="k">def</span> <span class="nf">load_datasets</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Load datasets into the project</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1">#Create an experiment folder</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="s1">&#39;experiments&#39;</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">project_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;experiment&#39;</span><span class="p">][</span><span class="s1">&#39;project_name&#39;</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="s1">&#39;datasets&#39;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">:</span>
+            <span class="n">first_dataset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;datasets&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="c1">#Create project based on first dataset</span>
+        <span class="c1">#Check if project exists</span>
+        <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;experiments/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">):</span>
+            <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Loading project </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">project</span> <span class="o">=</span> <span class="n">sf</span><span class="o">.</span><span class="n">Project</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;experiments/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="n">annotations</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;experiment&#39;</span><span class="p">][</span><span class="s1">&#39;annotation_file&#39;</span><span class="p">])</span>
+            <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Project </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project_name</span><span class="si">}</span><span class="s2"> loaded&quot;</span><span class="p">)</span>
+            <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Annotations in project: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="o">.</span><span class="n">annotations</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Creating project </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;experiments&quot;</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;experiments/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">project</span> <span class="o">=</span> <span class="n">sf</span><span class="o">.</span><span class="n">create_project</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">project_name</span><span class="p">,</span>
+                <span class="n">root</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;experiments/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">annotations</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;experiment&#39;</span><span class="p">][</span><span class="s1">&#39;annotation_file&#39;</span><span class="p">],</span>
+                <span class="n">slides</span><span class="o">=</span><span class="n">first_dataset</span><span class="p">[</span><span class="s1">&#39;slide_path&#39;</span><span class="p">]</span>
+            <span class="p">)</span> 
+            <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Project </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project_name</span><span class="si">}</span><span class="s2"> created&quot;</span><span class="p">)</span>
+
+        <span class="c1">#Add additional datasets to the project</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;datasets&#39;</span><span class="p">])</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">source</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;datasets&#39;</span><span class="p">][</span><span class="mi">1</span><span class="p">:]:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="o">.</span><span class="n">add_source</span><span class="p">(</span>
+                    <span class="n">name</span><span class="o">=</span><span class="n">source</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">],</span>
+                    <span class="n">slides</span><span class="o">=</span><span class="n">source</span><span class="p">[</span><span class="s1">&#39;slide_path&#39;</span><span class="p">],</span>
+                    <span class="n">tfrecords</span><span class="o">=</span><span class="n">source</span><span class="p">[</span><span class="s1">&#39;tfrecord_path&#39;</span><span class="p">],</span>
+                    <span class="n">tiles</span><span class="o">=</span><span class="n">source</span><span class="p">[</span><span class="s1">&#39;tile_path&#39;</span><span class="p">]</span>
+                <span class="p">)</span></div>
+
+<span class="w">        </span>
+<span class="w">        </span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    def ssl(self):</span>
+<span class="sd">        ssl_parameters = self.config[&#39;ssl&#39;]</span>
+<span class="sd">        (method, backbone, train_path, val_path, val_split,</span>
+<span class="sd">        ssl_model_name) = (ssl_parameters[&#39;method&#39;],</span>
+<span class="sd">            ssl_parameters[&#39;backbone&#39;], ssl_parameters[&#39;train_path&#39;],</span>
+<span class="sd">            ssl_parameters[&#39;val_path&#39;], ssl_parameters[&#39;val_split&#39;],</span>
+<span class="sd">            ssl_parameters[&#39;ssl_model_name&#39;])</span>
+<span class="sd">        </span>
+<span class="sd">        os.makedirs(f&#39;{self.config[&quot;experiment&quot;][&quot;project_name&quot;]}/ssl_train&#39;, exist_ok=True)</span>
+<span class="sd">        os.makedirs(f&#39;{self.config[&quot;experiment&quot;][&quot;project_name&quot;]}/ssl_val&#39;, exist_ok=True)</span>
+
+<span class="sd">        if val_path == None and val_split != None:</span>
+<span class="sd">            #Get all directories in the training directory</span>
+<span class="sd">            train_slides = os.listdir(train_path)</span>
+<span class="sd">            print(&quot;Total number of slides: &quot;, len(train_slides))</span>
+
+<span class="sd">            #Shuffle the directory</span>
+<span class="sd">            random.shuffle(train_slides)</span>
+<span class="sd">            #Split training data into training and validation data</span>
+<span class="sd">            val_size = int(val_split * len(train_slides))</span>
+<span class="sd">            val_files = train_slides[:val_size]</span>
+<span class="sd">            train_files = train_slides[val_size:]</span>
+
+<span class="sd">            for slide in train_files:</span>
+<span class="sd">                images = os.listdir(f&#39;{train_path}/{slide}&#39;)</span>
+<span class="sd">                for image in images:</span>
+<span class="sd">                    shutil.copy(f&#39;{train_path}/{slide}/{image}&#39;, f&quot;{self.config[&#39;experiment&#39;][&#39;project_name&#39;]}/ssl_train/{image}&quot;)</span>
+
+<span class="sd">            for slide in val_files:</span>
+<span class="sd">                images = os.listdir(f&#39;{train_path}/{slide}&#39;)</span>
+<span class="sd">                for image in images:</span>
+<span class="sd">                    shutil.copy(f&#39;{train_path}/{slide}/{image}&#39;, f&quot;{self.config[&#39;experiment&#39;][&#39;project_name&#39;]}/ssl_val/{image}&quot;)</span>
+
+<span class="sd">        elif val_path != None:</span>
+<span class="sd">            #Copy all files from the training directory to the ssl_train directory</span>
+<span class="sd">            for slide in os.listdir(train_path):</span>
+<span class="sd">                for image in os.listdir(f&quot;{train_path}/{slide}&quot;):</span>
+<span class="sd">                    shutil.copy(f&#39;{train_path}/{slide}/{image}&#39;, f&quot;{self.config[&#39;experiment&#39;][&#39;project_name&#39;]}/ssl_train/{image}&quot;)</span>
+<span class="sd">            #Copy all files from the validation directory to the ssl_val directory</span>
+<span class="sd">            for slide in os.listdir(val_path):</span>
+<span class="sd">                for image in os.listdir(f&quot;{val_path}/{slide}&quot;):</span>
+<span class="sd">                    shutil.copy(f&#39;{val_path}/{slide}/{image}&#39;, f&quot;{self.config[&#39;experiment&#39;][&#39;project_name&#39;]}/ssl_val/{image}&quot;)</span>
+<span class="sd">        else:</span>
+<span class="sd">            for slide in os.listdir(train_path):</span>
+<span class="sd">                for image in os.listdir(f&quot;{train_path}/{slide}&quot;):</span>
+<span class="sd">                    shutil.copy(f&#39;{train_path}/{slide}/{image}&#39;, f&quot;{self.config[&#39;experiment&#39;][&#39;project_name&#39;]}/ssl_train/{image}&quot;)</span>
+
+<span class="sd">        if val_path != None:</span>
+<span class="sd">            train_ssl_model(method, backbone, ssl_model_name, f&quot;{self.config[&#39;experiment&#39;][&#39;project_name&#39;]}/ssl_train&quot;,</span>
+<span class="sd">                        f&quot;{self.config[&#39;experiment&#39;][&#39;project_name&#39;]}/ssl_val&quot;)</span>
+<span class="sd">        else:</span>
+<span class="sd">            train_ssl_model(method, backbone, ssl_model_name, f&quot;{self.config[&#39;experiment&#39;][&#39;project_name&#39;]}/ssl_train&quot;)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+<div class="viewcode-block" id="Experiment.benchmark">
+<a class="viewcode-back" href="../../../pathbench_experiment.html#pathbench.experiment.experiment.Experiment.benchmark">[docs]</a>
+    <span class="k">def</span> <span class="nf">benchmark</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1">#Iterate over all possible combinations of hyperparameters</span>
+        <span class="n">benchmark</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Experiment.optimize_parameters">
+<a class="viewcode-back" href="../../../pathbench_experiment.html#pathbench.experiment.experiment.Experiment.optimize_parameters">[docs]</a>
+    <span class="k">def</span> <span class="nf">optimize_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">optimize_parameters</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="p">)</span></div>
+
+
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    def hpo(self):</span>
+<span class="sd">        optimizer = HyperParameterOptimizer()</span>
+<span class="sd">        optimizer.run()</span>
+<span class="sd">    &quot;&quot;&quot;</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Siemen Brussee.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
