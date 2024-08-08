@@ -1,0 +1,18 @@
+# .readthedocs.yaml
+
+version: 0.1.0
+
+# Build documentation in the main branch
+build:
+  os: ubuntu-22.04
+  tools:
+    python: "3.9"
+
+# Define the necessary Python dependencies
+python:
+  install:
+    - requirements: docs/requirements.txt
+
+# Build the documentation
+sphinx:
+  configuration: docs/source/conf.py
