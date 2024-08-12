@@ -629,7 +629,7 @@ class kaiko_s8(TorchFeatureExtractor):
                 transforms.Resize(224),
                 # Transform to float tensor
                 transforms.ConvertImageDtype(torch.float32),
-                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+                transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
             ]
         )
         self.model.eval()
@@ -680,7 +680,7 @@ class kaiko_s16(TorchFeatureExtractor):
                 transforms.Resize(224),
                 # Transform to float tensor
                 transforms.ConvertImageDtype(torch.float32),
-                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+                transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
             ]
         )
         self.model.eval()
@@ -730,7 +730,7 @@ class kaiko_b8(TorchFeatureExtractor):
                 transforms.Resize(224),
                 # Transform to float tensor
                 transforms.ConvertImageDtype(torch.float32),
-                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+                transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
             ]
         )
         self.model.eval()
@@ -780,7 +780,7 @@ class kaiko_b16(TorchFeatureExtractor):
                 transforms.Resize(224),
                 # Transform to float tensor
                 transforms.ConvertImageDtype(torch.float32),
-                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+                transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
             ]
         )
         self.model.eval()
@@ -832,7 +832,7 @@ class kaiko_l14(TorchFeatureExtractor):
                 transforms.Resize(224),
                 # Transform to float tensor
                 transforms.ConvertImageDtype(torch.float32),
-                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+                transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
             ]
         )
         self.model.eval()
@@ -1227,7 +1227,7 @@ class hibou_b(TorchFeatureExtractor):
             [
                 transforms.Resize(224),
                 transforms.ConvertImageDtype(torch.float32),
-                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+                transforms.Normalize(mean=(0.7068, 0.5655, 0.722), std=(0.195, 0.2316, 0.1816)),
             ]
         )
         self.model.eval()
@@ -1240,6 +1240,87 @@ class hibou_b(TorchFeatureExtractor):
             'kwargs': {}
         }
 
+
+#GATED
+@register_torch
+class hibou_l(TorchFeatureExtractor):
+    """
+    Hibou L feature extractor, with large Vision Transformer backbone
+
+    Parameters
+    ----------
+    tile_px : int
+        The size of the tile
+    
+    Attributes
+    ----------
+    model : HibouEmbedder
+        The Hibou model
+    transform : torchvision.transforms.Compose
+        The transformation pipeline
+    preprocess_kwargs : dict
+        The preprocessing arguments
+    
+    Methods
+    -------
+    dump_config()
+        Dump the configuration of the feature extractor
+    """
+    tag = 'hibou_l'
+
+    def __init__(self, tile_px=256):
+        super().__init__()
+        
+        model_name = "hibou_l"
+        self.num_features = 768
+        self.processor = AutoImageProcessor.from_pretrained("histai/hibou-l", trust_remote_code=True)
+        base_model = AutoModel.from_pretrained("histai/hibou-l", trust_remote_code=True)
+        
+        # Add a new head to include adaptive average pooling
+        class HibouEmbedder(nn.Module):
+            """
+            Hibou Embedder model, which adds mean pooling to the base model.
+
+            Parameters
+            ----------
+            base_model : nn.Module
+                The base Hibou-L model
+            
+            Methods
+            -------
+            forward(x)
+                Forward pass of the model
+            """
+            def __init__(self, base_model):
+                super(HibouEmbedder, self).__init__()
+                self.base_model = base_model
+                
+
+            def forward(self, x):
+                # Apply adaptive average pooling
+                x = self.base_model(x)
+                x = x[0]
+                x = torch.mean(x, dim=1)
+                return x
+
+        self.model = HibouEmbedder(base_model)
+        self.model.to('cuda')
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize(224),
+                transforms.ConvertImageDtype(torch.float32),
+                transforms.Normalize(mean=(0.7068, 0.5655, 0.722), std=(0.195, 0.2316, 0.1816)),
+            ]
+        )
+        self.model.eval()
+        # Slideflow standardization
+        self.preprocess_kwargs = {'standardize': False}
+
+    def dump_config(self):
+        return {
+            'class': 'hibou_l',
+            'kwargs': {}
+        }
 #GATED
 @register_torch
 class virchow(TorchFeatureExtractor):
