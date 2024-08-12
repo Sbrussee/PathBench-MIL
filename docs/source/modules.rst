@@ -7,6 +7,5 @@ Modules
    pathbench_benchmarking
    pathbench_experiment
    pathbench_models
-   pathbench_test
    pathbench_utils
    pathbench_visualization

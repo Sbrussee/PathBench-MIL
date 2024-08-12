@@ -6,3 +6,7 @@
  12-08-2024 09:52:13:360 [pid=2161284 tid=2161284] NOTICE  cufio-drv:705 running in compatible mode
  12-08-2024 10:07:50:239 [pid=2346284 tid=2346284] WARN   0:172 failed to open /proc/driver/nvidia-fs/devcount  error: No such file or directory
  12-08-2024 10:07:50:239 [pid=2346284 tid=2346284] NOTICE  cufio-drv:705 running in compatible mode
+ 12-08-2024 10:16:39:584 [pid=2448794 tid=2448794] WARN   0:172 failed to open /proc/driver/nvidia-fs/devcount  error: No such file or directory
+ 12-08-2024 10:16:39:584 [pid=2448794 tid=2448794] NOTICE  cufio-drv:705 running in compatible mode
+ 12-08-2024 10:17:08:547 [pid=2454348 tid=2454348] WARN   0:172 failed to open /proc/driver/nvidia-fs/devcount  error: No such file or directory
+ 12-08-2024 10:17:08:547 [pid=2454348 tid=2454348] NOTICE  cufio-drv:705 running in compatible mode

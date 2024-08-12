@@ -78,7 +78,7 @@ For survival tasks, the annotation file should contain columns with the survival
 
 An example of a valid annotation file for a classification task, assuming we use two datasets: dataset1 and dataset2:
 
-.. code-block:: csv
+.. code-block:: none
 
     slide,patient,dataset,category
     slide1,patient1,dataset1,0
@@ -93,7 +93,7 @@ An example of a valid annotation file for a classification task, assuming we use
     slide10,patient5,dataset2,1
 
 An example of a valid annotation file for a regression task:
-.. code-block:: csv
+.. code-block:: none
 
     slide,patient,dataset,value
     slide1,patient1,dataset1,0.1
@@ -108,7 +108,7 @@ An example of a valid annotation file for a regression task:
     slide10,patient5,dataset2,1.0
 
 An example of a valid annotation file for a survival task:
-.. code-block:: csv
+.. code-block:: none
 
     slide,patient,dataset,time,event
     slide1,patient1,dataset1,26,1
