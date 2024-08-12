@@ -57,8 +57,9 @@ benchmark_parameters:
     - resnet50_imagenet
     - CTransPath
     - RetCCL
-    - PLIP
+    - virchow
     - uni
+
   mil: # MIL models
     - CLAM_SB
     - dsmil

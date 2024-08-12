@@ -714,7 +714,7 @@ class gated_attention_mil(nn.Module):
         scores = self.head(pooled_embeddings)
         return scores
 
-class TopKMIL(nn.Module):
+class topk_mil(nn.Module):
     """
     Multiple instance learning model which selects the top k instances based on attention scores and aggregates them using mean pooling.
 
@@ -773,7 +773,7 @@ class TopKMIL(nn.Module):
         scores = self.head(pooled_embeddings)
         return scores
 
-class HierarchicalMIL(nn.Module):
+class hierarchical_mil(nn.Module):
     """
     Hierarchical Multiple Instance Learning model with attention mechanism. It first groups consecutive patches into regions,
     weights instances per region using attention and then aggregates region embeddings into slide embeddings using an attention mechanism.
@@ -861,7 +861,7 @@ class HierarchicalMIL(nn.Module):
         scores = self.slide_head(slide_embedding)
         return scores
 
-class HierarchicalClusterMIL(nn.Module):
+class hierarchical_cluster_mil(nn.Module):
     """
     Inspired by "Cluster-to-Conquer: A Framework for End-to-End
 Multi-Instance Learning for Whole Slide Image Classification".
@@ -957,7 +957,7 @@ Multi-Instance Learning for Whole Slide Image Classification".
         scores = self.slide_head(slide_embedding)
         return scores
 
-class RetMIL(nn.Module):
+class retmil(nn.Module):
     """
     Retention-based MIL. Retention mechanism is applied to both local subsequences and the global sequence in a hierarchical manner.
     The local retention mechanism uses relative distance decay to compute the retention scores, while the global retention mechanism
@@ -1009,7 +1009,7 @@ class RetMIL(nn.Module):
         Attention pooling mechanism
     """
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, subseq_len: int = 512, n_heads: int = 8, dropout_p: float = 0.1):
-        super(RetMIL, self).__init__()
+        super(retmil, self).__init__()
         self.subseq_len = subseq_len
         self.n_heads = n_heads
 
@@ -1102,7 +1102,7 @@ class RetMIL(nn.Module):
             out = torch.sum(alpha * x, dim=1)
             return out
 
-class WeightedMeanMIL(nn.Module):
+class weighted_mean_mil(nn.Module):
     """
     Multiple instance learning model with weighted mean pooling. Instances are inversely weighted by their variance.
     This effectively makes the model more robust to noisy instances.
@@ -1132,7 +1132,7 @@ class WeightedMeanMIL(nn.Module):
         
     """
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1):
-        super(RobustMeanMIL, self).__init__()
+        super(weighted_mean_mil, self).__init__()
         self.encoder = nn.Sequential(
             nn.Linear(n_feats, z_dim),
             nn.ReLU()
@@ -1155,7 +1155,7 @@ class WeightedMeanMIL(nn.Module):
         output = self.head(robust_mean)
         return output
 
-class AODMIL(nn.Module):
+class aodmil(nn.Module):
     """
     Attention-based Outlier Detection Multiple Instance Learning model. The model computes the mean embedding of the bag,
     computes the similarity of each instance to the mean embedding, and computes the attention weights based on the similarity.
@@ -1189,7 +1189,7 @@ class AODMIL(nn.Module):
     """
 
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1):
-        super(AODMIL, self).__init__()
+        super(aodmil, self).__init__()
         self.encoder = nn.Sequential(
             nn.Linear(n_feats, z_dim),
             nn.ReLU()
