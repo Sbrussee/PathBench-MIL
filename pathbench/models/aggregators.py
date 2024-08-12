@@ -8,6 +8,7 @@ As an example, we added some simple MIL methods (linear + mean, linear + max) be
 import torch
 from torch import nn
 import torch.nn.functional as F
+from sklearn.cluster import KMeans
 
 
 class simple_linear_mil(nn.Module):
@@ -591,3 +592,634 @@ class varmil(nn.Module):
         if apply_softmax:
             attention_scores = F.softmax(attention_scores, dim=1)
         return attention_scores
+
+class cluster_pooling_mil(nn.Module):
+    """
+    Multiple instance learning model with cluster-based pooling. It first clusters patches into regions, pools each region using mean pooling
+    and then aggregates region embeddings into the slide-level label using a linear classifier.
+
+    Parameters
+    ----------
+    n_feats : int
+        Number of input features
+    n_out : int
+        Number of output classes
+    z_dim : int
+        Dimensionality of the hidden layer
+    n_clusters : int
+        Number of clusters
+    dropout_p : float
+        Dropout probability
+    
+    Attributes
+    ----------
+    encoder : nn.Sequential
+        Encoder network
+    kmeans : KMeans
+        KMeans clustering model
+    head : nn.Sequential
+        Prediction head network
+    
+    Methods
+    -------
+    forward(bags)
+        Forward pass through the model
+    """
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, n_clusters: int = 4, dropout_p: float = 0.1) -> None:
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(n_feats, z_dim),
+            nn.ReLU()
+        )
+        self.kmeans = KMeans(n_clusters=n_clusters)
+        self.head = nn.Sequential(
+            nn.BatchNorm1d(z_dim * n_clusters),
+            nn.Dropout(dropout_p),
+            nn.Linear(z_dim * n_clusters, n_out)
+        )
+
+        self.dropout = nn.Dropout(dropout_p)
+
+    def forward(self, bags):
+        embeddings = self.encoder(bags)
+        clusters = self.kmeans.fit_predict(embeddings.detach().cpu().numpy())
+        pooled_embeddings = torch.cat([embeddings[clusters == i].mean(dim=0) for i in range(self.kmeans.n_clusters)], dim=0)
+        pooled_embeddings = pooled_embeddings.view(1, -1)
+        scores = self.head(pooled_embeddings)
+        return scores
+
+class gated_attention_mil(nn.Module):
+    """
+    Multiple instance learning model with gated attention mechanism.
+
+    Parameters
+    ----------
+    n_feats : int
+        Number of input features
+    n_out : int
+        Number of output classes
+    z_dim : int
+        Dimensionality of the hidden layer
+    dropout_p : float
+        Dropout probability
+
+    Attributes
+    ----------
+    encoder : nn.Sequential
+        Encoder network
+    attention_V : nn.Sequential
+        Attention network
+    attention_U : nn.Sequential
+        Attention network
+    attention_weights : nn.Linear
+        Attention network
+    head : nn.Sequential
+        Prediction head network
+    
+
+    Methods
+    -------
+    forward(bags)
+        Forward pass through the model
+
+    """
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1) -> None:
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(n_feats, z_dim),
+            nn.ReLU()
+        )
+        self.attention_V = nn.Sequential(
+            nn.Linear(z_dim, z_dim),
+            nn.Tanh()
+        )
+        self.attention_U = nn.Sequential(
+            nn.Linear(z_dim, z_dim),
+            nn.Sigmoid()
+        )
+        self.attention_weights = nn.Linear(z_dim, 1)
+        self.head = nn.Sequential(
+            nn.BatchNorm1d(z_dim),
+            nn.Dropout(dropout_p),
+            nn.Linear(z_dim, n_out)
+        )
+
+
+    def forward(self, bags):
+        embeddings = self.encoder(bags)
+        attention_V = self.attention_V(embeddings)
+        attention_U = self.attention_U(embeddings)
+        attention_weights = self.attention_weights(attention_V * attention_U).softmax(dim=1)
+        pooled_embeddings = (embeddings * attention_weights).sum(dim=1)
+        scores = self.head(pooled_embeddings)
+        return scores
+
+class TopKMIL(nn.Module):
+    """
+    Multiple instance learning model which selects the top k instances based on attention scores and aggregates them using mean pooling.
+
+    Parameters
+    ----------
+    n_feats : int
+        Number of input features
+    n_out : int
+        Number of output classes
+    z_dim : int
+        Dimensionality of the hidden layer
+    k : int
+        Number of top instances to select
+    dropout_p : float
+        Dropout probability
+
+    Attributes
+    ----------
+    encoder : nn.Sequential
+        Encoder network
+    attention : nn.Sequential
+        Attention network
+    head : nn.Sequential
+        Prediction head network
+    k : int
+        Number of top instances to select
+    
+    Methods
+    -------
+    forward(bags)
+        Forward pass through the model
+
+    """
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, k: int = 20, dropout_p: float = 0.1):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(n_feats, z_dim),
+            nn.ReLU()
+        )
+        self.attention = nn.Sequential(
+            nn.Linear(z_dim, 1),
+        )
+        self.head = nn.Sequential(
+            nn.BatchNorm1d(z_dim),
+            nn.Dropout(dropout_p),
+            nn.Linear(z_dim, n_out)
+        )
+        self.k = k
+
+    def forward(self, bags):
+        embeddings = self.encoder(bags)
+        scores = self.attention(embeddings).squeeze(-1)
+        topk_scores, topk_indices = torch.topk(scores, self.k, dim=0)
+        topk_embeddings = embeddings[topk_indices]
+        pooled_embeddings = topk_embeddings.mean(dim=0)
+        scores = self.head(pooled_embeddings)
+        return scores
+
+class HierarchicalMIL(nn.Module):
+    """
+    Hierarchical Multiple Instance Learning model with attention mechanism. It first groups consecutive patches into regions,
+    weights instances per region using attention and then aggregates region embeddings into slide embeddings using an attention mechanism.
+    Finally, it predicts the slide-level label using a linear classifier.
+
+    Parameters
+    ----------
+    n_feats : int
+        Number of input features
+    n_out : int
+        Number of output classes
+    z_dim : int
+        Dimensionality of the hidden layer
+    region_size : int
+        Number of patches per region
+    dropout_p : float
+        Dropout probability
+    
+    Attributes
+    ----------
+    encoder : nn.Sequential
+        Encoder network
+    region_attention : nn.Sequential
+        Region attention network
+    region_head : nn.Sequential
+        Region head network
+    slide_attention : nn.Sequential
+        Slide attention network
+    slide_head : nn.Sequential
+        Slide head network
+
+    Methods
+    -------
+    forward(bags)
+        Forward pass through the model
+
+    """
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, region_size: int = 4, dropout_p: float = 0.1):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(n_feats, z_dim),
+            nn.ReLU()
+        )
+        self.region_attention = nn.Sequential(
+            nn.Linear(z_dim, z_dim),
+            nn.Tanh(),
+            nn.Linear(z_dim, 1)
+        )
+        self.region_head = nn.Sequential(
+            nn.BatchNorm1d(z_dim),
+            nn.Dropout(dropout_p),
+            nn.Linear(z_dim, z_dim)
+        )
+        self.slide_attention = nn.Sequential(
+            nn.Linear(z_dim, z_dim),
+            nn.Tanh(),
+            nn.Linear(z_dim, 1)
+        )
+        self.slide_head = nn.Sequential(
+            nn.BatchNorm1d(z_dim),
+            nn.Dropout(dropout_p),
+            nn.Linear(z_dim, n_out)
+        )
+        self.region_size = region_size
+
+    def forward(self, bags):
+        # Split into regions
+        n_regions = bags.size(0) // self.region_size
+        embeddings = self.encoder(bags)
+        region_embeddings = []
+
+        for i in range(n_regions):
+            region_patches = embeddings[i * self.region_size: (i + 1) * self.region_size]
+            attention_weights = F.softmax(self.region_attention(region_patches), dim=0)
+            region_embedding = torch.sum(attention_weights * region_patches, dim=0)
+            region_embeddings.append(self.region_head(region_embedding))
+        
+        region_embeddings = torch.stack(region_embeddings, dim=0)
+
+        # Attention pooling across regions
+        region_attention_weights = F.softmax(self.slide_attention(region_embeddings), dim=0)
+        slide_embedding = torch.sum(region_attention_weights * region_embeddings, dim=0)
+
+        # Final slide-level prediction
+        scores = self.slide_head(slide_embedding)
+        return scores
+
+class HierarchicalClusterMIL(nn.Module):
+    """
+    Inspired by "Cluster-to-Conquer: A Framework for End-to-End
+Multi-Instance Learning for Whole Slide Image Classification".
+
+    Hierarchical Cluster MIL model with attention mechanism. It first clusters patches into regions, weights instances
+    per region using attention and then aggregates region embeddings into slide embeddings using an attention mechanism. Finally, it predicts the
+    slide-level label using a linear classifier.
+
+    Parameters
+    ----------
+    n_feats : int
+        Number of input features
+    n_out : int
+        Number of output classes
+    z_dim : int
+        Dimensionality of the hidden layer
+    n_clusters : int
+        Number of clusters
+    dropout_p : float
+        Dropout probability
+    
+    Attributes
+    ----------
+    encoder : nn.Sequential
+        Encoder network
+    kmeans : KMeans
+        KMeans clustering model
+    region_attention : nn.Sequential
+        Region attention network
+    region_head : nn.Sequential
+        Region head network
+    slide_attention : nn.Sequential
+        Slide attention network
+    slide_head : nn.Sequential
+        Slide head network
+    
+    Methods
+    -------
+    forward(bags)
+        Forward pass through the model
+    """
+
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, n_clusters: int = 10, dropout_p: float = 0.1):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(n_feats, z_dim),
+            nn.ReLU()
+        )
+        self.kmeans = KMeans(n_clusters=n_clusters)
+        self.region_attention = nn.Sequential(
+            nn.Linear(z_dim, z_dim),
+            nn.Tanh(),
+            nn.Linear(z_dim, 1)
+        )
+        self.region_head = nn.Sequential(
+            nn.BatchNorm1d(z_dim),
+            nn.Dropout(dropout_p),
+            nn.Linear(z_dim, z_dim)
+        )
+        self.slide_attention = nn.Sequential(
+            nn.Linear(z_dim, z_dim),
+            nn.Tanh(),
+            nn.Linear(z_dim, 1)
+        )
+        self.slide_head = nn.Sequential(
+            nn.BatchNorm1d(z_dim),
+            nn.Dropout(dropout_p),
+            nn.Linear(z_dim, n_out)
+        )
+
+    def forward(self, bags):
+        # Encode each patch
+        embeddings = self.encoder(bags)
+
+        # Cluster patches into regions
+        clusters = self.kmeans.fit_predict(embeddings.detach().cpu().numpy())
+
+        region_embeddings = []
+
+        for i in range(self.kmeans.n_clusters):
+            cluster_patches = embeddings[clusters == i]
+            attention_weights = F.softmax(self.region_attention(cluster_patches), dim=0)
+            region_embedding = torch.sum(attention_weights * cluster_patches, dim=0)
+            region_embeddings.append(self.region_head(region_embedding))
+        
+        region_embeddings = torch.stack(region_embeddings, dim=0)
+
+        # Attention pooling across regions
+        region_attention_weights = F.softmax(self.slide_attention(region_embeddings), dim=0)
+        slide_embedding = torch.sum(region_attention_weights * region_embeddings, dim=0)
+
+        # Final slide-level prediction
+        scores = self.slide_head(slide_embedding)
+        return scores
+
+class RetMIL(nn.Module):
+    """
+    Retention-based MIL. Retention mechanism is applied to both local subsequences and the global sequence in a hierarchical manner.
+    The local retention mechanism uses relative distance decay to compute the retention scores, while the global retention mechanism
+    uses self-attention to compute the retention scores. The final prediction is made using a linear classifier.
+    Method from: "RetMIL: Retentive Multiple Instance Learning
+    for Histopathological Whole Slide Image
+    Classification".
+
+    Parameters
+    ----------
+    n_feats : int
+        Number of input features
+    n_out : int
+        Number of output classes
+    z_dim : int
+        Dimensionality of the hidden layer
+    subseq_len : int
+        Length of subsequences
+    n_heads : int
+        Number of attention heads
+    dropout_p : float
+        Dropout probability
+    
+    Attributes
+    ----------
+    local_retention_1 : RetentionLayer
+        Local retention mechanism 1
+    local_retention_2 : RetentionLayer
+        Local retention mechanism 2
+    local_attention : AttentionPooling
+        Local attention pooling
+    global_retention : RetentionLayer
+        Global retention mechanism
+    global_attention : AttentionPooling
+        Global attention pooling
+    classifier : nn.Sequential
+        Prediction head network
+    
+    Methods
+    -------
+    forward(x)
+        Forward pass through the model
+    
+    Classes
+    -------
+    RetentionLayer(nn.Module)
+        Retention mechanism for local and global sequences
+    AttentionPooling(nn.Module)
+        Attention pooling mechanism
+    """
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, subseq_len: int = 512, n_heads: int = 8, dropout_p: float = 0.1):
+        super(RetMIL, self).__init__()
+        self.subseq_len = subseq_len
+        self.n_heads = n_heads
+
+        # Retention mechanism for local subsequences
+        self.local_retention_1 = self.RetentionLayer(z_dim, n_heads)
+        self.local_retention_2 = self.RetentionLayer(z_dim, n_heads)
+        self.local_attention = self.AttentionPooling(z_dim)
+
+        # Retention mechanism for global sequence
+        self.global_retention = self.RetentionLayer(z_dim, n_heads)
+        self.global_attention = self.AttentionPooling(z_dim)
+
+        # Classification head
+        self.classifier = nn.Sequential(
+            nn.BatchNorm1d(z_dim),
+            nn.Dropout(dropout_p),
+            nn.Linear(z_dim, n_out)
+        )
+
+    def forward(self, bags):
+        # Step 1: Split into subsequences
+        subsequences = torch.split(bags, self.subseq_len)
+
+        # Step 2: Local subsequence processing
+        local_embeddings = []
+        for subseq in subsequences:
+            subseq = self.local_retention_1(subseq)
+            subseq = self.local_retention_2(subseq)
+            local_embedding = self.local_attention(subseq)
+            local_embeddings.append(local_embedding)
+
+        # Stack local embeddings into a global sequence
+        global_sequence = torch.stack(local_embeddings)
+
+        # Step 3: Global sequence processing
+        global_sequence = self.global_retention(global_sequence)
+        global_embedding = self.global_attention(global_sequence)
+
+        # Step 4: Classification
+        out = self.classifier(global_embedding)
+        return out
+
+    class RetentionLayer(nn.Module):
+        def __init__(self, d_model, n_heads):
+            super(RetMIL.RetentionLayer, self).__init__()
+            self.d_model = d_model
+            self.n_heads = n_heads
+            self.head_dim = d_model // n_heads
+
+            self.WQ = nn.Linear(d_model, d_model)
+            self.WK = nn.Linear(d_model, d_model)
+            self.WV = nn.Linear(d_model, d_model)
+
+            self.group_norm = nn.GroupNorm(1, d_model)
+
+        def forward(self, x):
+            B, N, D = x.shape
+
+            Q = self.WQ(x).view(B, N, self.n_heads, self.head_dim).transpose(1, 2)
+            K = self.WK(x).view(B, N, self.n_heads, self.head_dim).transpose(1, 2)
+            V = self.WV(x).view(B, N, self.n_heads, self.head_dim).transpose(1, 2)
+
+            # Implementing a simplified version of retention mechanism
+            # Retention using relative distance decay
+            D = self.relative_distance_decay(N, K.device)
+            retention_scores = (Q @ K.transpose(-2, -1)) * D
+            retention_out = (retention_scores @ V).transpose(1, 2).contiguous().view(B, N, D)
+
+            # Applying normalization
+            retention_out = self.group_norm(retention_out)
+
+            return retention_out
+
+        def relative_distance_decay(self, N, device):
+            D = torch.zeros(N, N, device=device)
+            for i in range(N):
+                for j in range(i, N):
+                    D[i, j] = torch.exp(-float(j - i))
+            return D
+
+    class AttentionPooling(nn.Module):
+        def __init__(self, d_model):
+            super(RetMIL.AttentionPooling, self).__init__()
+            self.W = nn.Linear(d_model, d_model)
+            self.U = nn.Linear(d_model, d_model)
+            self.gamma = nn.Parameter(torch.zeros(1))
+
+        def forward(self, x):
+            alpha = F.softmax(self.gamma * torch.tanh(self.W(x)) * torch.sigmoid(self.U(x)), dim=1)
+            out = torch.sum(alpha * x, dim=1)
+            return out
+
+class WeightedMeanMIL(nn.Module):
+    """
+    Multiple instance learning model with weighted mean pooling. Instances are inversely weighted by their variance.
+    This effectively makes the model more robust to noisy instances.
+
+    Parameters
+    ----------
+    n_feats : int
+        Number of input features
+    n_out : int
+        Number of output classes
+    z_dim : int
+        Dimensionality of the hidden layer
+    dropout_p : float
+        Dropout probability
+    
+    Attributes
+    ----------
+    encoder : nn.Sequential
+        Encoder network
+    head : nn.Sequential
+        Prediction head network
+    
+    Methods
+    -------
+    forward(bags)
+        Forward pass through the model
+        
+    """
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1):
+        super(RobustMeanMIL, self).__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(n_feats, z_dim),
+            nn.ReLU()
+        )
+        self.head = nn.Sequential(
+            nn.BatchNorm1d(z_dim),
+            nn.Dropout(dropout_p),
+            nn.Linear(z_dim, n_out)
+        )
+
+    def forward(self, bags):
+        embeddings = self.encoder(bags)
+        
+        # Compute robust mean (weighted mean with inverse variance)
+        variances = embeddings.var(dim=0, unbiased=False)
+        weights = 1.0 / (variances + 1e-5)  # Small epsilon to avoid division by zero
+        weighted_sum = torch.sum(weights * embeddings, dim=0)
+        robust_mean = weighted_sum / torch.sum(weights)
+
+        output = self.head(robust_mean)
+        return output
+
+class AODMIL(nn.Module):
+    """
+    Attention-based Outlier Detection Multiple Instance Learning model. The model computes the mean embedding of the bag,
+    computes the similarity of each instance to the mean embedding, and computes the attention weights based on the similarity.
+    The final prediction is made using a linear classifier.
+    The method aims to detect patches that show abnormal behavior with respect to the other patches in the bag.
+
+    Parameters
+    ----------
+    n_feats : int
+        Number of input features
+    n_out : int
+        Number of output classes
+    z_dim : int
+        Dimensionality of the hidden layer
+    dropout_p : float
+        Dropout probability
+    
+    Attributes
+    ----------
+    encoder : nn.Sequential
+        Encoder network
+    attention : nn.Sequential
+        Attention network
+    head : nn.Sequential
+        Prediction head network
+    
+    Methods
+    -------
+    forward(bags)
+        Forward pass through the model
+    """
+
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1):
+        super(AODMIL, self).__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(n_feats, z_dim),
+            nn.ReLU()
+        )
+        self.attention = nn.Sequential(
+            nn.Linear(z_dim, 1),
+            nn.Sigmoid()
+        )
+        self.head = nn.Sequential(
+            nn.BatchNorm1d(z_dim),
+            nn.Dropout(dropout_p),
+            nn.Linear(z_dim, n_out)
+        )
+
+    def forward(self, bags):
+        embeddings = self.encoder(bags)
+        
+        # Compute the mean embedding of the bag
+        mean_embedding = embeddings.mean(dim=0, keepdim=True)
+        
+        # Compute similarity of each instance to the mean embedding
+        similarities = F.cosine_similarity(embeddings, mean_embedding, dim=-1)
+        
+        # Inverse attention based on similarity
+        attention_weights = 1.0 - similarities
+        attention_weights = self.attention(attention_weights.unsqueeze(-1)).squeeze(-1)
+        
+        # Weighted aggregation of embeddings
+        weighted_embeddings = embeddings * attention_weights.unsqueeze(-1)
+        aggregated_embedding = weighted_embeddings.mean(dim=0)
+        
+        output = self.head(aggregated_embedding)
+        return output
