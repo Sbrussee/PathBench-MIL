@@ -13,10 +13,10 @@ build:
 # Define the necessary Python dependencies
 python:
   install:
-    - method: pip
-      path: .
+    - requirements: docs/requirements.txt
 
-
+env:
+  - PYTHONPATH= ./pathbench
 formats:
   - pdf
   - htmlzip
