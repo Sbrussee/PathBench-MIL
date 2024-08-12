@@ -9,6 +9,8 @@ build:
   os: ubuntu-22.04
   tools:
     python: "3.9"
+  environment:
+    PYTHONPATH: ./pathbench  # Set PYTHONPATH here
 
 # Define the necessary Python dependencies
 python:
@@ -23,6 +25,3 @@ formats:
 # Build the documentation
 sphinx:
   configuration: docs/source/conf.py
-
-env:
-  - PYTHONPATH=./pathbench  # Remove the space here
