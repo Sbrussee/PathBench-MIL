@@ -47,7 +47,13 @@
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Getting Started</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Getting Started</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#setting-up-a-project">Setting up a project</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#datasets">Datasets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#annotations">Annotations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#running-pathbench">Running PathBench</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="benchmarking_mode.html">Benchmarking Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="optimization_mode.html">Optimization Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="visualization_application.html">Visualization Application</a></li>
@@ -84,6 +90,121 @@
              
   <section id="getting-started">
 <h1>Getting Started<a class="headerlink" href="#getting-started" title="Link to this heading"></a></h1>
+<section id="setting-up-a-project">
+<h2>Setting up a project<a class="headerlink" href="#setting-up-a-project" title="Link to this heading"></a></h2>
+<p>PathBench inherets the project functionality from SlideFlow. PathBench allows creating projects through the configuration file.
+In the configuration, project-specific settings can be specified in the <cite>experiment</cite> section.
+The <cite>experiment</cite> section also saves several other important settings:</p>
+<p>Project related settings:
+- <cite>project_name</cite>: The name of the project.
+- <cite>annotation_file</cite>: The path to the annotation file.</p>
+<p>Training related settings:
+- <cite>balancing</cite>: The balancing technique to be used. This can be ‘tile’, ‘slide’, ‘patient’ or ‘category’. Balancing is used to construct training batches with a balanced distribution of classes/patients/slides/tiles.
+- <cite>split_technique</cite>: The split technique to be used. This can be ‘k-fold’ or ‘fixed’.
+- <cite>k</cite>: The number of folds for k-fold cross-validation.
+- <cite>val_fraction</cite>: The fraction of the training data to be used for validation.
+- <cite>epochs</cite>: The number of epochs for training.
+- <cite>batch_size</cite>: The batch size for training.
+- <cite>bag_size</cite>: The bag size for MIL models.
+- <cite>aggregation_level</cite>: The aggregation level can be ‘slide’ or ‘patient’. This specifies at which levels bags are aggregated, effectively creating slide-level or patient-level predictions.</p>
+<p>General settings:
+- <cite>with_continue</cite>: If True, the model will continue training, skipping already finished parameter combinations.
+- <cite>task</cite>: The task can be ‘classification’, ‘regression’ or ‘survival’.
+- <cite>mode</cite>: The mode can be either ‘benchmark’ or ‘optimization’.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">experiment</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">project_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MF_TEST</span><span class="w"> </span><span class="c1"># Name of the project</span>
+<span class="w">  </span><span class="nt">annotation_file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">path/to/your/annotation_file</span><span class="w"> </span><span class="c1"># Path to the annotation file</span>
+<span class="w">  </span><span class="nt">balancing</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">category</span><span class="w"> </span><span class="c1"># Balancing can be &#39;tile&#39;, &#39;slide&#39;, &#39;patient&#39; or &#39;category&#39;</span>
+<span class="w">  </span><span class="nt">split_technique</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">k-fold</span><span class="w"> </span><span class="c1"># Split technique can be &#39;k-fold&#39; or &#39;fixed&#39;</span>
+<span class="w">  </span><span class="nt">k</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span><span class="w"> </span><span class="c1"># Number of folds for k-fold cross-validation</span>
+<span class="w">  </span><span class="nt">val_fraction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span><span class="w"> </span><span class="c1"># Fraction of the training data to be used for validation</span>
+<span class="w">  </span><span class="nt">epochs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span><span class="w"> </span><span class="c1"># Number of epochs for training</span>
+<span class="w">  </span><span class="nt">batch_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32</span><span class="w"> </span><span class="c1"># Batch size for training</span>
+<span class="w">  </span><span class="nt">bag_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">512</span><span class="w"> </span><span class="c1"># Bag size for MIL models</span>
+<span class="w">  </span><span class="nt">with_continue</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">True</span><span class="w"> </span><span class="c1"># If True, the model will continue training from the last checkpoint.</span>
+<span class="w">  </span><span class="nt">aggregation_level</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">slide</span><span class="w"> </span><span class="c1"># Aggregation level can be &#39;slide&#39; or &#39;patient&#39;</span>
+<span class="w">  </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">classification</span><span class="w"> </span><span class="c1"># Task can be &#39;classification&#39;, &#39;regression&#39; or &#39;survival&#39;</span>
+<span class="w">  </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">benchmark</span><span class="w"> </span><span class="c1"># Mode can be either &#39;benchmark&#39; or &#39;optimization&#39;.</span>
+<span class="w">  </span><span class="c1">#custom_loss:  # Can be any loss as specified in utils/losses.py, or None, in which case the default task loss will be used.</span>
+<span class="w">  </span><span class="c1">#custom_metrics: # Can be any list of metrics as specified in utils/metrics.py, or None, in which case the default task metrics will be used.</span>
+</pre></div>
+</div>
+</section>
+<section id="datasets">
+<h2>Datasets<a class="headerlink" href="#datasets" title="Link to this heading"></a></h2>
+<p>The datasets to be used in the project can be specified in the <cite>datasets</cite> section. One can add any arbitrary number of data sources to a project, and specify whether these should be used for training/validation or as testing datasets:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">datasets</span><span class="p">:</span><span class="w">  </span><span class="c1"># List of datasets to be used</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dataset1</span><span class="w">  </span><span class="c1"># Name of the dataset</span>
+<span class="w">    </span><span class="nt">slide_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">path/to/your/slides</span><span class="w">  </span><span class="c1"># Path to the slide data</span>
+<span class="w">    </span><span class="nt">tfrecord_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">path/to/save/tfrecords</span><span class="w">  </span><span class="c1"># Path to save tfrecords</span>
+<span class="w">    </span><span class="nt">tile_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">path/to/save/tiles</span><span class="w">  </span><span class="c1"># Path to save tiles</span>
+<span class="w">    </span><span class="nt">used_for</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">training</span><span class="w">  </span><span class="c1"># Whether the dataset is used for training or testing</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dataset2</span>
+<span class="w">    </span><span class="nt">slide_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">path/to/your/other/slides</span>
+<span class="w">    </span><span class="nt">tfrecord_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">path/to/other/tfrecords</span>
+<span class="w">    </span><span class="nt">tile_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">path/to/other/tiles</span>
+<span class="w">    </span><span class="nt">used_for</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">testing</span>
+</pre></div>
+</div>
+</section>
+<section id="annotations">
+<h2>Annotations<a class="headerlink" href="#annotations" title="Link to this heading"></a></h2>
+<p>As seen in the <cite>experiment</cite> section, the path to the annotation file should be specified. The annotation file should be a CSV file with the following columns:
+- <cite>slide</cite>: The name/identifier of the slide.
+- <cite>patient</cite>: The name/identifier of the patient to which the slide corresponds.
+- <cite>dataset</cite>: The name of the dataset to which the slide belongs.</p>
+<p>For classification tasks, the annotation file should also contain a column with the target labels. This column should be named <cite>category</cite>.
+For regression tasks, the annotation file should contain a column with the target values. This column should be named <cite>value</cite>.
+For survival tasks, the annotation file should contain columns with the survival time and event status. These columns should be named <cite>time</cite> and <cite>event</cite>, respectively.</p>
+<p>An example of a valid annotation file for a classification task, assuming we use two datasets: dataset1 and dataset2:</p>
+<div class="highlight-csv notranslate"><div class="highlight"><pre><span></span>slide,patient,dataset,category
+slide1,patient1,dataset1,0
+slide2,patient1,dataset1,1
+slide3,patient2,dataset1,0
+slide4,patient2,dataset1,1
+slide5,patient3,dataset1,0
+slide6,patient3,dataset1,1
+slide7,patient4,dataset2,0
+slide8,patient4,dataset2,1
+slide9,patient5,dataset2,0
+slide10,patient5,dataset2,1
+</pre></div>
+</div>
+<p>An example of a valid annotation file for a regression task:
+.. code-block:: csv</p>
+<blockquote>
+<div><p>slide,patient,dataset,value
+slide1,patient1,dataset1,0.1
+slide2,patient1,dataset1,0.2
+slide3,patient2,dataset1,0.3
+slide4,patient2,dataset1,0.4
+slide5,patient3,dataset1,0.5
+slide6,patient3,dataset1,0.6
+slide7,patient4,dataset2,0.7
+slide8,patient4,dataset2,0.8
+slide9,patient5,dataset2,0.9
+slide10,patient5,dataset2,1.0</p>
+</div></blockquote>
+<p>An example of a valid annotation file for a survival task:
+.. code-block:: csv</p>
+<blockquote>
+<div><p>slide,patient,dataset,time,event
+slide1,patient1,dataset1,26,1
+slide2,patient1,dataset1,15,1
+slide3,patient2,dataset1,16,1
+slide4,patient2,dataset1,42,0
+slide5,patient3,dataset1,13,1
+slide6,patient3,dataset1,11,1
+slide7,patient4,dataset2,6,0
+slide8,patient4,dataset2,5,1
+slide9,patient5,dataset2,84,1
+slide10,patient5,dataset2,43,1</p>
+</div></blockquote>
+<p>Note that all the slides we want to use should be present in the annotation file, and the datasets should be specified in the <cite>datasets</cite> section of the configuration file.</p>
+</section>
+<section id="running-pathbench">
+<h2>Running PathBench<a class="headerlink" href="#running-pathbench" title="Link to this heading"></a></h2>
 <p>To run PathBench once installed using default settings, one can simply run:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./run_pathbench.sh
 </pre></div>
@@ -121,6 +242,7 @@
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>main.py<span class="w"> </span><span class="nv">$CONFIG_FILE</span>
 </pre></div>
 </div>
+</section>
 </section>
 
 

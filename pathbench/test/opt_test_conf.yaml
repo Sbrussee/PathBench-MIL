@@ -2,8 +2,8 @@ experiment:
   project_name: MF_TEST
   annotation_file: /exports/path-cutane-lymfomen-hpc/siemen/MF_annotations_corrected.csv
   balancing: category
-  split_technique: k-fold
-  k: 3
+  split_technique: fixed
+  k: 1
   val_fraction: 0.1
   epochs: 5
   batch_size: 32
@@ -64,7 +64,6 @@ benchmark_parameters:
     - dsmil
     - varmil
     - attention_mil
-
 
 weights_dir: /exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/pretrained_weights
 hf_token: None
