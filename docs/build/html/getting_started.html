@@ -158,7 +158,7 @@ The <cite>experiment</cite> section also saves several other important settings:
 For regression tasks, the annotation file should contain a column with the target values. This column should be named <cite>value</cite>.
 For survival tasks, the annotation file should contain columns with the survival time and event status. These columns should be named <cite>time</cite> and <cite>event</cite>, respectively.</p>
 <p>An example of a valid annotation file for a classification task, assuming we use two datasets: dataset1 and dataset2:</p>
-<div class="highlight-csv notranslate"><div class="highlight"><pre><span></span>slide,patient,dataset,category
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>slide,patient,dataset,category
 slide1,patient1,dataset1,0
 slide2,patient1,dataset1,1
 slide3,patient2,dataset1,0
@@ -172,7 +172,7 @@ slide10,patient5,dataset2,1
 </pre></div>
 </div>
 <p>An example of a valid annotation file for a regression task:
-.. code-block:: csv</p>
+.. code-block:: none</p>
 <blockquote>
 <div><p>slide,patient,dataset,value
 slide1,patient1,dataset1,0.1
@@ -187,7 +187,7 @@ slide9,patient5,dataset2,0.9
 slide10,patient5,dataset2,1.0</p>
 </div></blockquote>
 <p>An example of a valid annotation file for a survival task:
-.. code-block:: csv</p>
+.. code-block:: none</p>
 <blockquote>
 <div><p>slide,patient,dataset,time,event
 slide1,patient1,dataset1,26,1
