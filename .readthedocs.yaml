@@ -13,7 +13,9 @@ build:
 # Define the necessary Python dependencies
 python:
   install:
-    - requirements: docs/requirements.txt
+    - requirements: requirements.txt
+    - method: pip
+      path: .
 
 
 formats:
