@@ -1135,9 +1135,10 @@ def optimize_parameters(config, project):
             print(test_df)
             index += 1
 
-            trial.report(np.mean(metrics[objective_metric]), index)
-            if trial.should_prune():
-                raise optuna.TrialPruned()
+            if 'pruner' in config['optimization']:
+                trial.report(np.mean(metrics[objective_metric]), index)
+                if trial.should_prune():
+                    raise optuna.TrialPruned()
 
         logging.info(f"Combination {save_string} finished...")
 
@@ -1180,11 +1181,13 @@ def optimize_parameters(config, project):
     logging.info(f"Using {splits_file} splits for benchmarking...")
 
     sampler = config['optimization'].get('sampler', 'TPESampler')
-    pruner = config['optimization'].get('pruner', 'MedianPruner')
     sampler_class = getattr(optuna.samplers, sampler, TPESampler)()
-    pruner_class = getattr(optuna.pruners, pruner, MedianPruner)()
-
-    logging.info(f"Using {sampler} sampler and {pruner} pruner...")
+    if 'pruner' in config['optimization']:
+        pruner = config['optimization']['pruner'].get('pruner', 'HyperbandPruner')
+        pruner_class = getattr(optuna.pruners, pruner)()
+        logging.info(f"Using {sampler} sampler and {pruner} pruner...")
+    else:
+        logging.info(f"Using {sampler} sampler...")
 
     if config['optimization']['objective_mode'] == 'max':
         direction = 'maximize'
