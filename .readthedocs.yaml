@@ -15,8 +15,6 @@ python:
   install:
     - requirements: docs/requirements.txt
 
-env:
-  - PYTHONPATH= ./pathbench
 formats:
   - pdf
   - htmlzip
@@ -25,3 +23,6 @@ formats:
 # Build the documentation
 sphinx:
   configuration: docs/source/conf.py
+
+env:
+  - PYTHONPATH=./pathbench  # Remove the space here
