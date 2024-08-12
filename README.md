@@ -20,7 +20,6 @@ PathBench is being developed at the Leiden University Medical Center: Department
 
 PathBench's documentation is available [here](https://pathbench.readthedocs.io/en/latest/index.html)
 
-## Installation
 # Installation Guide for PathBench
 
 ## Prerequisites
@@ -89,141 +88,7 @@ PathBench's documentation is available [here](https://pathbench.readthedocs.io/e
     pip install .
     ```
 
-## Getting Started
-To run pathbench once installed using default setting, one can simply run
-```bash
-./run_pathbench.sh
-```
-
-Note that this script can set your huggingface token for gated models and the configuration file as well as the name of the virtual environment can be changed:
-```bash
-#If virtual environment does not exist, construct one using pip
-if [ ! -d "pathbench_env" ]; then
-    python3 -m venv pathbench_env
-    source pathbench_env/bin/activate
-    pip install --upgrade pip
-    pip install -r requirements.txt
-else
-    source pathbench_env/bin/activate
-fi
-
-#Set slideflow backends
-export SF_SLIDE_BACKEND=cucim
-export SF_BACKEND=torch
-#Token required to access the gated models
-export HF_TOKEN=YOUR_HUGGINGFACE_TOKEN
-
-#Set the config file
-CONFIG_FILE=conf.yaml
-
-#Run the program
-python3 main.py $CONFIG_FILE
-```
-## Features
-
-- Benchmarking w.r.t.
-    - Tile sizes, magnifications (e.g. 256px, 20x)
-    - Normalization methods (e.g. Macenko, Reinhard)
-    - Feature extractors (e.g. UNI, GigaPath)
-    - MIL aggregators (e.g. CLAM, DSMIL)
-- Interpretable visualizations of benchmark output
-- Plotly-based benchmark visualization tool
-- Efficient Tile processing and QC pipeline inherited by Slideflow
-- Optuna-based optimization w.r.t. the benchmark parameters, to quickly find good candidate solutions.
-
-## Package Structure
-
-- pathbench/
-  - pathbench/ 
-    - benchmarking/
-      - benchmark.py # Main benchmarking script
-    - experiment/
-      - experiment.py # Initialization of experiments
-    - models/
-      - aggregators.py # MIL aggregation methods
-      - feature_extractors.py # Feature extractors
-    - utils
-      - calculate_feature_similarity.py # Calculate feature extractor similarity
-      - utils.py # Util functions
-      - losses.py # Houses custom losses for training models
-      - metrics.py # Houses custom metrics to calculate during training
-    - visualization
-      - visualization.py # Houses visualization functions
-    - test
-      - test.py # Calls testing functions
-      - binary_test_conf.yaml # tests binary classification
-      - classification_test_conf.yaml # tests multiclass classification
-      - opt_test_conf.yaml # tests optimization mode
-      - regression_test_conf.yaml # tests regresison
-      - survival_test_conf.yaml # tests survival prediciton
-  - slideflow_fork # Forked Slideflow package
-    - ...
-  - requirements.txt
-  - README.md
-  - LICENSE
-  - setup.py # Main setup script for pip
-  - setup_pathbench.py # Script to setup a virtual environment and install base packages
-  - run_pathbench.sh # Bash script to run pathbench
-  - conf.yaml # Default configuration
-
-## Normalization
-PathBench currently supports:
-- Macenko
-- Reinhard
-- CycleGan
-
-normalization.
-## Feature Extractors
-PathBench supports a wide range of different feature extractors, including SOTA foundation models for pathology. Most of these models are automatically downloaded by PathBench, however, some models require a huggingface account key to access the model (labeled 'Gated' in the feature extraction table) or require manually downloading the model weights (labeled 'Manual' in the extraction table). For each of the models, a link to the publication is given, and for the manual/gated models, the link for downloading the models or gaining model access are also provided.
-
-| Feature Extractor | Acquisition | Link |
-|----------|----------|----------|
-| ImageNet-ResNet50 | Automatic | NA | 
-| CTransPath | Automatic | [Link](https://github.com/Xiyue-Wang/TransPath?tab=readme-ov-file) |
-| MoCoV3-TransPath | Automatic | [Link](https://github.com/Xiyue-Wang/TransPath?tab=readme-ov-file) |
-| HistoSSL | Automatic | [Link](https://github.com/owkin/HistoSSLscaling) |
-| RetCCL | Automatic | [Link](https://github.com/Xiyue-Wang/RetCCL) |
-| PLIP | Automatic | [Link](https://github.com/PathologyFoundation/plip?tab=readme-ov-file) |
-| Lunit DINO | Automatic | [Link](https://github.com/lunit-io/benchmark-ssl-pathology) |
-| Lunit SwAV | Automatic | [Link](https://github.com/lunit-io/benchmark-ssl-pathology)  |
-| Lunit Barlow Twins | Automatic | [Link](https://github.com/lunit-io/benchmark-ssl-pathology) |
-| Lunit MocoV2 | Automatic | [Link](https://github.com/lunit-io/benchmark-ssl-pathology)  |
-| Phikon | Automatic | [Link](https://huggingface.co/owkin/phikon) |
-| PathoDuet-HE | Manual | [Link](https://github.com/openmedlab/PathoDuet) [Weights](https://drive.google.com/drive/folders/1aQHGabQzopSy9oxstmM9cPeF7QziIUxM)|
-| PathoDuet-IHC | Manual | [Link](https://github.com/openmedlab/PathoDuet) [Weights](https://drive.google.com/drive/folders/1aQHGabQzopSy9oxstmM9cPeF7QziIUxM)|
-| Virchow | Gated | [Link](https://huggingface.co/paige-ai/Virchow)|
-| Hibou-B | Automatic | [Link](https://huggingface.co/histai/hibou-b) |
-| UNI | Gated | [Link](https://huggingface.co/MahmoodLab/UNI) |
-| Prov-GigaPath | Gated | [Link](https://huggingface.co/prov-gigapath/prov-gigapath) |
-| Kaiko-S8 | Automatic | [Link](https://github.com/kaiko-ai/towards_large_pathology_fms) |
-| Kaiko-S16 | Automatic | [Link](https://github.com/kaiko-ai/towards_large_pathology_fms) |
-| Kaiko-B8 | Automatic | [Link](https://github.com/kaiko-ai/towards_large_pathology_fms) |
-| Kaiko-B16 | Automatic | [Link](https://github.com/kaiko-ai/towards_large_pathology_fms) |
-| Kaiko-L14 | Automatic | [Link](https://github.com/kaiko-ai/towards_large_pathology_fms) |
-| H-Optimus-0 | Automatic | [Link](https://huggingface.co/bioptimus/H-optimus-0) |
-
-## MIL aggregators
-In addition to a wide range of feature extractors, PathBench also includes a wide variety of MIL aggregation methods. Most of these support all tasks (Binary classification, Muliclass classifcation, regression and survival prediction), but some like the CLAM-models only support binary classification. We are actively working on extending support for these models.
-
-| MIL aggregator | Bin. class. | Multi-class. | Regression | Survival | Link |
-|----------|----------|----------|----------|----------|----------|
-| CLAM-SB | Supported | Not Supported | Not Supported | Not Supported | [Link](https://github.com/mahmoodlab/CLAM) |
-| CLAM-MB | Supported | Not Supported | Not Supported | Not Supported | [Link](https://github.com/mahmoodlab/CLAM)  |
-| Attention MIL | Supported | Supported | Supported | Supported | [Link](https://github.com/AMLab-Amsterdam/AttentionDeepMIL)|
-| TransMIL | Supported | Supported | Supported | Supported | [Link](https://github.com/szc19990412/TransMIL) |
-| HistoBistro Transformer | Supported | Supported | Supported | Supported | [Link](https://github.com/peng-lab/HistoBistro) |
-| Linear MIL | Supported | Supported | Supported | Supported | NA |
-| Mean MIL | Supported | Supported | Supported | Supported | NA |
-| Max MIL | Supported | Supported | Supported | Supported | NA |
-| Log-Sum-Exp MIL | Supported | Supported | Supported | Supported | NA |
-| LSTM-MIL | Supported | Supported | Supported | Supported | NA |
-| DeepSet-MIL | Supported | Supported | Supported | Supported |[Link](https://github.com/manzilzaheer/DeepSets)|
-| Distribution-pool MIL | Supported | Supported | Supported | Supported | NA |
-| VarMIL | Supported | Supported | Supported | Supported | [Link](https://github.com/NKI-AI/dlup-lightning-mil)|
-| DSMIL | Supported | Supported | Supported | Supported | [Link](https://github.com/binli123/dsmil-wsi)  |
-
 # PathBench Configuration Example
-
 To use PathBench, you need to provide a configuration file in YAML format. Below is an example configuration file:
 
 ```yaml
@@ -332,6 +197,235 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 weights_dir : ./pretrained_weights # Path to the model weights, and where newly retrieved model weights will be saved
 hf_key: YOUR_HUGGINGFACE_TOKEN # Token for Hugging Face model hub to access gated models, if you do not have one, just set to None
 ```
+
+# Setting up a Project
+PathBench inherits the project functionality from SlideFlow. PathBench allows creating projects through the configuration file. In the configuration, project-specific settings can be specified in the `experiment` section. The `experiment` section also saves several other important settings:
+
+### Project-related settings:
+
+- `project_name`: The name of the project.
+- `annotation_file`: The path to the annotation file.
+
+### Training-related settings:
+
+- `balancing`: The balancing technique to be used. This can be `tile`, `slide`, `patient`, or `category`. Balancing is used to construct training batches with a balanced distribution of classes/patients/slides/tiles.
+- `split_technique`: The split technique to be used. This can be `k-fold` or `fixed`.
+- `k`: The number of folds for k-fold cross-validation.
+- `val_fraction`: The fraction of the training data to be used for validation.
+- `epochs`: The number of epochs for training.
+- `batch_size`: The batch size for training.
+- `bag_size`: The bag size for MIL models.
+- `aggregation_level`: The aggregation level can be `slide` or `patient`. This specifies at which levels bags are aggregated, effectively creating slide-level or patient-level predictions.
+
+### General settings:
+
+- `with_continue`: If `True`, the model will continue training, skipping already finished parameter combinations.
+- `task`: The task can be `classification`, `regression`, or `survival`.
+- `mode`: The mode can be either `benchmark` or `optimization`.
+
+
+# Datasets
+The datasets to be used in the project can be specified in the datasets section. One can add any arbitrary number of data sources to a project and specify whether these should be used for training/validation or as testing datasets:
+```yaml
+datasets:  # List of datasets to be used
+  - name: dataset1  # Name of the dataset
+    slide_path: path/to/your/slides  # Path to the slide data
+    tfrecord_path: path/to/save/tfrecords  # Path to save tfrecords
+    tile_path: path/to/save/tiles  # Path to save tiles
+    used_for: training  # Whether the dataset is used for training or testing
+
+  - name: dataset2
+    slide_path: path/to/your/other/slides
+    tfrecord_path: path/to/other/tfrecords
+    tile_path: path/to/other/tiles
+    used_for: testing
+```
+
+# Annotations
+The annotation file should be a CSV file with the following columns:
+
+- slide: The name/identifier of the slide.
+- patient: The name/identifier of the patient to which the slide corresponds.
+- dataset: The name of the dataset to which the slide belongs.
+For classification tasks, the annotation file should also contain a column with the target labels. This column should be named category. For regression tasks, the annotation file should contain a column with the target values. This column should be named value. For survival tasks, the annotation file should contain columns with the survival time and event status. These columns should be named time and event, respectively.
+
+Example of a valid annotation file for a classification task, assuming we use two datasets: dataset1 and dataset2:
+```csv
+slide,patient,dataset,category
+slide1,patient1,dataset1,0
+slide2,patient1,dataset1,1
+slide3,patient2,dataset1,0
+slide4,patient2,dataset1,1
+slide5,patient3,dataset1,0
+slide6,patient3,dataset1,1
+slide7,patient4,dataset2,0
+slide8,patient4,dataset2,1
+slide9,patient5,dataset2,0
+slide10,patient5,dataset2,1
+```
+
+For a regression task:
+```csv
+slide,patient,dataset,value
+slide1,patient1,dataset1,0.1
+slide2,patient1,dataset1,0.2
+slide3,patient2,dataset1,0.3
+slide4,patient2,dataset1,0.4
+slide5,patient3,dataset1,0.5
+slide6,patient3,dataset1,0.6
+slide7,patient4,dataset2,0.7
+slide8,patient4,dataset2,0.8
+slide9,patient5,dataset2,0.9
+slide10,patient5,dataset2,1.0
+```
+
+For a survival task:
+```csv
+slide,patient,dataset,time,event
+slide1,patient1,dataset1,26,1
+slide2,patient1,dataset1,15,1
+slide3,patient2,dataset1,16,1
+slide4,patient2,dataset1,42,0
+slide5,patient3,dataset1,13,1
+slide6,patient3,dataset1,11,1
+slide7,patient4,dataset2,6,0
+slide8,patient4,dataset2,5,1
+slide9,patient5,dataset2,84,1
+slide10,patient5,dataset2,43,1
+```
+# Running PathBench
+To run pathbench once installed using default setting, one can simply run
+```bash
+./run_pathbench.sh
+```
+
+Note that this script can set your huggingface token for gated models and the configuration file as well as the name of the virtual environment can be changed:
+```bash
+#If virtual environment does not exist, construct one using pip
+if [ ! -d "pathbench_env" ]; then
+    python3 -m venv pathbench_env
+    source pathbench_env/bin/activate
+    pip install --upgrade pip
+    pip install -r requirements.txt
+else
+    source pathbench_env/bin/activate
+fi
+
+#Set slideflow backends
+export SF_SLIDE_BACKEND=cucim
+export SF_BACKEND=torch
+#Token required to access the gated models
+export HF_TOKEN=YOUR_HUGGINGFACE_TOKEN
+
+#Set the config file
+CONFIG_FILE=conf.yaml
+
+#Run the program
+python3 main.py $CONFIG_FILE
+```
+# Features
+
+- Benchmarking w.r.t.
+    - Tile sizes, magnifications (e.g. 256px, 20x)
+    - Normalization methods (e.g. Macenko, Reinhard)
+    - Feature extractors (e.g. UNI, GigaPath)
+    - MIL aggregators (e.g. CLAM, DSMIL)
+- Interpretable visualizations of benchmark output
+- Plotly-based benchmark visualization tool
+- Efficient Tile processing and QC pipeline inherited by Slideflow
+- Optuna-based optimization w.r.t. the benchmark parameters, to quickly find good candidate solutions.
+
+# Package Structure
+
+- pathbench/
+  - pathbench/ 
+    - benchmarking/
+      - benchmark.py # Main benchmarking script
+    - experiment/
+      - experiment.py # Initialization of experiments
+    - models/
+      - aggregators.py # MIL aggregation methods
+      - feature_extractors.py # Feature extractors
+    - utils
+      - calculate_feature_similarity.py # Calculate feature extractor similarity
+      - utils.py # Util functions
+      - losses.py # Houses custom losses for training models
+      - metrics.py # Houses custom metrics to calculate during training
+    - visualization
+      - visualization.py # Houses visualization functions
+    - test
+      - test.py # Calls testing functions
+      - binary_test_conf.yaml # tests binary classification
+      - classification_test_conf.yaml # tests multiclass classification
+      - opt_test_conf.yaml # tests optimization mode
+      - regression_test_conf.yaml # tests regresison
+      - survival_test_conf.yaml # tests survival prediciton
+  - slideflow_fork # Forked Slideflow package
+    - ...
+  - requirements.txt
+  - README.md
+  - LICENSE
+  - setup.py # Main setup script for pip
+  - setup_pathbench.py # Script to setup a virtual environment and install base packages
+  - run_pathbench.sh # Bash script to run pathbench
+  - conf.yaml # Default configuration
+
+## Normalization
+PathBench currently supports:
+- Macenko
+- Reinhard
+- CycleGan
+
+normalization.
+## Feature Extractors
+PathBench supports a wide range of different feature extractors, including SOTA foundation models for pathology. Most of these models are automatically downloaded by PathBench, however, some models require a huggingface account key to access the model (labeled 'Gated' in the feature extraction table) or require manually downloading the model weights (labeled 'Manual' in the extraction table). For each of the models, a link to the publication is given, and for the manual/gated models, the link for downloading the models or gaining model access are also provided.
+
+| Feature Extractor | Acquisition | Link |
+|----------|----------|----------|
+| ImageNet-ResNet50 | Automatic | NA | 
+| CTransPath | Automatic | [Link](https://github.com/Xiyue-Wang/TransPath?tab=readme-ov-file) |
+| MoCoV3-TransPath | Automatic | [Link](https://github.com/Xiyue-Wang/TransPath?tab=readme-ov-file) |
+| HistoSSL | Automatic | [Link](https://github.com/owkin/HistoSSLscaling) |
+| RetCCL | Automatic | [Link](https://github.com/Xiyue-Wang/RetCCL) |
+| PLIP | Automatic | [Link](https://github.com/PathologyFoundation/plip?tab=readme-ov-file) |
+| Lunit DINO | Automatic | [Link](https://github.com/lunit-io/benchmark-ssl-pathology) |
+| Lunit SwAV | Automatic | [Link](https://github.com/lunit-io/benchmark-ssl-pathology)  |
+| Lunit Barlow Twins | Automatic | [Link](https://github.com/lunit-io/benchmark-ssl-pathology) |
+| Lunit MocoV2 | Automatic | [Link](https://github.com/lunit-io/benchmark-ssl-pathology)  |
+| Phikon | Automatic | [Link](https://huggingface.co/owkin/phikon) |
+| PathoDuet-HE | Manual | [Link](https://github.com/openmedlab/PathoDuet) [Weights](https://drive.google.com/drive/folders/1aQHGabQzopSy9oxstmM9cPeF7QziIUxM)|
+| PathoDuet-IHC | Manual | [Link](https://github.com/openmedlab/PathoDuet) [Weights](https://drive.google.com/drive/folders/1aQHGabQzopSy9oxstmM9cPeF7QziIUxM)|
+| Virchow | Gated | [Link](https://huggingface.co/paige-ai/Virchow)|
+| Hibou-B | Automatic | [Link](https://huggingface.co/histai/hibou-b) |
+| UNI | Gated | [Link](https://huggingface.co/MahmoodLab/UNI) |
+| Prov-GigaPath | Gated | [Link](https://huggingface.co/prov-gigapath/prov-gigapath) |
+| Kaiko-S8 | Automatic | [Link](https://github.com/kaiko-ai/towards_large_pathology_fms) |
+| Kaiko-S16 | Automatic | [Link](https://github.com/kaiko-ai/towards_large_pathology_fms) |
+| Kaiko-B8 | Automatic | [Link](https://github.com/kaiko-ai/towards_large_pathology_fms) |
+| Kaiko-B16 | Automatic | [Link](https://github.com/kaiko-ai/towards_large_pathology_fms) |
+| Kaiko-L14 | Automatic | [Link](https://github.com/kaiko-ai/towards_large_pathology_fms) |
+| H-Optimus-0 | Automatic | [Link](https://huggingface.co/bioptimus/H-optimus-0) |
+
+## MIL aggregators
+In addition to a wide range of feature extractors, PathBench also includes a wide variety of MIL aggregation methods. Most of these support all tasks (Binary classification, Muliclass classifcation, regression and survival prediction), but some like the CLAM-models only support binary classification. We are actively working on extending support for these models.
+
+| MIL aggregator | Bin. class. | Multi-class. | Regression | Survival | Link |
+|----------|----------|----------|----------|----------|----------|
+| CLAM-SB | Supported | Not Supported | Not Supported | Not Supported | [Link](https://github.com/mahmoodlab/CLAM) |
+| CLAM-MB | Supported | Not Supported | Not Supported | Not Supported | [Link](https://github.com/mahmoodlab/CLAM)  |
+| Attention MIL | Supported | Supported | Supported | Supported | [Link](https://github.com/AMLab-Amsterdam/AttentionDeepMIL)|
+| TransMIL | Supported | Supported | Supported | Supported | [Link](https://github.com/szc19990412/TransMIL) |
+| HistoBistro Transformer | Supported | Supported | Supported | Supported | [Link](https://github.com/peng-lab/HistoBistro) |
+| Linear MIL | Supported | Supported | Supported | Supported | NA |
+| Mean MIL | Supported | Supported | Supported | Supported | NA |
+| Max MIL | Supported | Supported | Supported | Supported | NA |
+| Log-Sum-Exp MIL | Supported | Supported | Supported | Supported | NA |
+| LSTM-MIL | Supported | Supported | Supported | Supported | NA |
+| DeepSet-MIL | Supported | Supported | Supported | Supported |[Link](https://github.com/manzilzaheer/DeepSets)|
+| Distribution-pool MIL | Supported | Supported | Supported | Supported | NA |
+| VarMIL | Supported | Supported | Supported | Supported | [Link](https://github.com/NKI-AI/dlup-lightning-mil)|
+| DSMIL | Supported | Supported | Supported | Supported | [Link](https://github.com/binli123/dsmil-wsi)  |
+
 
 ## Extending PathBench
 PathBench is designed such that it easy to add new feature extractors and MIL aggregation models. 
