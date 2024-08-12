@@ -1399,6 +1399,61 @@ class virchow(TorchFeatureExtractor):
             'kwargs': {}
         }
 
+@register_torch
+class virchow2(TorchFeatureExtractor):
+    """
+    Virchow2 feature extractor, with Huge Vision Transformer backbone.
+    """
+    tag = 'virchow2'
+
+    def __init__(self, tile_px=256):
+        super().__init__()
+        local_dir = WEIGHTS_DIR
+        base_model = timm.create_model("hf-hub:paige-ai/Virchow2", pretrained=True,
+                                        mlp_layer=SwiGLUPacked, act_layer=nn.SiLU)
+        base_model.to('cuda')
+
+        # Modify the classifier to output the concatenated embeddings
+        class VirchowEmbedder(nn.Module):
+            """
+            Virchow Embedder model, which concatenates the class token and average pool of patch tokens.
+
+            Methods
+            -------
+            forward(x)
+                Forward pass of the model
+            """
+            def __init__(self):
+                super(VirchowEmbedder, self).__init__()
+
+            def forward(self, x):
+                x = base_model(x)
+                cls_token = x[:, 0]
+                patch_tokens = x[:, 5:]
+                avg_pool = patch_tokens.mean(dim=1)
+                # Concatenate class token and average pool of patch tokens
+                embedding = torch.cat((cls_token, avg_pool), dim=-1)
+                return embedding
+
+        self.model = VirchowEmbedder()
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize(224),
+                transforms.ConvertImageDtype(torch.float32),
+                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+            ]  
+        )
+        self.model.to('cuda')
+        self.num_features = 1280
+        self.model.eval()
+        self.preprocess_kwargs = {'standardize': False}
+
+    def dump_config(self):
+        return {
+            'class': 'virchow2',
+            'kwargs': {}
+        }
+
 
 @register_torch
 class h_optimus_0(TorchFeatureExtractor):
