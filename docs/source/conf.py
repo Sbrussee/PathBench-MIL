@@ -46,3 +46,10 @@ autodoc_default_options = {
 html_theme = 'sphinx_rtd_theme'
 html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 html_static_path = ['_static']
+
+import subprocess
+
+def install_package():
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "../.."])
+
+install_package()
