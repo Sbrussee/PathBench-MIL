@@ -1183,7 +1183,7 @@ def optimize_parameters(config, project):
     sampler = config['optimization'].get('sampler', 'TPESampler')
     sampler_class = getattr(optuna.samplers, sampler, TPESampler)()
     if 'pruner' in config['optimization']:
-        pruner = config['optimization']['pruner'].get('pruner', 'HyperbandPruner')
+        pruner = config['optimization'].get('pruner', 'HyperbandPruner')
         pruner_class = getattr(optuna.pruners, pruner)()
         logging.info(f"Using {sampler} sampler and {pruner} pruner...")
     else:
