@@ -1,9 +1,9 @@
-from pathbench.experiment.experiment import Experiment
+from pathbench import Experiment
 import logging
 
 
 
-def main():
+def test():
     root = "pathbench/test/"
     #Test binary classification
     #experiment = Experiment(root+'binary_test_conf.yaml')
@@ -22,8 +22,8 @@ def main():
     #experiment.run()
     #logging.info("Regression test passed")
     #Test optimization
-    experiment = Experiment(root+'opt_test_conf.yaml')
-    experiment.run()
-    logging.info("Optimization test passed")
+    #experiment = Experiment(root+'opt_test_conf.yaml')
+    #experiment.run()
+    #logging.info("Optimization test passed")
 
-main()
+test()

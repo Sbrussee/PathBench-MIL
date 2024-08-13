@@ -66,6 +66,7 @@ class Experiment():
     """
     def __init__(self, config_file : str):
         self.config = read_config(config_file)
+        logging.info(f"Configuration file {config_file} loaded")
         self.load_datasets()
         #Set Hugging Face token
         if 'hf_token' in self.config:
