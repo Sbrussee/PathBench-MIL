@@ -2,7 +2,7 @@
  <img src="thumbnail_PathBench-logo-horizontaal.png" alt="PathBench" width="800" height="200">
 </div>
 
-# PathBench
+# PathBench-MIL: A comprehensive, flexible Benchmarking/AutoML package for multiple instance learning in pathology.
 
 PATHBENCH IS CURRENTLY UNDER DEVELOPMENT, SOME FEATURES MAY NOT WORK AS INTENDED
 
