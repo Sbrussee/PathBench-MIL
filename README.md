@@ -111,11 +111,12 @@ experiment:
     - confusion_matrix
     - roc_curve
     - umap
-    - mosaic
   mode: optimization # Mode to use, either benchmark or optimization
 
 optimization:
   objective_metric: balanced_accuracy # Objective metric to optimize
+  objective_mode: max # Optimization mode, can be 'max' or 'min'
+  objective_dataset: test # Dataset to be used for the objective metric, can be 'val' or 'test'
   sampler: TPESampler # Algorithm to use for optimization: grid_search, TPE, Bayesian
   trials: 100 # Number of optimization trials
   pruner: HyperbandPruner # Pruner for optimization, can be Hyperband, Median etc.
