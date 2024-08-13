@@ -14,10 +14,9 @@ build:
 python:
   install:
     - requirements: requirements.txt
-    - method: pip
-      path: .
-    - pip_install: sphinx_rtd_theme
-    
+    - pip_install:
+      - sphinx_rtd_theme
+
 formats:
   - pdf
   - htmlzip
