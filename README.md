@@ -169,6 +169,7 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 # - gigapath
 # - barlow_twins
 # - hibou_b
+# - hibou_l
 # - pathoduet_ihc
 # - pathoduet_he
 # - kaiko_s8
@@ -178,6 +179,7 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 # - kaiko_l14
 # - h_optimus_0
 # - virchow
+# - virchow2
 
 # Available MIL aggregation methods:
 # - CLAM_SB
