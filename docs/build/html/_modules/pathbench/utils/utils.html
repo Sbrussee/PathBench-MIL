@@ -84,6 +84,7 @@
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">resource</span>
 
 <div class="viewcode-block" id="calculate_entropy">
 <a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.utils.calculate_entropy">[docs]</a>
@@ -224,6 +225,16 @@
 
     <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Correct predictions saved to </span><span class="si">{</span><span class="n">correct_save_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
     <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Incorrect predictions saved to </span><span class="si">{</span><span class="n">incorrect_save_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<span class="c1"># Increase the file descriptor limit temporarily for the session</span>
+<div class="viewcode-block" id="increase_file_limit">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.utils.increase_file_limit">[docs]</a>
+<span class="k">def</span> <span class="nf">increase_file_limit</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">4096</span><span class="p">):</span>
+    <span class="n">soft_limit</span><span class="p">,</span> <span class="n">hard_limit</span> <span class="o">=</span> <span class="n">resource</span><span class="o">.</span><span class="n">getrlimit</span><span class="p">(</span><span class="n">resource</span><span class="o">.</span><span class="n">RLIMIT_NOFILE</span><span class="p">)</span>
+    <span class="n">new_limit</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">limit</span><span class="p">,</span> <span class="n">hard_limit</span><span class="p">)</span>
+    <span class="n">resource</span><span class="o">.</span><span class="n">setrlimit</span><span class="p">(</span><span class="n">resource</span><span class="o">.</span><span class="n">RLIMIT_NOFILE</span><span class="p">,</span> <span class="p">(</span><span class="n">new_limit</span><span class="p">,</span> <span class="n">hard_limit</span><span class="p">))</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;File descriptor limit increased to: </span><span class="si">{</span><span class="n">new_limit</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
 
 </pre></div>
 

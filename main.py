@@ -1,10 +1,12 @@
-from pathbench.experiment.experiment import Experiment
+from pathbench.experiment import Experiment
 import argparse
+import logging
 
 # Add arguments
 parser = argparse.ArgumentParser(description='Run PathDev experiment')
 parser.add_argument('--config', type=str, default='conf.yaml', help='Path to the configuration file')
 args = parser.parse_args()
+
 
 def main():
     """"

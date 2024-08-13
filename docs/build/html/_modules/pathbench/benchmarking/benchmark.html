@@ -125,6 +125,7 @@
 <span class="kn">from</span> <span class="nn">..utils.metrics</span> <span class="kn">import</span> <span class="o">*</span>
 
 <span class="kn">import</span> <span class="nn">optuna</span>
+<span class="kn">import</span> <span class="nn">optuna.visualization</span> <span class="k">as</span> <span class="nn">opt_vis</span>
 <span class="kn">from</span> <span class="nn">optuna.samplers</span> <span class="kn">import</span> <span class="o">*</span>
 <span class="kn">from</span> <span class="nn">optuna.pruners</span> <span class="kn">import</span> <span class="o">*</span>
 
@@ -1273,9 +1274,10 @@
             <span class="nb">print</span><span class="p">(</span><span class="n">test_df</span><span class="p">)</span>
             <span class="n">index</span> <span class="o">+=</span> <span class="mi">1</span>
 
-            <span class="n">trial</span><span class="o">.</span><span class="n">report</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">metrics</span><span class="p">[</span><span class="n">objective_metric</span><span class="p">]),</span> <span class="n">index</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">trial</span><span class="o">.</span><span class="n">should_prune</span><span class="p">():</span>
-                <span class="k">raise</span> <span class="n">optuna</span><span class="o">.</span><span class="n">TrialPruned</span><span class="p">()</span>
+            <span class="k">if</span> <span class="s1">&#39;pruner&#39;</span> <span class="ow">in</span> <span class="n">config</span><span class="p">[</span><span class="s1">&#39;optimization&#39;</span><span class="p">]:</span>
+                <span class="n">trial</span><span class="o">.</span><span class="n">report</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">metrics</span><span class="p">[</span><span class="n">objective_metric</span><span class="p">]),</span> <span class="n">index</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">trial</span><span class="o">.</span><span class="n">should_prune</span><span class="p">():</span>
+                    <span class="k">raise</span> <span class="n">optuna</span><span class="o">.</span><span class="n">TrialPruned</span><span class="p">()</span>
 
         <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Combination </span><span class="si">{</span><span class="n">save_string</span><span class="si">}</span><span class="s2"> finished...&quot;</span><span class="p">)</span>
 
@@ -1318,11 +1320,13 @@
     <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using </span><span class="si">{</span><span class="n">splits_file</span><span class="si">}</span><span class="s2"> splits for benchmarking...&quot;</span><span class="p">)</span>
 
     <span class="n">sampler</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s1">&#39;optimization&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;sampler&#39;</span><span class="p">,</span> <span class="s1">&#39;TPESampler&#39;</span><span class="p">)</span>
-    <span class="n">pruner</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s1">&#39;optimization&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;pruner&#39;</span><span class="p">,</span> <span class="s1">&#39;MedianPruner&#39;</span><span class="p">)</span>
     <span class="n">sampler_class</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">optuna</span><span class="o">.</span><span class="n">samplers</span><span class="p">,</span> <span class="n">sampler</span><span class="p">,</span> <span class="n">TPESampler</span><span class="p">)()</span>
-    <span class="n">pruner_class</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">optuna</span><span class="o">.</span><span class="n">pruners</span><span class="p">,</span> <span class="n">pruner</span><span class="p">,</span> <span class="n">MedianPruner</span><span class="p">)()</span>
-
-    <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using </span><span class="si">{</span><span class="n">sampler</span><span class="si">}</span><span class="s2"> sampler and </span><span class="si">{</span><span class="n">pruner</span><span class="si">}</span><span class="s2"> pruner...&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="s1">&#39;pruner&#39;</span> <span class="ow">in</span> <span class="n">config</span><span class="p">[</span><span class="s1">&#39;optimization&#39;</span><span class="p">]:</span>
+        <span class="n">pruner</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s1">&#39;optimization&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;pruner&#39;</span><span class="p">,</span> <span class="s1">&#39;HyperbandPruner&#39;</span><span class="p">)</span>
+        <span class="n">pruner_class</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">optuna</span><span class="o">.</span><span class="n">pruners</span><span class="p">,</span> <span class="n">pruner</span><span class="p">)()</span>
+        <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using </span><span class="si">{</span><span class="n">sampler</span><span class="si">}</span><span class="s2"> sampler and </span><span class="si">{</span><span class="n">pruner</span><span class="si">}</span><span class="s2"> pruner...&quot;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using </span><span class="si">{</span><span class="n">sampler</span><span class="si">}</span><span class="s2"> sampler...&quot;</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">config</span><span class="p">[</span><span class="s1">&#39;optimization&#39;</span><span class="p">][</span><span class="s1">&#39;objective_mode&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;max&#39;</span><span class="p">:</span>
         <span class="n">direction</span> <span class="o">=</span> <span class="s1">&#39;maximize&#39;</span>
@@ -1336,6 +1340,11 @@
     <span class="c1"># Optimize the study</span>
     <span class="n">study</span><span class="o">.</span><span class="n">optimize</span><span class="p">(</span><span class="n">objective</span><span class="p">,</span> <span class="n">n_trials</span><span class="o">=</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;optimization&#39;</span><span class="p">][</span><span class="s1">&#39;trials&#39;</span><span class="p">])</span>
 
+    <span class="c1"># Visualize the optimization results</span>
+    <span class="n">fig</span> <span class="o">=</span> <span class="n">vis</span><span class="o">.</span><span class="n">plot_param_importances</span><span class="p">(</span><span class="n">study</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;Parameter Importances&quot;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;experiments/</span><span class="si">{</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;experiment&#39;</span><span class="p">][</span><span class="s1">&#39;project_name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">/optimization/parameter_importances.png&quot;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
     <span class="c1"># Save the best parameters</span>
     <span class="n">best_params</span> <span class="o">=</span> <span class="n">study</span><span class="o">.</span><span class="n">best_params</span>
     <span class="c1"># Create optimization directory</span>
