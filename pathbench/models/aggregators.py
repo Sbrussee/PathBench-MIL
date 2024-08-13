@@ -1404,6 +1404,7 @@ class clam_mil(nn.Module):
     def calculate_attention(self, bags):
         """
         Calculate attention scores for the given bags.
+        Returns a tensor of attention scores.
         """
         embeddings = self.encoder(bags)
         attention_weights_list = []
@@ -1415,7 +1416,10 @@ class clam_mil(nn.Module):
             attention_scores = self.attention_branches[i](attention_U_output * attention_V_output).softmax(dim=1)
             attention_weights_list.append(attention_scores)
 
-        return attention_weights_list
+        # Concatenate attention weights across classes into a single tensor
+        attention_weights = torch.cat(attention_weights_list, dim=1)
+
+        return attention_weights
 
 class clam_mil_mb(nn.Module):
     """
@@ -1542,6 +1546,7 @@ class clam_mil_mb(nn.Module):
     def calculate_attention(self, bags):
         """
         Calculate attention scores for the given bags for each branch.
+        Returns a tensor of attention scores.
         """
         all_attention_weights = []
 
@@ -1556,6 +1561,11 @@ class clam_mil_mb(nn.Module):
                 attention_scores = self.attention_branches[b][i](attention_U_output * attention_V_output).softmax(dim=1)
                 attention_weights_list.append(attention_scores)
 
-            all_attention_weights.append(attention_weights_list)
+            # Concatenate attention weights across classes for this branch
+            branch_attention_weights = torch.cat(attention_weights_list, dim=1)
+            all_attention_weights.append(branch_attention_weights)
 
-        return all_attention_weights
+        # Stack attention weights from all branches into a single tensor
+        attention_weights = torch.stack(all_attention_weights, dim=0)
+
+        return attention_weights

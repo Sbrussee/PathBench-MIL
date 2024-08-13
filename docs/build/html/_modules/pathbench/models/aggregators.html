@@ -90,6 +90,7 @@
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
 <span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>
+<span class="kn">from</span> <span class="nn">sklearn.cluster</span> <span class="kn">import</span> <span class="n">KMeans</span>
 
 
 <div class="viewcode-block" id="simple_linear_mil">
@@ -767,6 +768,1024 @@
         <span class="k">if</span> <span class="n">apply_softmax</span><span class="p">:</span>
             <span class="n">attention_scores</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="n">attention_scores</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">attention_scores</span></div>
+</div>
+
+
+<div class="viewcode-block" id="cluster_pooling_mil">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.cluster_pooling_mil">[docs]</a>
+<span class="k">class</span> <span class="nc">cluster_pooling_mil</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Multiple instance learning model with cluster-based pooling. It first clusters patches into regions, pools each region using mean pooling</span>
+<span class="sd">    and then aggregates region embeddings into the slide-level label using a linear classifier.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_feats : int</span>
+<span class="sd">        Number of input features</span>
+<span class="sd">    n_out : int</span>
+<span class="sd">        Number of output classes</span>
+<span class="sd">    z_dim : int</span>
+<span class="sd">        Dimensionality of the hidden layer</span>
+<span class="sd">    n_clusters : int</span>
+<span class="sd">        Number of clusters</span>
+<span class="sd">    dropout_p : float</span>
+<span class="sd">        Dropout probability</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    encoder : nn.Sequential</span>
+<span class="sd">        Encoder network</span>
+<span class="sd">    kmeans : KMeans</span>
+<span class="sd">        KMeans clustering model</span>
+<span class="sd">    head : nn.Sequential</span>
+<span class="sd">        Prediction head network</span>
+<span class="sd">    </span>
+<span class="sd">    Methods</span>
+<span class="sd">    -------</span>
+<span class="sd">    forward(bags)</span>
+<span class="sd">        Forward pass through the model</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+<div class="viewcode-block" id="cluster_pooling_mil.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.cluster_pooling_mil.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_out</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span> <span class="n">n_clusters</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span> <span class="n">dropout_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_feats</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kmeans</span> <span class="o">=</span> <span class="n">KMeans</span><span class="p">(</span><span class="n">n_clusters</span><span class="o">=</span><span class="n">n_clusters</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">head</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm1d</span><span class="p">(</span><span class="n">z_dim</span> <span class="o">*</span> <span class="n">n_clusters</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span> <span class="o">*</span> <span class="n">n_clusters</span><span class="p">,</span> <span class="n">n_out</span><span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">dropout</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="cluster_pooling_mil.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.cluster_pooling_mil.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">):</span>
+        <span class="n">batch_size</span><span class="p">,</span> <span class="n">n_patches</span><span class="p">,</span> <span class="n">n_feats</span> <span class="o">=</span> <span class="n">bags</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">pooled_embeddings</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># Process each batch element independently</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">batch_size</span><span class="p">):</span>
+            <span class="c1"># Encode each patch in the current batch element</span>
+            <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">bags</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>  <span class="c1"># Shape: (n_patches, z_dim)</span>
+
+            <span class="c1"># Determine the number of clusters based on the number of patches</span>
+            <span class="n">n_clusters</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">kmeans</span><span class="o">.</span><span class="n">n_clusters</span><span class="p">,</span> <span class="n">n_patches</span><span class="p">)</span>
+            
+            <span class="k">if</span> <span class="n">n_clusters</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="c1"># If we have fewer than 2 patches, use the mean of all embeddings</span>
+                <span class="n">cluster_embedding</span> <span class="o">=</span> <span class="n">embeddings</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                <span class="n">pooled_embeddings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cluster_embedding</span><span class="p">)</span>
+                <span class="k">continue</span>
+            
+            <span class="c1"># Perform KMeans clustering for the current batch element</span>
+            <span class="n">kmeans</span> <span class="o">=</span> <span class="n">KMeans</span><span class="p">(</span><span class="n">n_clusters</span><span class="o">=</span><span class="n">n_clusters</span><span class="p">)</span>
+            <span class="n">clusters</span> <span class="o">=</span> <span class="n">kmeans</span><span class="o">.</span><span class="n">fit_predict</span><span class="p">(</span><span class="n">embeddings</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">())</span>
+
+            <span class="c1"># Pool embeddings within each cluster</span>
+            <span class="n">cluster_embeddings</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_clusters</span><span class="p">):</span>
+                <span class="n">cluster_indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">clusters</span> <span class="o">==</span> <span class="n">j</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">embeddings</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">cluster_indices</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">cluster_embedding</span> <span class="o">=</span> <span class="n">embeddings</span><span class="p">[</span><span class="n">cluster_indices</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># Handle the case where a cluster has no elements</span>
+                    <span class="n">cluster_embedding</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">embeddings</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">device</span><span class="o">=</span><span class="n">embeddings</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                <span class="n">cluster_embeddings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cluster_embedding</span><span class="p">)</span>
+            
+            <span class="c1"># Concatenate the pooled embeddings for each cluster</span>
+            <span class="n">pooled_embeddings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">cluster_embeddings</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+
+        <span class="c1"># Stack the pooled embeddings to form a tensor of shape (batch_size, z_dim * n_clusters)</span>
+        <span class="n">pooled_embeddings</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">pooled_embeddings</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="c1"># Pass the pooled embeddings through the prediction head</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="n">pooled_embeddings</span><span class="p">)</span>  <span class="c1"># Shape: (batch_size, n_out)</span>
+
+        <span class="k">return</span> <span class="n">scores</span></div>
+</div>
+
+
+<div class="viewcode-block" id="gated_attention_mil">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.gated_attention_mil">[docs]</a>
+<span class="k">class</span> <span class="nc">gated_attention_mil</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Multiple instance learning model with gated attention mechanism.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_feats : int</span>
+<span class="sd">        Number of input features</span>
+<span class="sd">    n_out : int</span>
+<span class="sd">        Number of output classes</span>
+<span class="sd">    z_dim : int</span>
+<span class="sd">        Dimensionality of the hidden layer</span>
+<span class="sd">    dropout_p : float</span>
+<span class="sd">        Dropout probability</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    encoder : nn.Sequential</span>
+<span class="sd">        Encoder network</span>
+<span class="sd">    attention_V : nn.Sequential</span>
+<span class="sd">        Attention network</span>
+<span class="sd">    attention_U : nn.Sequential</span>
+<span class="sd">        Attention network</span>
+<span class="sd">    attention_weights : nn.Linear</span>
+<span class="sd">        Attention network</span>
+<span class="sd">    head : nn.Sequential</span>
+<span class="sd">        Prediction head network</span>
+<span class="sd">    </span>
+
+<span class="sd">    Methods</span>
+<span class="sd">    -------</span>
+<span class="sd">    forward(bags)</span>
+<span class="sd">        Forward pass through the model</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+<div class="viewcode-block" id="gated_attention_mil.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.gated_attention_mil.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_out</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span> <span class="n">dropout_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_feats</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attention_V</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attention_U</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Sigmoid</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attention_weights</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">head</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm1d</span><span class="p">(</span><span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">n_out</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="gated_attention_mil.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.gated_attention_mil.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">):</span>
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">bags</span><span class="p">)</span>
+        <span class="n">attention_V</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">attention_V</span><span class="p">(</span><span class="n">embeddings</span><span class="p">)</span>
+        <span class="n">attention_U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">attention_U</span><span class="p">(</span><span class="n">embeddings</span><span class="p">)</span>
+        <span class="n">attention_weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">attention_weights</span><span class="p">(</span><span class="n">attention_V</span> <span class="o">*</span> <span class="n">attention_U</span><span class="p">)</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">pooled_embeddings</span> <span class="o">=</span> <span class="p">(</span><span class="n">embeddings</span> <span class="o">*</span> <span class="n">attention_weights</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="n">pooled_embeddings</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">scores</span></div>
+</div>
+
+
+<div class="viewcode-block" id="topk_mil">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.topk_mil">[docs]</a>
+<span class="k">class</span> <span class="nc">topk_mil</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Multiple instance learning model which selects the top k instances based on attention scores and aggregates them using mean pooling.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_feats : int</span>
+<span class="sd">        Number of input features</span>
+<span class="sd">    n_out : int</span>
+<span class="sd">        Number of output classes</span>
+<span class="sd">    z_dim : int</span>
+<span class="sd">        Dimensionality of the hidden layer</span>
+<span class="sd">    k : int</span>
+<span class="sd">        Number of top instances to select</span>
+<span class="sd">    dropout_p : float</span>
+<span class="sd">        Dropout probability</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    encoder : nn.Sequential</span>
+<span class="sd">        Encoder network</span>
+<span class="sd">    attention : nn.Sequential</span>
+<span class="sd">        Attention network</span>
+<span class="sd">    head : nn.Sequential</span>
+<span class="sd">        Prediction head network</span>
+<span class="sd">    k : int</span>
+<span class="sd">        Number of top instances to select</span>
+<span class="sd">    </span>
+<span class="sd">    Methods</span>
+<span class="sd">    -------</span>
+<span class="sd">    forward(bags)</span>
+<span class="sd">        Forward pass through the model</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+<div class="viewcode-block" id="topk_mil.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.topk_mil.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_out</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span> <span class="n">dropout_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_feats</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attention</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">head</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm1d</span><span class="p">(</span><span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">n_out</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">k</span> <span class="o">=</span> <span class="n">k</span></div>
+
+
+<div class="viewcode-block" id="topk_mil.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.topk_mil.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">):</span>
+        <span class="c1"># Assuming `bags` has shape (batch_size, n_patches, n_feats)</span>
+        <span class="n">batch_size</span><span class="p">,</span> <span class="n">n_patches</span><span class="p">,</span> <span class="n">n_feats</span> <span class="o">=</span> <span class="n">bags</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">bags</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">))</span>
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="n">embeddings</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">n_patches</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        
+        <span class="c1"># Compute attention scores for each instance</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">attention</span><span class="p">(</span><span class="n">embeddings</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        
+        <span class="c1"># Select top k instances for each item in the batch</span>
+        <span class="n">topk_scores</span><span class="p">,</span> <span class="n">topk_indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">topk</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">k</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        
+        <span class="c1"># Gather top k embeddings for each batch item</span>
+        <span class="n">topk_embeddings</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">embeddings</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">topk_indices</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">embeddings</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)))</span>
+        
+        <span class="c1"># Mean pooling over the selected top k instances</span>
+        <span class="n">pooled_embeddings</span> <span class="o">=</span> <span class="n">topk_embeddings</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        
+        <span class="c1"># Pass the pooled embeddings through the prediction head</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="n">pooled_embeddings</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">scores</span></div>
+</div>
+
+
+<div class="viewcode-block" id="hierarchical_mil">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.hierarchical_mil">[docs]</a>
+<span class="k">class</span> <span class="nc">hierarchical_mil</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Hierarchical Multiple Instance Learning model with attention mechanism. It first groups consecutive patches into regions,</span>
+<span class="sd">    weights instances per region using attention and then aggregates region embeddings into slide embeddings using an attention mechanism.</span>
+<span class="sd">    Finally, it predicts the slide-level label using a linear classifier.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_feats : int</span>
+<span class="sd">        Number of input features</span>
+<span class="sd">    n_out : int</span>
+<span class="sd">        Number of output classes</span>
+<span class="sd">    z_dim : int</span>
+<span class="sd">        Dimensionality of the hidden layer</span>
+<span class="sd">    region_size : int</span>
+<span class="sd">        Number of patches per region</span>
+<span class="sd">    dropout_p : float</span>
+<span class="sd">        Dropout probability</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    encoder : nn.Sequential</span>
+<span class="sd">        Encoder network</span>
+<span class="sd">    region_attention : nn.Sequential</span>
+<span class="sd">        Region attention network</span>
+<span class="sd">    region_head : nn.Sequential</span>
+<span class="sd">        Region head network</span>
+<span class="sd">    slide_attention : nn.Sequential</span>
+<span class="sd">        Slide attention network</span>
+<span class="sd">    slide_head : nn.Sequential</span>
+<span class="sd">        Slide head network</span>
+
+<span class="sd">    Methods</span>
+<span class="sd">    -------</span>
+<span class="sd">    forward(bags)</span>
+<span class="sd">        Forward pass through the model</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+<div class="viewcode-block" id="hierarchical_mil.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.hierarchical_mil.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_out</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span> <span class="n">region_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span> <span class="n">dropout_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_feats</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">region_attention</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span><span class="p">(),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">region_head</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm1d</span><span class="p">(</span><span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">slide_attention</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span><span class="p">(),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">slide_head</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm1d</span><span class="p">(</span><span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">n_out</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">region_size</span> <span class="o">=</span> <span class="n">region_size</span></div>
+
+
+<div class="viewcode-block" id="hierarchical_mil.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.hierarchical_mil.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">):</span>
+        <span class="c1"># Split into regions</span>
+        <span class="n">batch_size</span><span class="p">,</span> <span class="n">n_patches</span><span class="p">,</span> <span class="n">n_feats</span> <span class="o">=</span> <span class="n">bags</span><span class="o">.</span><span class="n">shape</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">bags</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">bags</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">bags</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">))</span>
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="n">embeddings</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">n_patches</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">n_regions</span> <span class="o">=</span> <span class="n">n_patches</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">region_size</span>
+
+        <span class="n">region_embeddings</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_regions</span><span class="p">):</span>
+            <span class="n">region_patches</span> <span class="o">=</span> <span class="n">embeddings</span><span class="p">[:,</span> <span class="n">i</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">region_size</span><span class="p">:</span> <span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">region_size</span><span class="p">]</span>
+            <span class="n">attention_weights</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">region_attention</span><span class="p">(</span><span class="n">region_patches</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">region_embedding</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">attention_weights</span> <span class="o">*</span> <span class="n">region_patches</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">region_embeddings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">region_head</span><span class="p">(</span><span class="n">region_embedding</span><span class="p">))</span>
+
+        <span class="n">region_embeddings</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">region_embeddings</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Attention pooling across regions</span>
+        <span class="n">region_attention_weights</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">slide_attention</span><span class="p">(</span><span class="n">region_embeddings</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">slide_embedding</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">region_attention_weights</span> <span class="o">*</span> <span class="n">region_embeddings</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Final slide-level prediction</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">slide_head</span><span class="p">(</span><span class="n">slide_embedding</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">scores</span></div>
+</div>
+
+
+<span class="k">class</span> <span class="nc">hierarchical_cluster_mil</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Inspired by &quot;Cluster-to-Conquer: A Framework for End-to-End</span>
+<span class="sd">    Multi-Instance Learning for Whole Slide Image Classification&quot;.</span>
+
+<span class="sd">    Hierarchical Cluster MIL model with attention mechanism. It first clusters patches into regions, weights instances</span>
+<span class="sd">    per region using attention and then aggregates region embeddings into slide embeddings using an attention mechanism.</span>
+<span class="sd">    Finally, it predicts the slide-level label using a linear classifier.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_feats : int</span>
+<span class="sd">        Number of input features</span>
+<span class="sd">    n_out : int</span>
+<span class="sd">        Number of output classes</span>
+<span class="sd">    z_dim : int</span>
+<span class="sd">        Dimensionality of the hidden layer</span>
+<span class="sd">    n_clusters : int</span>
+<span class="sd">        Number of clusters</span>
+<span class="sd">    dropout_p : float</span>
+<span class="sd">        Dropout probability</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    encoder : nn.Sequential</span>
+<span class="sd">        Encoder network</span>
+<span class="sd">    kmeans : KMeans</span>
+<span class="sd">        KMeans clustering model</span>
+<span class="sd">    region_attention : nn.Sequential</span>
+<span class="sd">        Region attention network</span>
+<span class="sd">    region_head : nn.Sequential</span>
+<span class="sd">        Region head network</span>
+<span class="sd">    slide_attention : nn.Sequential</span>
+<span class="sd">        Slide attention network</span>
+<span class="sd">    slide_head : nn.Sequential</span>
+<span class="sd">        Slide head network</span>
+
+<span class="sd">    Methods</span>
+<span class="sd">    -------</span>
+<span class="sd">    forward(bags)</span>
+<span class="sd">        Forward pass through the model</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="hierarchical_cluster_mil">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.hierarchical_cluster_mil">[docs]</a>
+<span class="k">class</span> <span class="nc">hierarchical_cluster_mil</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<div class="viewcode-block" id="hierarchical_cluster_mil.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.hierarchical_cluster_mil.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_out</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span> <span class="n">n_clusters</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span> <span class="n">dropout_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_feats</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kmeans</span> <span class="o">=</span> <span class="n">KMeans</span><span class="p">(</span><span class="n">n_clusters</span><span class="o">=</span><span class="n">n_clusters</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">region_attention</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span><span class="p">(),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">region_head</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm1d</span><span class="p">(</span><span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">slide_attention</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span><span class="p">(),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">slide_head</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm1d</span><span class="p">(</span><span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">n_out</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="hierarchical_cluster_mil.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.hierarchical_cluster_mil.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">):</span>
+        <span class="n">batch_size</span><span class="p">,</span> <span class="n">n_patches</span><span class="p">,</span> <span class="n">n_feats</span> <span class="o">=</span> <span class="n">bags</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">all_region_embeddings</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># Process each batch element independently</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">batch_size</span><span class="p">):</span>
+            <span class="c1"># Encode patches</span>
+            <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">bags</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>  <span class="c1"># Shape: (n_patches, z_dim)</span>
+
+            <span class="c1"># Perform KMeans clustering for each item in the batch</span>
+            <span class="n">n_clusters</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">kmeans</span><span class="o">.</span><span class="n">n_clusters</span><span class="p">,</span> <span class="n">n_patches</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">n_clusters</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="c1"># If fewer than 2 patches, use the mean of all embeddings</span>
+                <span class="n">region_embeddings</span> <span class="o">=</span> <span class="n">embeddings</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># Shape: (1, z_dim)</span>
+                <span class="n">all_region_embeddings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">region_embeddings</span><span class="p">)</span>
+                <span class="k">continue</span>
+
+            <span class="n">clusters</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kmeans</span><span class="o">.</span><span class="n">fit_predict</span><span class="p">(</span><span class="n">embeddings</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">())</span>
+
+            <span class="n">region_embeddings</span> <span class="o">=</span> <span class="p">[]</span>
+
+            <span class="c1"># Process each cluster within the batch item</span>
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_clusters</span><span class="p">):</span>
+                <span class="n">cluster_mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">clusters</span> <span class="o">==</span> <span class="n">j</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">embeddings</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                <span class="n">cluster_patches</span> <span class="o">=</span> <span class="n">embeddings</span><span class="p">[</span><span class="n">cluster_mask</span><span class="p">]</span>  <span class="c1"># Shape: (n_cluster_patches, z_dim)</span>
+
+                <span class="k">if</span> <span class="n">cluster_patches</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>  <span class="c1"># If no patches in this cluster</span>
+                    <span class="k">continue</span>  <span class="c1"># Skip this cluster</span>
+
+                <span class="c1"># Apply attention within each region</span>
+                <span class="n">attention_weights</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">region_attention</span><span class="p">(</span><span class="n">cluster_patches</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                <span class="n">region_embedding</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">attention_weights</span> <span class="o">*</span> <span class="n">cluster_patches</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># Shape: (z_dim)</span>
+                <span class="n">region_embeddings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">region_head</span><span class="p">(</span><span class="n">region_embedding</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)))</span>  <span class="c1"># Shape: (1, z_dim)</span>
+
+            <span class="k">if</span> <span class="n">region_embeddings</span><span class="p">:</span>
+                <span class="n">all_region_embeddings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">region_embeddings</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>  <span class="c1"># Shape: (n_clusters, z_dim)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">all_region_embeddings</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># Stack all region embeddings across the batch</span>
+            <span class="n">region_embeddings</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">all_region_embeddings</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># Shape: (batch_size, n_clusters, z_dim)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;No regions were found. Check your clustering or input data.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Ensure that region_embeddings has at least 2 dimensions for BatchNorm</span>
+        <span class="k">if</span> <span class="n">region_embeddings</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">region_embeddings</span> <span class="o">=</span> <span class="n">region_embeddings</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Attention pooling across regions within each batch item</span>
+        <span class="n">region_attention_weights</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">slide_attention</span><span class="p">(</span><span class="n">region_embeddings</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># Shape: (batch_size, n_clusters, 1)</span>
+        <span class="n">slide_embedding</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">region_attention_weights</span> <span class="o">*</span> <span class="n">region_embeddings</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># Shape: (batch_size, z_dim)</span>
+
+        <span class="c1"># Final slide-level prediction</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">slide_head</span><span class="p">(</span><span class="n">slide_embedding</span><span class="p">)</span>  <span class="c1"># Shape: (batch_size, n_out)</span>
+        <span class="k">return</span> <span class="n">scores</span></div>
+</div>
+
+
+<div class="viewcode-block" id="retmil">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.retmil">[docs]</a>
+<span class="k">class</span> <span class="nc">retmil</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Retention-based MIL. Retention mechanism is applied to both local subsequences and the global sequence in a hierarchical manner.</span>
+<span class="sd">    The local retention mechanism uses relative distance decay to compute the retention scores, while the global retention mechanism</span>
+<span class="sd">    uses self-attention to compute the retention scores. The final prediction is made using a linear classifier.</span>
+<span class="sd">    Method from: &quot;RetMIL: Retentive Multiple Instance Learning for Histopathological Whole Slide Image Classification&quot;.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+<div class="viewcode-block" id="retmil.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.retmil.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_out</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span> <span class="n">subseq_len</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">512</span><span class="p">,</span> <span class="n">n_heads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">8</span><span class="p">,</span> <span class="n">dropout_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">retmil</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">subseq_len</span> <span class="o">=</span> <span class="n">subseq_len</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_heads</span> <span class="o">=</span> <span class="n">n_heads</span>
+
+        <span class="c1"># Retention mechanism for local subsequences</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">local_retention_1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">RetentionLayer</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">n_heads</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">local_retention_2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">RetentionLayer</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">n_heads</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">local_attention</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">AttentionPooling</span><span class="p">(</span><span class="n">z_dim</span><span class="p">)</span>
+
+        <span class="c1"># Retention mechanism for global sequence</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">global_retention</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">RetentionLayer</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">n_heads</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">global_attention</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">AttentionPooling</span><span class="p">(</span><span class="n">z_dim</span><span class="p">)</span>
+
+        <span class="c1"># Classification head</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm1d</span><span class="p">(</span><span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">n_out</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="retmil.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.retmil.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">):</span>
+        <span class="c1"># Step 1: Split into subsequences</span>
+        <span class="n">batch_size</span><span class="p">,</span> <span class="n">n_patches</span><span class="p">,</span> <span class="n">n_feats</span> <span class="o">=</span> <span class="n">bags</span><span class="o">.</span><span class="n">size</span><span class="p">()</span>
+        <span class="n">subsequences</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">bags</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">subseq_len</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Step 2: Local subsequence processing</span>
+        <span class="n">local_embeddings</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">subseq</span> <span class="ow">in</span> <span class="n">subsequences</span><span class="p">:</span>
+            <span class="n">subseq</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">local_retention_1</span><span class="p">(</span><span class="n">subseq</span><span class="p">)</span>
+            <span class="n">subseq</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">local_retention_2</span><span class="p">(</span><span class="n">subseq</span><span class="p">)</span>
+            <span class="n">local_embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">local_attention</span><span class="p">(</span><span class="n">subseq</span><span class="p">)</span>
+            <span class="n">local_embeddings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">local_embedding</span><span class="p">)</span>
+
+        <span class="c1"># Stack local embeddings into a global sequence</span>
+        <span class="n">global_sequence</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">local_embeddings</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># Shape: (batch_size, num_subseq, z_dim)</span>
+
+        <span class="c1"># Step 3: Global sequence processing</span>
+        <span class="n">global_sequence</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">global_retention</span><span class="p">(</span><span class="n">global_sequence</span><span class="p">)</span>
+        <span class="n">global_embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">global_attention</span><span class="p">(</span><span class="n">global_sequence</span><span class="p">)</span>  <span class="c1"># Shape: (batch_size, z_dim)</span>
+
+        <span class="c1"># Step 4: Classification</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span><span class="p">(</span><span class="n">global_embedding</span><span class="p">)</span>  <span class="c1"># Shape: (batch_size, n_out)</span>
+        <span class="k">return</span> <span class="n">out</span></div>
+
+
+<div class="viewcode-block" id="retmil.RetentionLayer">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.retmil.RetentionLayer">[docs]</a>
+    <span class="k">class</span> <span class="nc">RetentionLayer</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<div class="viewcode-block" id="retmil.RetentionLayer.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.retmil.RetentionLayer.__init__">[docs]</a>
+        <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">d_model</span><span class="p">,</span> <span class="n">n_heads</span><span class="p">):</span>
+            <span class="nb">super</span><span class="p">(</span><span class="n">retmil</span><span class="o">.</span><span class="n">RetentionLayer</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">d_model</span> <span class="o">=</span> <span class="n">d_model</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">n_heads</span> <span class="o">=</span> <span class="n">n_heads</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">head_dim</span> <span class="o">=</span> <span class="n">d_model</span> <span class="o">//</span> <span class="n">n_heads</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">WQ</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">d_model</span><span class="p">,</span> <span class="n">d_model</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">WK</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">d_model</span><span class="p">,</span> <span class="n">d_model</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">WV</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">d_model</span><span class="p">,</span> <span class="n">d_model</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">group_norm</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">GroupNorm</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">d_model</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="retmil.RetentionLayer.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.retmil.RetentionLayer.forward">[docs]</a>
+        <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+            <span class="n">B</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="n">D</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span>
+
+            <span class="n">Q</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">WQ</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_heads</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">head_dim</span><span class="p">)</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+            <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">WK</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_heads</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">head_dim</span><span class="p">)</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+            <span class="n">V</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">WV</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_heads</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">head_dim</span><span class="p">)</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+
+            <span class="c1"># Implementing a simplified version of retention mechanism</span>
+            <span class="c1"># Retention using relative distance decay</span>
+            <span class="n">D</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">relative_distance_decay</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">K</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">retention_scores</span> <span class="o">=</span> <span class="p">(</span><span class="n">Q</span> <span class="o">@</span> <span class="n">K</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span> <span class="o">*</span> <span class="n">D</span>
+            <span class="n">retention_out</span> <span class="o">=</span> <span class="p">(</span><span class="n">retention_scores</span> <span class="o">@</span> <span class="n">V</span><span class="p">)</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">d_model</span><span class="p">)</span>
+
+            <span class="c1"># Applying normalization</span>
+            <span class="n">retention_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">group_norm</span><span class="p">(</span><span class="n">retention_out</span><span class="p">)</span>
+
+            <span class="k">return</span> <span class="n">retention_out</span></div>
+
+
+<div class="viewcode-block" id="retmil.RetentionLayer.relative_distance_decay">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.retmil.RetentionLayer.relative_distance_decay">[docs]</a>
+        <span class="k">def</span> <span class="nf">relative_distance_decay</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="n">device</span><span class="p">):</span>
+            <span class="n">D</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N</span><span class="p">):</span>
+                <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">N</span><span class="p">):</span>
+                    <span class="n">D</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="nb">float</span><span class="p">(</span><span class="n">j</span> <span class="o">-</span> <span class="n">i</span><span class="p">))</span>
+            <span class="k">return</span> <span class="n">D</span></div>
+</div>
+
+
+<div class="viewcode-block" id="retmil.AttentionPooling">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.retmil.AttentionPooling">[docs]</a>
+    <span class="k">class</span> <span class="nc">AttentionPooling</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<div class="viewcode-block" id="retmil.AttentionPooling.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.retmil.AttentionPooling.__init__">[docs]</a>
+        <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">d_model</span><span class="p">):</span>
+            <span class="nb">super</span><span class="p">(</span><span class="n">retmil</span><span class="o">.</span><span class="n">AttentionPooling</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">W</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">d_model</span><span class="p">,</span> <span class="n">d_model</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">U</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">d_model</span><span class="p">,</span> <span class="n">d_model</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">gamma</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="retmil.AttentionPooling.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.retmil.AttentionPooling.forward">[docs]</a>
+        <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+            <span class="n">alpha</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gamma</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">tanh</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">W</span><span class="p">(</span><span class="n">x</span><span class="p">))</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">sigmoid</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">U</span><span class="p">(</span><span class="n">x</span><span class="p">)),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">alpha</span> <span class="o">*</span> <span class="n">x</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">out</span></div>
+</div>
+</div>
+
+
+<div class="viewcode-block" id="weighted_mean_mil">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.weighted_mean_mil">[docs]</a>
+<span class="k">class</span> <span class="nc">weighted_mean_mil</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Multiple instance learning model with weighted mean pooling. Instances are inversely weighted by their variance.</span>
+<span class="sd">    This effectively makes the model more robust to noisy instances.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_feats : int</span>
+<span class="sd">        Number of input features</span>
+<span class="sd">    n_out : int</span>
+<span class="sd">        Number of output classes</span>
+<span class="sd">    z_dim : int</span>
+<span class="sd">        Dimensionality of the hidden layer</span>
+<span class="sd">    dropout_p : float</span>
+<span class="sd">        Dropout probability</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    encoder : nn.Sequential</span>
+<span class="sd">        Encoder network</span>
+<span class="sd">    head : nn.Sequential</span>
+<span class="sd">        Prediction head network</span>
+<span class="sd">    </span>
+<span class="sd">    Methods</span>
+<span class="sd">    -------</span>
+<span class="sd">    forward(bags)</span>
+<span class="sd">        Forward pass through the model</span>
+<span class="sd">        </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+<div class="viewcode-block" id="weighted_mean_mil.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.weighted_mean_mil.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_out</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span> <span class="n">dropout_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">weighted_mean_mil</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_feats</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">head</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm1d</span><span class="p">(</span><span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">n_out</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="weighted_mean_mil.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.weighted_mean_mil.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">):</span>
+        <span class="c1"># Assume bags has shape (batch_size, n_patches, n_feats)</span>
+        <span class="n">batch_size</span><span class="p">,</span> <span class="n">n_patches</span><span class="p">,</span> <span class="n">n_feats</span> <span class="o">=</span> <span class="n">bags</span><span class="o">.</span><span class="n">shape</span>
+        
+        <span class="c1"># Encode each patch</span>
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">bags</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">))</span>  <span class="c1"># Shape: (batch_size * n_patches, z_dim)</span>
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="n">embeddings</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">n_patches</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># Reshape to (batch_size, n_patches, z_dim)</span>
+        
+        <span class="c1"># Compute variances for each feature across patches in each batch</span>
+        <span class="n">variances</span> <span class="o">=</span> <span class="n">embeddings</span><span class="o">.</span><span class="n">var</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">unbiased</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>  <span class="c1"># Shape: (batch_size, z_dim)</span>
+        
+        <span class="c1"># Compute weights as inverse of variances</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">variances</span> <span class="o">+</span> <span class="mf">1e-5</span><span class="p">)</span>  <span class="c1"># Shape: (batch_size, z_dim)</span>
+        
+        <span class="c1"># Compute weighted sum of embeddings across patches for each batch</span>
+        <span class="n">weighted_sum</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">weights</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">embeddings</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># Shape: (batch_size, z_dim)</span>
+        
+        <span class="c1"># Compute robust mean by dividing by the sum of weights</span>
+        <span class="n">robust_mean</span> <span class="o">=</span> <span class="n">weighted_sum</span> <span class="o">/</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># Shape: (batch_size, z_dim)</span>
+
+        <span class="c1"># Pass the robust mean through the prediction head</span>
+        <span class="n">output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="n">robust_mean</span><span class="p">)</span>  <span class="c1"># Shape: (batch_size, n_out)</span>
+        
+        <span class="k">return</span> <span class="n">output</span></div>
+</div>
+
+
+<div class="viewcode-block" id="aodmil">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.aodmil">[docs]</a>
+<span class="k">class</span> <span class="nc">aodmil</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Attention-based Outlier Detection Multiple Instance Learning model. The model computes the mean embedding of the bag,</span>
+<span class="sd">    computes the similarity of each instance to the mean embedding, and computes the attention weights based on the similarity.</span>
+<span class="sd">    The final prediction is made using a linear classifier.</span>
+<span class="sd">    The method aims to detect patches that show abnormal behavior with respect to the other patches in the bag.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_feats : int</span>
+<span class="sd">        Number of input features</span>
+<span class="sd">    n_out : int</span>
+<span class="sd">        Number of output classes</span>
+<span class="sd">    z_dim : int</span>
+<span class="sd">        Dimensionality of the hidden layer</span>
+<span class="sd">    dropout_p : float</span>
+<span class="sd">        Dropout probability</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    encoder : nn.Sequential</span>
+<span class="sd">        Encoder network</span>
+<span class="sd">    attention : nn.Sequential</span>
+<span class="sd">        Attention network</span>
+<span class="sd">    head : nn.Sequential</span>
+<span class="sd">        Prediction head network</span>
+<span class="sd">    </span>
+<span class="sd">    Methods</span>
+<span class="sd">    -------</span>
+<span class="sd">    forward(bags)</span>
+<span class="sd">        Forward pass through the model</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="aodmil.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.aodmil.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_out</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span> <span class="n">dropout_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">aodmil</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_feats</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attention</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Sigmoid</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">head</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm1d</span><span class="p">(</span><span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">n_out</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="aodmil.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.aodmil.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">):</span>
+        <span class="n">batch_size</span><span class="p">,</span> <span class="n">n_patches</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">bags</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">bags</span><span class="p">)</span>
+        
+        <span class="c1"># Compute the mean embedding of the bag</span>
+        <span class="n">mean_embedding</span> <span class="o">=</span> <span class="n">embeddings</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># Mean along patches, retain batch dimension</span>
+        
+        <span class="c1"># Compute similarity of each instance to the mean embedding</span>
+        <span class="n">similarities</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">cosine_similarity</span><span class="p">(</span><span class="n">embeddings</span><span class="p">,</span> <span class="n">mean_embedding</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        
+        <span class="c1"># Inverse attention based on similarity</span>
+        <span class="n">attention_weights</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">similarities</span>
+        <span class="n">attention_weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">attention</span><span class="p">(</span><span class="n">attention_weights</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        
+        <span class="c1"># Weighted aggregation of embeddings</span>
+        <span class="n">weighted_embeddings</span> <span class="o">=</span> <span class="n">embeddings</span> <span class="o">*</span> <span class="n">attention_weights</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">aggregated_embedding</span> <span class="o">=</span> <span class="n">weighted_embeddings</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># Mean along patches, retain batch dimension</span>
+        
+        <span class="n">output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="n">aggregated_embedding</span><span class="p">)</span>  <span class="c1"># Shape: [batch_size, n_out]</span>
+        <span class="k">return</span> <span class="n">output</span></div>
+</div>
+
+
+<div class="viewcode-block" id="clam_mil">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.clam_mil">[docs]</a>
+<span class="k">class</span> <span class="nc">clam_mil</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Clustering-constrained Attention Multiple Instance Learning (CLAM)</span>
+<span class="sd">    model with attention-based pooling and instance-level clustering.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_feats : int</span>
+<span class="sd">        Number of input features.</span>
+<span class="sd">    n_out : int</span>
+<span class="sd">        Number of output classes.</span>
+<span class="sd">    z_dim : int</span>
+<span class="sd">        Dimensionality of the hidden layer.</span>
+<span class="sd">    dropout_p : float</span>
+<span class="sd">        Dropout probability.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="clam_mil.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.clam_mil.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_out</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">512</span><span class="p">,</span> <span class="n">dropout_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.25</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">clam_mil</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_out</span> <span class="o">=</span> <span class="n">n_out</span>
+        
+        <span class="c1"># Encoder Network</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_feats</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">(),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">)</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Attention Network (shared backbone)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attention_U</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Sigmoid</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attention_V</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span><span class="p">()</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Class-specific Attention and Classification branches</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attention_branches</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">([</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_out</span><span class="p">)])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">classifiers</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">([</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_out</span><span class="p">)])</span>
+        
+        <span class="c1"># Clustering Layer for instance-level clustering</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">instance_cluster</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">([</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_out</span><span class="p">)])</span></div>
+
+
+<div class="viewcode-block" id="clam_mil.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.clam_mil.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">,</span> <span class="n">return_attention</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">bags</span><span class="p">)</span>
+        
+        <span class="n">slide_level_representations</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">attention_weights_list</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># Loop through each class-specific branch</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_out</span><span class="p">):</span>
+            <span class="n">attention_U_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">attention_U</span><span class="p">(</span><span class="n">embeddings</span><span class="p">)</span>
+            <span class="n">attention_V_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">attention_V</span><span class="p">(</span><span class="n">embeddings</span><span class="p">)</span>
+            <span class="n">attention_scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">attention_branches</span><span class="p">[</span><span class="n">i</span><span class="p">](</span><span class="n">attention_U_output</span> <span class="o">*</span> <span class="n">attention_V_output</span><span class="p">)</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">attention_weights_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">attention_scores</span><span class="p">)</span>
+            
+            <span class="c1"># Slide-level representation</span>
+            <span class="n">slide_level_representation</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">attention_scores</span> <span class="o">*</span> <span class="n">embeddings</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">slide_level_representations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">slide_level_representation</span><span class="p">)</span>
+
+        <span class="c1"># Stack all slide-level representations</span>
+        <span class="n">slide_level_representations</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">slide_level_representations</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        
+        <span class="c1"># Final classification scores</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_out</span><span class="p">):</span>
+            <span class="n">score</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifiers</span><span class="p">[</span><span class="n">i</span><span class="p">](</span><span class="n">slide_level_representations</span><span class="p">[:,</span> <span class="n">i</span><span class="p">,</span> <span class="p">:])</span>
+            <span class="n">scores</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">score</span><span class="p">)</span>
+        
+        <span class="c1"># Aggregate scores into a tensor</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="n">return_attention</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">scores</span><span class="p">,</span> <span class="n">attention_weights_list</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">scores</span></div>
+
+
+<div class="viewcode-block" id="clam_mil.cluster_patches">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.clam_mil.cluster_patches">[docs]</a>
+    <span class="k">def</span> <span class="nf">cluster_patches</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Perform instance-level clustering using pseudo-labels generated </span>
+<span class="sd">        by the attention scores.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">bags</span><span class="p">)</span>
+        <span class="n">cluster_predictions</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_out</span><span class="p">):</span>
+            <span class="n">cluster_pred</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">instance_cluster</span><span class="p">[</span><span class="n">i</span><span class="p">](</span><span class="n">embeddings</span><span class="p">)</span>
+            <span class="n">cluster_predictions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cluster_pred</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">cluster_predictions</span></div>
+</div>
+
+
+<div class="viewcode-block" id="clam_mil_mb">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.clam_mil_mb">[docs]</a>
+<span class="k">class</span> <span class="nc">clam_mil_mb</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Multi-Branch Clustering-constrained Attention Multiple Instance Learning (CLAM)</span>
+<span class="sd">    model with attention-based pooling and instance-level clustering.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_feats : int</span>
+<span class="sd">        Number of input features.</span>
+<span class="sd">    n_out : int</span>
+<span class="sd">        Number of output classes.</span>
+<span class="sd">    z_dim : int</span>
+<span class="sd">        Dimensionality of the hidden layer.</span>
+<span class="sd">    dropout_p : float</span>
+<span class="sd">        Dropout probability.</span>
+<span class="sd">    n_branches : int</span>
+<span class="sd">        Number of independent branches.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="clam_mil_mb.__init__">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.clam_mil_mb.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_feats</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_out</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">512</span><span class="p">,</span> <span class="n">dropout_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.25</span><span class="p">,</span> <span class="n">n_branches</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">clam_mil_mb</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_out</span> <span class="o">=</span> <span class="n">n_out</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_branches</span> <span class="o">=</span> <span class="n">n_branches</span>
+
+        <span class="c1"># Separate encoder, attention, and classifier for each branch</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoders</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">([</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+                <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_feats</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+                <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">(),</span>
+                <span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">dropout_p</span><span class="p">)</span>
+            <span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_branches</span><span class="p">)</span>
+        <span class="p">])</span>
+        
+        <span class="c1"># Attention networks for each branch</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attention_U</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">([</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+                <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+                <span class="n">nn</span><span class="o">.</span><span class="n">Sigmoid</span><span class="p">()</span>
+            <span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_branches</span><span class="p">)</span>
+        <span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attention_V</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">([</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+                <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="n">z_dim</span><span class="p">),</span>
+                <span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span><span class="p">()</span>
+            <span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_branches</span><span class="p">)</span>
+        <span class="p">])</span>
+        
+        <span class="c1"># Class-specific Attention and Classification branches for each branch</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attention_branches</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">([</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">([</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_out</span><span class="p">)])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_branches</span><span class="p">)</span>
+        <span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">classifiers</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">([</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">([</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_out</span><span class="p">)])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_branches</span><span class="p">)</span>
+        <span class="p">])</span>
+        
+        <span class="c1"># Clustering Layer for instance-level clustering for each branch</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">instance_cluster</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">([</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">([</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">z_dim</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_out</span><span class="p">)])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_branches</span><span class="p">)</span>
+        <span class="p">])</span></div>
+
+
+<div class="viewcode-block" id="clam_mil_mb.forward">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.clam_mil_mb.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">,</span> <span class="n">return_attention</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="n">all_slide_level_representations</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">all_attention_weights</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># Loop through each branch</span>
+        <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_branches</span><span class="p">):</span>
+            <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoders</span><span class="p">[</span><span class="n">b</span><span class="p">](</span><span class="n">bags</span><span class="p">)</span>
+            <span class="n">slide_level_representations</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">attention_weights_list</span> <span class="o">=</span> <span class="p">[]</span>
+
+            <span class="c1"># Loop through each class-specific branch</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_out</span><span class="p">):</span>
+                <span class="n">attention_U_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">attention_U</span><span class="p">[</span><span class="n">b</span><span class="p">](</span><span class="n">embeddings</span><span class="p">)</span>
+                <span class="n">attention_V_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">attention_V</span><span class="p">[</span><span class="n">b</span><span class="p">](</span><span class="n">embeddings</span><span class="p">)</span>
+                <span class="n">attention_scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">attention_branches</span><span class="p">[</span><span class="n">b</span><span class="p">][</span><span class="n">i</span><span class="p">](</span><span class="n">attention_U_output</span> <span class="o">*</span> <span class="n">attention_V_output</span><span class="p">)</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+                <span class="n">attention_weights_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">attention_scores</span><span class="p">)</span>
+
+                <span class="c1"># Slide-level representation</span>
+                <span class="n">slide_level_representation</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">attention_scores</span> <span class="o">*</span> <span class="n">embeddings</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+                <span class="n">slide_level_representations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">slide_level_representation</span><span class="p">)</span>
+
+            <span class="c1"># Stack slide-level representations for the current branch</span>
+            <span class="n">slide_level_representations</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">slide_level_representations</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">all_slide_level_representations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">slide_level_representations</span><span class="p">)</span>
+            <span class="n">all_attention_weights</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">attention_weights_list</span><span class="p">)</span>
+
+        <span class="c1"># Aggregate representations from all branches (e.g., by summing)</span>
+        <span class="n">aggregated_representations</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">all_slide_level_representations</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="c1"># Final classification scores</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_out</span><span class="p">):</span>
+            <span class="n">score</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_branches</span><span class="p">):</span>
+                <span class="n">score</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifiers</span><span class="p">[</span><span class="n">b</span><span class="p">][</span><span class="n">i</span><span class="p">](</span><span class="n">aggregated_representations</span><span class="p">[:,</span> <span class="n">i</span><span class="p">,</span> <span class="p">:])</span>
+            <span class="n">scores</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">score</span><span class="p">)</span>
+
+        <span class="c1"># Aggregate scores into a tensor</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">return_attention</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">scores</span><span class="p">,</span> <span class="n">all_attention_weights</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">scores</span></div>
+
+
+<div class="viewcode-block" id="clam_mil_mb.cluster_patches">
+<a class="viewcode-back" href="../../../pathbench_models.html#pathbench.models.aggregators.clam_mil_mb.cluster_patches">[docs]</a>
+    <span class="k">def</span> <span class="nf">cluster_patches</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bags</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Perform instance-level clustering using pseudo-labels generated </span>
+<span class="sd">        by the attention scores for each branch.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">all_cluster_predictions</span> <span class="o">=</span> <span class="p">[]</span>
+        
+        <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_branches</span><span class="p">):</span>
+            <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoders</span><span class="p">[</span><span class="n">b</span><span class="p">](</span><span class="n">bags</span><span class="p">)</span>
+            <span class="n">branch_cluster_predictions</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_out</span><span class="p">):</span>
+                <span class="n">cluster_pred</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">instance_cluster</span><span class="p">[</span><span class="n">b</span><span class="p">][</span><span class="n">i</span><span class="p">](</span><span class="n">embeddings</span><span class="p">)</span>
+                <span class="n">branch_cluster_predictions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cluster_pred</span><span class="p">)</span>
+            <span class="n">all_cluster_predictions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">branch_cluster_predictions</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">all_cluster_predictions</span></div>
 </div>
 
 </pre></div>
