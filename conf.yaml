@@ -61,7 +61,7 @@ benchmark_parameters:
     - uni
 
   mil: # MIL models
-    - CLAM_SB
+    - clam_mil
     - dsmil
     - varmil
     - attention_mil

@@ -43,6 +43,7 @@ from ..utils.losses import *
 from ..utils.metrics import *
 
 import optuna
+import optuna.visualization as opt_vis
 from optuna.samplers import *
 from optuna.pruners import *
 
@@ -1201,6 +1202,11 @@ def optimize_parameters(config, project):
     # Optimize the study
     study.optimize(objective, n_trials=config['optimization']['trials'])
 
+    # Visualize the optimization results
+    fig = vis.plot_param_importances(study)
+    plt.title("Parameter Importances")
+    plt.savefig(f"experiments/{config['experiment']['project_name']}/optimization/parameter_importances.png")
+    plt.close()
     # Save the best parameters
     best_params = study.best_params
     # Create optimization directory
