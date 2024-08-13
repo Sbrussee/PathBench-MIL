@@ -1383,8 +1383,11 @@ class clam_mil(nn.Module):
         # Aggregate scores into a tensor
         scores = torch.cat(scores, dim=1)
         
+        # Concatenate attention weights into a single tensor
+        attention_weights = torch.cat(attention_weights_list, dim=1)
+
         if return_attention:
-            return scores, attention_weights_list
+            return scores, attention_weights
         else:
             return scores
 
@@ -1505,7 +1508,10 @@ class clam_mil_mb(nn.Module):
             # Stack slide-level representations for the current branch
             slide_level_representations = torch.stack(slide_level_representations, dim=1)
             all_slide_level_representations.append(slide_level_representations)
-            all_attention_weights.append(attention_weights_list)
+
+            # Concatenate attention weights for the current branch into a single tensor
+            branch_attention_weights = torch.cat(attention_weights_list, dim=1)
+            all_attention_weights.append(branch_attention_weights)
 
         # Aggregate representations from all branches (e.g., by summing)
         aggregated_representations = torch.sum(torch.stack(all_slide_level_representations, dim=0), dim=0)
@@ -1521,8 +1527,11 @@ class clam_mil_mb(nn.Module):
         # Aggregate scores into a tensor
         scores = torch.cat(scores, dim=1)
 
+        # Stack attention weights from all branches into a single tensor
+        attention_weights = torch.stack(all_attention_weights, dim=0)
+
         if return_attention:
-            return scores, all_attention_weights
+            return scores, attention_weights
         else:
             return scores
 
