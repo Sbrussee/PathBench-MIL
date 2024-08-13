@@ -633,12 +633,10 @@ class cluster_pooling_mil(nn.Module):
         )
         self.kmeans = KMeans(n_clusters=n_clusters)
         self.head = nn.Sequential(
-            nn.BatchNorm1d(z_dim * n_clusters),
+            nn.BatchNorm1d(z_dim * n_clusters),  # Adjusted to account for the number of clusters
             nn.Dropout(dropout_p),
             nn.Linear(z_dim * n_clusters, n_out)
         )
-
-        self.dropout = nn.Dropout(dropout_p)
 
     def forward(self, bags):
         batch_size, n_patches, n_feats = bags.shape
@@ -818,8 +816,11 @@ class topk_mil(nn.Module):
         # Compute attention scores for each instance
         scores = self.attention(embeddings).squeeze(-1)
         
+        # Adjust k to be no greater than the number of patches
+        k = min(self.k, n_patches)
+        
         # Select top k instances for each item in the batch
-        topk_scores, topk_indices = torch.topk(scores, self.k, dim=1)
+        topk_scores, topk_indices = torch.topk(scores, k, dim=1)
         
         # Gather top k embeddings for each batch item
         topk_embeddings = torch.gather(embeddings, 1, topk_indices.unsqueeze(-1).expand(-1, -1, embeddings.size(-1)))
@@ -831,7 +832,6 @@ class topk_mil(nn.Module):
         scores = self.head(pooled_embeddings)
         
         return scores
-
 
     def calculate_attention(self, bags, lens, apply_softmax=None):
         batch_size, n_patches, n_feats = bags.shape
@@ -1001,7 +1001,6 @@ class hierarchical_cluster_mil(nn.Module):
             nn.Linear(z_dim, 1)
         )
         self.slide_head = nn.Sequential(
-            nn.BatchNorm1d(z_dim),
             nn.Dropout(dropout_p),
             nn.Linear(z_dim, n_out)
         )
@@ -1300,15 +1299,6 @@ class aodmil(nn.Module):
         output = self.head(aggregated_embedding)  # Shape: [batch_size, n_out]
         return output
 
-    def calculate_attention(self, bags):
-        embeddings = self.encoder(bags)
-        batch_size, n_patches, _ = bags.shape
-
-        # Compute the mean embedding of the bag
-
-        return attention_weights
-
-
 class clam_mil(nn.Module):
     """
     Clustering-constrained Attention Multiple Instance Learning (CLAM)
@@ -1404,7 +1394,7 @@ class clam_mil(nn.Module):
         
         return cluster_predictions
 
-    def calculate_attention(self, bags):
+    def calculate_attention(self, bags, lens=None, apply_softmax=False):
         """
         Calculate attention scores for the given bags.
         Returns a tensor of attention scores.
@@ -1421,6 +1411,9 @@ class clam_mil(nn.Module):
 
         # Concatenate attention weights across classes into a single tensor
         attention_weights = torch.cat(attention_weights_list, dim=1)
+
+        if apply_softmax:
+            attention_weights = F.softmax(attention_weights, dim=1)
 
         return attention_weights
 
@@ -1552,7 +1545,7 @@ class clam_mil_mb(nn.Module):
         
         return all_cluster_predictions
 
-    def calculate_attention(self, bags):
+    def calculate_attention(self, bags, lens=None, apply_softmax=False):
         """
         Calculate attention scores for the given bags for each branch.
         Returns a tensor of attention scores.
@@ -1577,4 +1570,6 @@ class clam_mil_mb(nn.Module):
         # Stack attention weights from all branches into a single tensor
         attention_weights = torch.stack(all_attention_weights, dim=0)
 
+        if apply_softmax:
+            attention_weights = F.softmax(attention_weights, dim=2)
         return attention_weights

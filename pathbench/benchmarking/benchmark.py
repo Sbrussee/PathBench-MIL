@@ -1203,10 +1203,17 @@ def optimize_parameters(config, project):
     study.optimize(objective, n_trials=config['optimization']['trials'])
 
     # Visualize the optimization results
+    current_date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     fig = vis.plot_param_importances(study)
     plt.title("Parameter Importances")
-    plt.savefig(f"experiments/{config['experiment']['project_name']}/optimization/parameter_importances.png")
+    plt.savefig(f"experiments/{config['experiment']['project_name']}/optimization/parameter_importances_{current_date}.png")
     plt.close()
+
+    fig = vis.plot_optimization_history(study)
+    plt.title("Optimization History")
+    plt.savefig(f"experiments/{config['experiment']['project_name']}/optimization/optimization_history_{current_date}.png")
+    plt.close()
+
     # Save the best parameters
     best_params = study.best_params
     # Create optimization directory
