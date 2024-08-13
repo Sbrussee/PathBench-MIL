@@ -13,9 +13,7 @@ build:
 # Define the necessary Python dependencies
 python:
   install:
-    - requirements: requirements.txt
-    - pip_install:
-      - sphinx_rtd_theme
+    - requirements: docs/requirements.txt
 
 formats:
   - pdf
