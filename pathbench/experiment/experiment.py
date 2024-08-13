@@ -7,6 +7,7 @@ from ..benchmarking.benchmark import optimize_parameters
 import random
 import shutil
 import logging
+from ..utils.utils import increase_file_limit
 
 def read_config(config_file : str):
     """
@@ -77,10 +78,15 @@ class Experiment():
         os.environ['TORCH_HOME'] = WEIGHTS_DIR
         os.environ['HF_HOME'] = WEIGHTS_DIR
 
+        #Increase open file limit, useful for multiprocessing
+        increase_file_limit(16384)
+
     def run(self):
         if self.config['experiment']['mode'] == 'benchmark':
+            logging.info("Running benchmarking mode...")
             self.benchmark()
         elif self.config['experiment']['mode'] == 'optimization':
+            logging.info("Running optimization mode...")
             self.optimize_parameters()
         else:
             raise ValueError("Invalid mode. Mode must be either 'benchmark' or 'optimization'")

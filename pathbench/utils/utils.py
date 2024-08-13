@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import os
 import logging
+import resource
 
 def calculate_entropy(row : pd.Series):
     """
@@ -128,3 +129,10 @@ def save_correct(result: pd.DataFrame, save_string: str, dataset_type: str, conf
 
     logging.info(f"Correct predictions saved to {correct_save_path}")
     logging.info(f"Incorrect predictions saved to {incorrect_save_path}")
+
+# Increase the file descriptor limit temporarily for the session
+def increase_file_limit(limit=4096):
+    soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
+    new_limit = min(limit, hard_limit)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (new_limit, hard_limit))
+    print(f"File descriptor limit increased to: {new_limit}")

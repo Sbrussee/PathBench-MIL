@@ -146,7 +146,8 @@ def plot_roc_curve_across_splits(rates : list, save_string : str, dataset : str,
     plt.legend(loc="lower right")
     os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations", exist_ok=True)
     plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/roc_auc_{save_string}_{dataset}.png")
-
+    plt.close()
+    
 def plot_survival_auc_across_folds(results: pd.DataFrame, save_string: str, dataset: str, config: dict):
     """
     Plot the survival ROC-AUC across folds based on the results

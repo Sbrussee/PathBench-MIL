@@ -641,11 +641,39 @@ class cluster_pooling_mil(nn.Module):
         self.dropout = nn.Dropout(dropout_p)
 
     def forward(self, bags):
-        embeddings = self.encoder(bags)
-        clusters = self.kmeans.fit_predict(embeddings.detach().cpu().numpy())
-        pooled_embeddings = torch.cat([embeddings[clusters == i].mean(dim=0) for i in range(self.kmeans.n_clusters)], dim=0)
-        pooled_embeddings = pooled_embeddings.view(1, -1)
-        scores = self.head(pooled_embeddings)
+        batch_size, n_patches, n_feats = bags.shape
+
+        # Encode each patch
+        embeddings = self.encoder(bags.view(-1, n_feats))  # Shape: (batch_size * n_patches, z_dim)
+        embeddings = embeddings.view(batch_size, n_patches, -1)  # Reshape to (batch_size, n_patches, z_dim)
+
+        pooled_embeddings = []
+
+        # Process each batch element independently
+        for i in range(batch_size):
+            # Perform KMeans clustering for each item in the batch
+            clusters = self.kmeans.fit_predict(embeddings[i].detach().cpu().numpy())
+
+            # Pool embeddings within each cluster
+            cluster_embeddings = []
+            for j in range(self.kmeans.n_clusters):
+                cluster_indices = torch.tensor(clusters == j, dtype=torch.bool, device=embeddings.device)
+                if cluster_indices.sum() > 0:
+                    cluster_embedding = embeddings[i][cluster_indices].mean(dim=0)
+                else:
+                    # Handle the case where a cluster has no elements
+                    cluster_embedding = torch.zeros(embeddings.size(-1), device=embeddings.device)
+                cluster_embeddings.append(cluster_embedding)
+            
+            # Concatenate the pooled embeddings for each cluster
+            pooled_embeddings.append(torch.cat(cluster_embeddings, dim=0))
+
+        # Stack the pooled embeddings to form a tensor of shape (batch_size, z_dim * n_clusters)
+        pooled_embeddings = torch.stack(pooled_embeddings, dim=0)
+
+        # Pass the pooled embeddings through the prediction head
+        scores = self.head(pooled_embeddings)  # Shape: (batch_size, n_out)
+
         return scores
 
 class gated_attention_mil(nn.Module):
@@ -765,12 +793,26 @@ class topk_mil(nn.Module):
         self.k = k
 
     def forward(self, bags):
-        embeddings = self.encoder(bags)
+        # Assuming `bags` has shape (batch_size, n_patches, n_feats)
+        batch_size, n_patches, n_feats = bags.shape
+        embeddings = self.encoder(bags.view(-1, n_feats))
+        embeddings = embeddings.view(batch_size, n_patches, -1)
+        
+        # Compute attention scores for each instance
         scores = self.attention(embeddings).squeeze(-1)
-        topk_scores, topk_indices = torch.topk(scores, self.k, dim=0)
-        topk_embeddings = embeddings[topk_indices]
-        pooled_embeddings = topk_embeddings.mean(dim=0)
+        
+        # Select top k instances for each item in the batch
+        topk_scores, topk_indices = torch.topk(scores, self.k, dim=1)
+        
+        # Gather top k embeddings for each batch item
+        topk_embeddings = torch.gather(embeddings, 1, topk_indices.unsqueeze(-1).expand(-1, -1, embeddings.size(-1)))
+        
+        # Mean pooling over the selected top k instances
+        pooled_embeddings = topk_embeddings.mean(dim=1)
+        
+        # Pass the pooled embeddings through the prediction head
         scores = self.head(pooled_embeddings)
+        
         return scores
 
 class hierarchical_mil(nn.Module):
@@ -841,21 +883,23 @@ class hierarchical_mil(nn.Module):
 
     def forward(self, bags):
         # Split into regions
-        n_regions = bags.size(0) // self.region_size
-        embeddings = self.encoder(bags)
-        region_embeddings = []
+        batch_size, n_patches, n_feats = bags.shape
+        embeddings = self.encoder(bags.view(-1, n_feats))
+        embeddings = embeddings.view(batch_size, n_patches, -1)
+        n_regions = n_patches // self.region_size
 
+        region_embeddings = []
         for i in range(n_regions):
-            region_patches = embeddings[i * self.region_size: (i + 1) * self.region_size]
-            attention_weights = F.softmax(self.region_attention(region_patches), dim=0)
-            region_embedding = torch.sum(attention_weights * region_patches, dim=0)
+            region_patches = embeddings[:, i * self.region_size: (i + 1) * self.region_size]
+            attention_weights = F.softmax(self.region_attention(region_patches), dim=1)
+            region_embedding = torch.sum(attention_weights * region_patches, dim=1)
             region_embeddings.append(self.region_head(region_embedding))
-        
-        region_embeddings = torch.stack(region_embeddings, dim=0)
+
+        region_embeddings = torch.stack(region_embeddings, dim=1)
 
         # Attention pooling across regions
-        region_attention_weights = F.softmax(self.slide_attention(region_embeddings), dim=0)
-        slide_embedding = torch.sum(region_attention_weights * region_embeddings, dim=0)
+        region_attention_weights = F.softmax(self.slide_attention(region_embeddings), dim=1)
+        slide_embedding = torch.sum(region_attention_weights * region_embeddings, dim=1)
 
         # Final slide-level prediction
         scores = self.slide_head(slide_embedding)
@@ -933,28 +977,50 @@ Multi-Instance Learning for Whole Slide Image Classification".
         )
 
     def forward(self, bags):
+        # Assume bags has shape (batch_size, n_patches, n_feats)
+        batch_size, n_patches, n_feats = bags.shape
+
         # Encode each patch
-        embeddings = self.encoder(bags)
+        embeddings = self.encoder(bags.view(-1, n_feats))  # Shape: (batch_size * n_patches, z_dim)
+        embeddings = embeddings.view(batch_size, n_patches, -1)  # Reshape to (batch_size, n_patches, z_dim)
 
-        # Cluster patches into regions
-        clusters = self.kmeans.fit_predict(embeddings.detach().cpu().numpy())
+        all_region_embeddings = []
 
-        region_embeddings = []
+        # Process each batch element independently
+        for i in range(batch_size):
+            # Perform KMeans clustering for each item in the batch
+            clusters = self.kmeans.fit_predict(embeddings[i].detach().cpu().numpy())
 
-        for i in range(self.kmeans.n_clusters):
-            cluster_patches = embeddings[clusters == i]
-            attention_weights = F.softmax(self.region_attention(cluster_patches), dim=0)
-            region_embedding = torch.sum(attention_weights * cluster_patches, dim=0)
-            region_embeddings.append(self.region_head(region_embedding))
-        
-        region_embeddings = torch.stack(region_embeddings, dim=0)
+            region_embeddings = []
 
-        # Attention pooling across regions
-        region_attention_weights = F.softmax(self.slide_attention(region_embeddings), dim=0)
-        slide_embedding = torch.sum(region_attention_weights * region_embeddings, dim=0)
+            # Process each cluster within the batch item
+            for j in range(self.kmeans.n_clusters):
+                cluster_mask = torch.tensor(clusters == j, dtype=torch.bool, device=embeddings.device)
+                cluster_patches = embeddings[i][cluster_mask]  # Shape: (n_cluster_patches, z_dim)
+
+                if cluster_patches.size(0) == 0:  # If no patches in this cluster
+                    continue  # Skip this cluster
+
+                # Apply attention within each region
+                attention_weights = F.softmax(self.region_attention(cluster_patches), dim=0)
+                region_embedding = torch.sum(attention_weights * cluster_patches, dim=0)  # Shape: (z_dim)
+                region_embeddings.append(self.region_head(region_embedding))  # Shape: (z_dim)
+
+            if region_embeddings:
+                all_region_embeddings.append(torch.stack(region_embeddings, dim=0))  # Shape: (n_clusters, z_dim)
+
+        if len(all_region_embeddings) > 0:
+            # Stack all region embeddings across the batch
+            region_embeddings = torch.stack(all_region_embeddings, dim=0)  # Shape: (batch_size, n_clusters, z_dim)
+        else:
+            raise ValueError("No regions were found. Check your clustering or input data.")
+
+        # Attention pooling across regions within each batch item
+        region_attention_weights = F.softmax(self.slide_attention(region_embeddings), dim=1)  # Shape: (batch_size, n_clusters, 1)
+        slide_embedding = torch.sum(region_attention_weights * region_embeddings, dim=1)  # Shape: (batch_size, z_dim)
 
         # Final slide-level prediction
-        scores = self.slide_head(slide_embedding)
+        scores = self.slide_head(slide_embedding)  # Shape: (batch_size, n_out)
         return scores
 
 class retmil(nn.Module):
@@ -1054,7 +1120,7 @@ class retmil(nn.Module):
 
     class RetentionLayer(nn.Module):
         def __init__(self, d_model, n_heads):
-            super(RetMIL.RetentionLayer, self).__init__()
+            super(retmil.RetentionLayer, self).__init__()
             self.d_model = d_model
             self.n_heads = n_heads
             self.head_dim = d_model // n_heads
@@ -1092,7 +1158,7 @@ class retmil(nn.Module):
 
     class AttentionPooling(nn.Module):
         def __init__(self, d_model):
-            super(RetMIL.AttentionPooling, self).__init__()
+            super(retmil.AttentionPooling, self).__init__()
             self.W = nn.Linear(d_model, d_model)
             self.U = nn.Linear(d_model, d_model)
             self.gamma = nn.Parameter(torch.zeros(1))
@@ -1144,15 +1210,28 @@ class weighted_mean_mil(nn.Module):
         )
 
     def forward(self, bags):
-        embeddings = self.encoder(bags)
+        # Assume bags has shape (batch_size, n_patches, n_feats)
+        batch_size, n_patches, n_feats = bags.shape
         
-        # Compute robust mean (weighted mean with inverse variance)
-        variances = embeddings.var(dim=0, unbiased=False)
-        weights = 1.0 / (variances + 1e-5)  # Small epsilon to avoid division by zero
-        weighted_sum = torch.sum(weights * embeddings, dim=0)
-        robust_mean = weighted_sum / torch.sum(weights)
+        # Encode each patch
+        embeddings = self.encoder(bags.view(-1, n_feats))  # Shape: (batch_size * n_patches, z_dim)
+        embeddings = embeddings.view(batch_size, n_patches, -1)  # Reshape to (batch_size, n_patches, z_dim)
+        
+        # Compute variances for each feature across patches in each batch
+        variances = embeddings.var(dim=1, unbiased=False)  # Shape: (batch_size, z_dim)
+        
+        # Compute weights as inverse of variances
+        weights = 1.0 / (variances + 1e-5)  # Shape: (batch_size, z_dim)
+        
+        # Compute weighted sum of embeddings across patches for each batch
+        weighted_sum = torch.sum(weights.unsqueeze(1) * embeddings, dim=1)  # Shape: (batch_size, z_dim)
+        
+        # Compute robust mean by dividing by the sum of weights
+        robust_mean = weighted_sum / torch.sum(weights, dim=1, keepdim=True)  # Shape: (batch_size, z_dim)
 
-        output = self.head(robust_mean)
+        # Pass the robust mean through the prediction head
+        output = self.head(robust_mean)  # Shape: (batch_size, n_out)
+        
         return output
 
 class aodmil(nn.Module):
