@@ -1,4 +1,4 @@
-from pathbench import Experiment
+from ..experiment.experiment import Experiment
 import logging
 
 

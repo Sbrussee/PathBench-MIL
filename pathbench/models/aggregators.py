@@ -642,24 +642,32 @@ class cluster_pooling_mil(nn.Module):
 
     def forward(self, bags):
         batch_size, n_patches, n_feats = bags.shape
-
-        # Encode each patch
-        embeddings = self.encoder(bags.view(-1, n_feats))  # Shape: (batch_size * n_patches, z_dim)
-        embeddings = embeddings.view(batch_size, n_patches, -1)  # Reshape to (batch_size, n_patches, z_dim)
-
         pooled_embeddings = []
 
         # Process each batch element independently
         for i in range(batch_size):
-            # Perform KMeans clustering for each item in the batch
-            clusters = self.kmeans.fit_predict(embeddings[i].detach().cpu().numpy())
+            # Encode each patch in the current batch element
+            embeddings = self.encoder(bags[i])  # Shape: (n_patches, z_dim)
+
+            # Determine the number of clusters based on the number of patches
+            n_clusters = min(self.kmeans.n_clusters, n_patches)
+            
+            if n_clusters < 2:
+                # If we have fewer than 2 patches, use the mean of all embeddings
+                cluster_embedding = embeddings.mean(dim=0)
+                pooled_embeddings.append(cluster_embedding)
+                continue
+            
+            # Perform KMeans clustering for the current batch element
+            kmeans = KMeans(n_clusters=n_clusters)
+            clusters = kmeans.fit_predict(embeddings.detach().cpu().numpy())
 
             # Pool embeddings within each cluster
             cluster_embeddings = []
-            for j in range(self.kmeans.n_clusters):
+            for j in range(n_clusters):
                 cluster_indices = torch.tensor(clusters == j, dtype=torch.bool, device=embeddings.device)
                 if cluster_indices.sum() > 0:
-                    cluster_embedding = embeddings[i][cluster_indices].mean(dim=0)
+                    cluster_embedding = embeddings[cluster_indices].mean(dim=0)
                 else:
                     # Handle the case where a cluster has no elements
                     cluster_embedding = torch.zeros(embeddings.size(-1), device=embeddings.device)
@@ -742,6 +750,15 @@ class gated_attention_mil(nn.Module):
         scores = self.head(pooled_embeddings)
         return scores
 
+    def calculate_attention(self, bags, lens, apply_softmax=None):
+        embeddings = self.encoder(bags)
+        attention_V = self.attention_V(embeddings)
+        attention_U = self.attention_U(embeddings)
+        attention_weights = self.attention_weights(attention_V * attention_U)
+        if apply_softmax:
+            attention_weights = F.softmax(attention_weights, dim=1)
+        return attention_weights
+
 class topk_mil(nn.Module):
     """
     Multiple instance learning model which selects the top k instances based on attention scores and aggregates them using mean pooling.
@@ -815,6 +832,16 @@ class topk_mil(nn.Module):
         
         return scores
 
+
+    def calculate_attention(self, bags, lens, apply_softmax=None):
+        batch_size, n_patches, n_feats = bags.shape
+        embeddings = self.encoder(bags.view(-1, n_feats))
+        embeddings = embeddings.view(batch_size, n_patches, -1)
+        scores = self.attention(embeddings).squeeze(-1)
+        if apply_softmax:
+            scores = F.softmax(scores, dim=1)
+        return scores
+
 class hierarchical_mil(nn.Module):
     """
     Hierarchical Multiple Instance Learning model with attention mechanism. It first groups consecutive patches into regions,
@@ -884,6 +911,8 @@ class hierarchical_mil(nn.Module):
     def forward(self, bags):
         # Split into regions
         batch_size, n_patches, n_feats = bags.shape
+        print(bags)
+        print(bags.shape)
         embeddings = self.encoder(bags.view(-1, n_feats))
         embeddings = embeddings.view(batch_size, n_patches, -1)
         n_regions = n_patches // self.region_size
@@ -908,11 +937,11 @@ class hierarchical_mil(nn.Module):
 class hierarchical_cluster_mil(nn.Module):
     """
     Inspired by "Cluster-to-Conquer: A Framework for End-to-End
-Multi-Instance Learning for Whole Slide Image Classification".
+    Multi-Instance Learning for Whole Slide Image Classification".
 
     Hierarchical Cluster MIL model with attention mechanism. It first clusters patches into regions, weights instances
-    per region using attention and then aggregates region embeddings into slide embeddings using an attention mechanism. Finally, it predicts the
-    slide-level label using a linear classifier.
+    per region using attention and then aggregates region embeddings into slide embeddings using an attention mechanism.
+    Finally, it predicts the slide-level label using a linear classifier.
 
     Parameters
     ----------
@@ -926,7 +955,7 @@ Multi-Instance Learning for Whole Slide Image Classification".
         Number of clusters
     dropout_p : float
         Dropout probability
-    
+
     Attributes
     ----------
     encoder : nn.Sequential
@@ -941,13 +970,14 @@ Multi-Instance Learning for Whole Slide Image Classification".
         Slide attention network
     slide_head : nn.Sequential
         Slide head network
-    
+
     Methods
     -------
     forward(bags)
         Forward pass through the model
     """
 
+class hierarchical_cluster_mil(nn.Module):
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, n_clusters: int = 10, dropout_p: float = 0.1):
         super().__init__()
         self.encoder = nn.Sequential(
@@ -977,26 +1007,30 @@ Multi-Instance Learning for Whole Slide Image Classification".
         )
 
     def forward(self, bags):
-        # Assume bags has shape (batch_size, n_patches, n_feats)
         batch_size, n_patches, n_feats = bags.shape
-
-        # Encode each patch
-        embeddings = self.encoder(bags.view(-1, n_feats))  # Shape: (batch_size * n_patches, z_dim)
-        embeddings = embeddings.view(batch_size, n_patches, -1)  # Reshape to (batch_size, n_patches, z_dim)
-
         all_region_embeddings = []
 
         # Process each batch element independently
         for i in range(batch_size):
+            # Encode patches
+            embeddings = self.encoder(bags[i])  # Shape: (n_patches, z_dim)
+
             # Perform KMeans clustering for each item in the batch
-            clusters = self.kmeans.fit_predict(embeddings[i].detach().cpu().numpy())
+            n_clusters = min(self.kmeans.n_clusters, n_patches)
+            if n_clusters < 2:
+                # If fewer than 2 patches, use the mean of all embeddings
+                region_embeddings = embeddings.mean(dim=0, keepdim=True).unsqueeze(0)  # Shape: (1, z_dim)
+                all_region_embeddings.append(region_embeddings)
+                continue
+
+            clusters = self.kmeans.fit_predict(embeddings.detach().cpu().numpy())
 
             region_embeddings = []
 
             # Process each cluster within the batch item
-            for j in range(self.kmeans.n_clusters):
+            for j in range(n_clusters):
                 cluster_mask = torch.tensor(clusters == j, dtype=torch.bool, device=embeddings.device)
-                cluster_patches = embeddings[i][cluster_mask]  # Shape: (n_cluster_patches, z_dim)
+                cluster_patches = embeddings[cluster_mask]  # Shape: (n_cluster_patches, z_dim)
 
                 if cluster_patches.size(0) == 0:  # If no patches in this cluster
                     continue  # Skip this cluster
@@ -1004,16 +1038,20 @@ Multi-Instance Learning for Whole Slide Image Classification".
                 # Apply attention within each region
                 attention_weights = F.softmax(self.region_attention(cluster_patches), dim=0)
                 region_embedding = torch.sum(attention_weights * cluster_patches, dim=0)  # Shape: (z_dim)
-                region_embeddings.append(self.region_head(region_embedding))  # Shape: (z_dim)
+                region_embeddings.append(self.region_head(region_embedding.unsqueeze(0)))  # Shape: (1, z_dim)
 
             if region_embeddings:
-                all_region_embeddings.append(torch.stack(region_embeddings, dim=0))  # Shape: (n_clusters, z_dim)
+                all_region_embeddings.append(torch.cat(region_embeddings, dim=0))  # Shape: (n_clusters, z_dim)
 
         if len(all_region_embeddings) > 0:
             # Stack all region embeddings across the batch
             region_embeddings = torch.stack(all_region_embeddings, dim=0)  # Shape: (batch_size, n_clusters, z_dim)
         else:
             raise ValueError("No regions were found. Check your clustering or input data.")
+
+        # Ensure that region_embeddings has at least 2 dimensions for BatchNorm
+        if region_embeddings.dim() == 2:
+            region_embeddings = region_embeddings.unsqueeze(1)
 
         # Attention pooling across regions within each batch item
         region_attention_weights = F.softmax(self.slide_attention(region_embeddings), dim=1)  # Shape: (batch_size, n_clusters, 1)
@@ -1028,51 +1066,7 @@ class retmil(nn.Module):
     Retention-based MIL. Retention mechanism is applied to both local subsequences and the global sequence in a hierarchical manner.
     The local retention mechanism uses relative distance decay to compute the retention scores, while the global retention mechanism
     uses self-attention to compute the retention scores. The final prediction is made using a linear classifier.
-    Method from: "RetMIL: Retentive Multiple Instance Learning
-    for Histopathological Whole Slide Image
-    Classification".
-
-    Parameters
-    ----------
-    n_feats : int
-        Number of input features
-    n_out : int
-        Number of output classes
-    z_dim : int
-        Dimensionality of the hidden layer
-    subseq_len : int
-        Length of subsequences
-    n_heads : int
-        Number of attention heads
-    dropout_p : float
-        Dropout probability
-    
-    Attributes
-    ----------
-    local_retention_1 : RetentionLayer
-        Local retention mechanism 1
-    local_retention_2 : RetentionLayer
-        Local retention mechanism 2
-    local_attention : AttentionPooling
-        Local attention pooling
-    global_retention : RetentionLayer
-        Global retention mechanism
-    global_attention : AttentionPooling
-        Global attention pooling
-    classifier : nn.Sequential
-        Prediction head network
-    
-    Methods
-    -------
-    forward(x)
-        Forward pass through the model
-    
-    Classes
-    -------
-    RetentionLayer(nn.Module)
-        Retention mechanism for local and global sequences
-    AttentionPooling(nn.Module)
-        Attention pooling mechanism
+    Method from: "RetMIL: Retentive Multiple Instance Learning for Histopathological Whole Slide Image Classification".
     """
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, subseq_len: int = 512, n_heads: int = 8, dropout_p: float = 0.1):
         super(retmil, self).__init__()
@@ -1097,7 +1091,8 @@ class retmil(nn.Module):
 
     def forward(self, bags):
         # Step 1: Split into subsequences
-        subsequences = torch.split(bags, self.subseq_len)
+        batch_size, n_patches, n_feats = bags.size()
+        subsequences = torch.split(bags, self.subseq_len, dim=1)
 
         # Step 2: Local subsequence processing
         local_embeddings = []
@@ -1108,15 +1103,16 @@ class retmil(nn.Module):
             local_embeddings.append(local_embedding)
 
         # Stack local embeddings into a global sequence
-        global_sequence = torch.stack(local_embeddings)
+        global_sequence = torch.stack(local_embeddings, dim=1)  # Shape: (batch_size, num_subseq, z_dim)
 
         # Step 3: Global sequence processing
         global_sequence = self.global_retention(global_sequence)
-        global_embedding = self.global_attention(global_sequence)
+        global_embedding = self.global_attention(global_sequence)  # Shape: (batch_size, z_dim)
 
         # Step 4: Classification
-        out = self.classifier(global_embedding)
+        out = self.classifier(global_embedding)  # Shape: (batch_size, n_out)
         return out
+
 
     class RetentionLayer(nn.Module):
         def __init__(self, d_model, n_heads):
@@ -1142,7 +1138,7 @@ class retmil(nn.Module):
             # Retention using relative distance decay
             D = self.relative_distance_decay(N, K.device)
             retention_scores = (Q @ K.transpose(-2, -1)) * D
-            retention_out = (retention_scores @ V).transpose(1, 2).contiguous().view(B, N, D)
+            retention_out = (retention_scores @ V).transpose(1, 2).contiguous().view(B, N, self.d_model)
 
             # Applying normalization
             retention_out = self.group_norm(retention_out)
@@ -1284,10 +1280,11 @@ class aodmil(nn.Module):
         )
 
     def forward(self, bags):
+        batch_size, n_patches, _ = bags.shape
         embeddings = self.encoder(bags)
         
         # Compute the mean embedding of the bag
-        mean_embedding = embeddings.mean(dim=0, keepdim=True)
+        mean_embedding = embeddings.mean(dim=1, keepdim=True)  # Mean along patches, retain batch dimension
         
         # Compute similarity of each instance to the mean embedding
         similarities = F.cosine_similarity(embeddings, mean_embedding, dim=-1)
@@ -1298,7 +1295,267 @@ class aodmil(nn.Module):
         
         # Weighted aggregation of embeddings
         weighted_embeddings = embeddings * attention_weights.unsqueeze(-1)
-        aggregated_embedding = weighted_embeddings.mean(dim=0)
+        aggregated_embedding = weighted_embeddings.mean(dim=1)  # Mean along patches, retain batch dimension
         
-        output = self.head(aggregated_embedding)
+        output = self.head(aggregated_embedding)  # Shape: [batch_size, n_out]
         return output
+
+    def calculate_attention(self, bags):
+        embeddings = self.encoder(bags)
+        batch_size, n_patches, _ = bags.shape
+
+        # Compute the mean embedding of the bag
+
+        return attention_weights
+
+
+class clam_mil(nn.Module):
+    """
+    Clustering-constrained Attention Multiple Instance Learning (CLAM)
+    model with attention-based pooling and instance-level clustering.
+
+    Parameters
+    ----------
+    n_feats : int
+        Number of input features.
+    n_out : int
+        Number of output classes.
+    z_dim : int
+        Dimensionality of the hidden layer.
+    dropout_p : float
+        Dropout probability.
+    """
+
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 512, dropout_p: float = 0.25):
+        super(clam_mil, self).__init__()
+        self.n_out = n_out
+        
+        # Encoder Network
+        self.encoder = nn.Sequential(
+            nn.Linear(n_feats, z_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout_p)
+        )
+        
+        # Attention Network (shared backbone)
+        self.attention_U = nn.Sequential(
+            nn.Linear(z_dim, z_dim),
+            nn.Sigmoid()
+        )
+        self.attention_V = nn.Sequential(
+            nn.Linear(z_dim, z_dim),
+            nn.Tanh()
+        )
+        
+        # Class-specific Attention and Classification branches
+        self.attention_branches = nn.ModuleList([nn.Linear(z_dim, 1) for _ in range(n_out)])
+        self.classifiers = nn.ModuleList([nn.Linear(z_dim, 1) for _ in range(n_out)])
+        
+        # Clustering Layer for instance-level clustering
+        self.instance_cluster = nn.ModuleList([nn.Linear(z_dim, 2) for _ in range(n_out)])
+
+    def forward(self, bags, return_attention=False):
+        embeddings = self.encoder(bags)
+        
+        slide_level_representations = []
+        attention_weights_list = []
+
+        # Loop through each class-specific branch
+        for i in range(self.n_out):
+            attention_U_output = self.attention_U(embeddings)
+            attention_V_output = self.attention_V(embeddings)
+            attention_scores = self.attention_branches[i](attention_U_output * attention_V_output).softmax(dim=1)
+            attention_weights_list.append(attention_scores)
+            
+            # Slide-level representation
+            slide_level_representation = torch.sum(attention_scores * embeddings, dim=1)
+            slide_level_representations.append(slide_level_representation)
+
+        # Stack all slide-level representations
+        slide_level_representations = torch.stack(slide_level_representations, dim=1)
+        
+        # Final classification scores
+        scores = []
+        for i in range(self.n_out):
+            score = self.classifiers[i](slide_level_representations[:, i, :])
+            scores.append(score)
+        
+        # Aggregate scores into a tensor
+        scores = torch.cat(scores, dim=1)
+        
+        if return_attention:
+            return scores, attention_weights_list
+        else:
+            return scores
+
+    def cluster_patches(self, bags):
+        """
+        Perform instance-level clustering using pseudo-labels generated 
+        by the attention scores.
+        """
+        embeddings = self.encoder(bags)
+        cluster_predictions = []
+        for i in range(self.n_out):
+            cluster_pred = self.instance_cluster[i](embeddings)
+            cluster_predictions.append(cluster_pred)
+        
+        return cluster_predictions
+
+    def calculate_attention(self, bags):
+        """
+        Calculate attention scores for the given bags.
+        """
+        embeddings = self.encoder(bags)
+        attention_weights_list = []
+
+        # Loop through each class-specific branch
+        for i in range(self.n_out):
+            attention_U_output = self.attention_U(embeddings)
+            attention_V_output = self.attention_V(embeddings)
+            attention_scores = self.attention_branches[i](attention_U_output * attention_V_output).softmax(dim=1)
+            attention_weights_list.append(attention_scores)
+
+        return attention_weights_list
+
+class clam_mil_mb(nn.Module):
+    """
+    Multi-Branch Clustering-constrained Attention Multiple Instance Learning (CLAM)
+    model with attention-based pooling and instance-level clustering.
+
+    Parameters
+    ----------
+    n_feats : int
+        Number of input features.
+    n_out : int
+        Number of output classes.
+    z_dim : int
+        Dimensionality of the hidden layer.
+    dropout_p : float
+        Dropout probability.
+    n_branches : int
+        Number of independent branches.
+    """
+
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 512, dropout_p: float = 0.25, n_branches: int = 3):
+        super(clam_mil_mb, self).__init__()
+        self.n_out = n_out
+        self.n_branches = n_branches
+
+        # Separate encoder, attention, and classifier for each branch
+        self.encoders = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(n_feats, z_dim),
+                nn.ReLU(),
+                nn.Dropout(dropout_p)
+            ) for _ in range(n_branches)
+        ])
+        
+        # Attention networks for each branch
+        self.attention_U = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(z_dim, z_dim),
+                nn.Sigmoid()
+            ) for _ in range(n_branches)
+        ])
+        self.attention_V = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(z_dim, z_dim),
+                nn.Tanh()
+            ) for _ in range(n_branches)
+        ])
+        
+        # Class-specific Attention and Classification branches for each branch
+        self.attention_branches = nn.ModuleList([
+            nn.ModuleList([nn.Linear(z_dim, 1) for _ in range(n_out)]) for _ in range(n_branches)
+        ])
+        self.classifiers = nn.ModuleList([
+            nn.ModuleList([nn.Linear(z_dim, 1) for _ in range(n_out)]) for _ in range(n_branches)
+        ])
+        
+        # Clustering Layer for instance-level clustering for each branch
+        self.instance_cluster = nn.ModuleList([
+            nn.ModuleList([nn.Linear(z_dim, 2) for _ in range(n_out)]) for _ in range(n_branches)
+        ])
+
+    def forward(self, bags, return_attention=False):
+        all_slide_level_representations = []
+        all_attention_weights = []
+
+        # Loop through each branch
+        for b in range(self.n_branches):
+            embeddings = self.encoders[b](bags)
+            slide_level_representations = []
+            attention_weights_list = []
+
+            # Loop through each class-specific branch
+            for i in range(self.n_out):
+                attention_U_output = self.attention_U[b](embeddings)
+                attention_V_output = self.attention_V[b](embeddings)
+                attention_scores = self.attention_branches[b][i](attention_U_output * attention_V_output).softmax(dim=1)
+                attention_weights_list.append(attention_scores)
+
+                # Slide-level representation
+                slide_level_representation = torch.sum(attention_scores * embeddings, dim=1)
+                slide_level_representations.append(slide_level_representation)
+
+            # Stack slide-level representations for the current branch
+            slide_level_representations = torch.stack(slide_level_representations, dim=1)
+            all_slide_level_representations.append(slide_level_representations)
+            all_attention_weights.append(attention_weights_list)
+
+        # Aggregate representations from all branches (e.g., by summing)
+        aggregated_representations = torch.sum(torch.stack(all_slide_level_representations, dim=0), dim=0)
+
+        # Final classification scores
+        scores = []
+        for i in range(self.n_out):
+            score = 0
+            for b in range(self.n_branches):
+                score += self.classifiers[b][i](aggregated_representations[:, i, :])
+            scores.append(score)
+
+        # Aggregate scores into a tensor
+        scores = torch.cat(scores, dim=1)
+
+        if return_attention:
+            return scores, all_attention_weights
+        else:
+            return scores
+
+    def cluster_patches(self, bags):
+        """
+        Perform instance-level clustering using pseudo-labels generated 
+        by the attention scores for each branch.
+        """
+        all_cluster_predictions = []
+        
+        for b in range(self.n_branches):
+            embeddings = self.encoders[b](bags)
+            branch_cluster_predictions = []
+            for i in range(self.n_out):
+                cluster_pred = self.instance_cluster[b][i](embeddings)
+                branch_cluster_predictions.append(cluster_pred)
+            all_cluster_predictions.append(branch_cluster_predictions)
+        
+        return all_cluster_predictions
+
+    def calculate_attention(self, bags):
+        """
+        Calculate attention scores for the given bags for each branch.
+        """
+        all_attention_weights = []
+
+        for b in range(self.n_branches):
+            embeddings = self.encoders[b](bags)
+            attention_weights_list = []
+
+            # Loop through each class-specific branch
+            for i in range(self.n_out):
+                attention_U_output = self.attention_U[b](embeddings)
+                attention_V_output = self.attention_V[b](embeddings)
+                attention_scores = self.attention_branches[b][i](attention_U_output * attention_V_output).softmax(dim=1)
+                attention_weights_list.append(attention_scores)
+
+            all_attention_weights.append(attention_weights_list)
+
+        return all_attention_weights
