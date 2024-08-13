@@ -169,6 +169,7 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 # - gigapath
 # - barlow_twins
 # - hibou_b
+# - hibou_l
 # - pathoduet_ihc
 # - pathoduet_he
 # - kaiko_s8
@@ -178,6 +179,7 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 # - kaiko_l14
 # - h_optimus_0
 # - virchow
+# - virchow2
 
 # Available MIL aggregation methods:
 # - CLAM_SB
@@ -397,7 +399,9 @@ PathBench supports a wide range of different feature extractors, including SOTA 
 | PathoDuet-HE | Manual | [Link](https://github.com/openmedlab/PathoDuet) [Weights](https://drive.google.com/drive/folders/1aQHGabQzopSy9oxstmM9cPeF7QziIUxM)|
 | PathoDuet-IHC | Manual | [Link](https://github.com/openmedlab/PathoDuet) [Weights](https://drive.google.com/drive/folders/1aQHGabQzopSy9oxstmM9cPeF7QziIUxM)|
 | Virchow | Gated | [Link](https://huggingface.co/paige-ai/Virchow)|
+| Virchow2 | Gated | [Link](https://huggingface.co/paige-ai/Virchow2) |
 | Hibou-B | Automatic | [Link](https://huggingface.co/histai/hibou-b) |
+| Hibou-L | Gated | [Link](https://huggingface.co/histai/hibou-L)
 | UNI | Gated | [Link](https://huggingface.co/MahmoodLab/UNI) |
 | Prov-GigaPath | Gated | [Link](https://huggingface.co/prov-gigapath/prov-gigapath) |
 | Kaiko-S8 | Automatic | [Link](https://github.com/kaiko-ai/towards_large_pathology_fms) |
@@ -471,7 +475,7 @@ class kaiko_s8(TorchFeatureExtractor):
                 transforms.Resize(224),
                 # Transform to float tensor
                 transforms.ConvertImageDtype(torch.float32),
-                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+                transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
             ]
         )
         self.model.eval()
