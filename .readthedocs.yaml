@@ -5,12 +5,10 @@ build:
   os: ubuntu-22.04
   tools:
     python: "3.9"
-
-# System packages required for spams
-apt_packages:
-  - libblas-dev
-  - liblapack-dev
-  - gfortran
+  apt_packages:
+    - libblas-dev
+    - liblapack-dev
+    - gfortran
 
 # Define the necessary Python dependencies
 python:
