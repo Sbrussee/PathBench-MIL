@@ -504,7 +504,7 @@ class dsmil(nn.Module):
             return scores
 
 
-    def calculate_attention(self, bags, lens, apply_softmax=None):
+    def calculate_attention(self, bags, lens=None, apply_softmax=None):
         batch_size, num_instances, _ = bags.size()
         
         # Instance-level encoding
@@ -586,7 +586,7 @@ class varmil(nn.Module):
         else:
             return scores
 
-    def calculate_attention(self, bags, lens, apply_softmax=None):
+    def calculate_attention(self, bags, lens=None, apply_softmax=None):
         embeddings = self.encoder(bags)
         attention_scores = self.attention(embeddings)
         if apply_softmax:
@@ -748,7 +748,7 @@ class gated_attention_mil(nn.Module):
         scores = self.head(pooled_embeddings)
         return scores
 
-    def calculate_attention(self, bags, lens, apply_softmax=None):
+    def calculate_attention(self, bags, lens=None, apply_softmax=None):
         embeddings = self.encoder(bags)
         attention_V = self.attention_V(embeddings)
         attention_U = self.attention_U(embeddings)
@@ -833,7 +833,7 @@ class topk_mil(nn.Module):
         
         return scores
 
-    def calculate_attention(self, bags, lens, apply_softmax=None):
+    def calculate_attention(self, bags, lens=None, apply_softmax=None):
         batch_size, n_patches, n_feats = bags.shape
         embeddings = self.encoder(bags.view(-1, n_feats))
         embeddings = embeddings.view(batch_size, n_patches, -1)
@@ -1060,109 +1060,6 @@ class hierarchical_cluster_mil(nn.Module):
         scores = self.slide_head(slide_embedding)  # Shape: (batch_size, n_out)
         return scores
 
-class retmil(nn.Module):
-    """
-    Retention-based MIL. Retention mechanism is applied to both local subsequences and the global sequence in a hierarchical manner.
-    The local retention mechanism uses relative distance decay to compute the retention scores, while the global retention mechanism
-    uses self-attention to compute the retention scores. The final prediction is made using a linear classifier.
-    Method from: "RetMIL: Retentive Multiple Instance Learning for Histopathological Whole Slide Image Classification".
-    """
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, subseq_len: int = 512, n_heads: int = 8, dropout_p: float = 0.1):
-        super(retmil, self).__init__()
-        self.subseq_len = subseq_len
-        self.n_heads = n_heads
-
-        # Retention mechanism for local subsequences
-        self.local_retention_1 = self.RetentionLayer(z_dim, n_heads)
-        self.local_retention_2 = self.RetentionLayer(z_dim, n_heads)
-        self.local_attention = self.AttentionPooling(z_dim)
-
-        # Retention mechanism for global sequence
-        self.global_retention = self.RetentionLayer(z_dim, n_heads)
-        self.global_attention = self.AttentionPooling(z_dim)
-
-        # Classification head
-        self.classifier = nn.Sequential(
-            nn.BatchNorm1d(z_dim),
-            nn.Dropout(dropout_p),
-            nn.Linear(z_dim, n_out)
-        )
-
-    def forward(self, bags):
-        # Step 1: Split into subsequences
-        batch_size, n_patches, n_feats = bags.size()
-        subsequences = torch.split(bags, self.subseq_len, dim=1)
-
-        # Step 2: Local subsequence processing
-        local_embeddings = []
-        for subseq in subsequences:
-            subseq = self.local_retention_1(subseq)
-            subseq = self.local_retention_2(subseq)
-            local_embedding = self.local_attention(subseq)
-            local_embeddings.append(local_embedding)
-
-        # Stack local embeddings into a global sequence
-        global_sequence = torch.stack(local_embeddings, dim=1)  # Shape: (batch_size, num_subseq, z_dim)
-
-        # Step 3: Global sequence processing
-        global_sequence = self.global_retention(global_sequence)
-        global_embedding = self.global_attention(global_sequence)  # Shape: (batch_size, z_dim)
-
-        # Step 4: Classification
-        out = self.classifier(global_embedding)  # Shape: (batch_size, n_out)
-        return out
-
-
-    class RetentionLayer(nn.Module):
-        def __init__(self, d_model, n_heads):
-            super(retmil.RetentionLayer, self).__init__()
-            self.d_model = d_model
-            self.n_heads = n_heads
-            self.head_dim = d_model // n_heads
-
-            self.WQ = nn.Linear(d_model, d_model)
-            self.WK = nn.Linear(d_model, d_model)
-            self.WV = nn.Linear(d_model, d_model)
-
-            self.group_norm = nn.GroupNorm(1, d_model)
-
-        def forward(self, x):
-            B, N, D = x.shape
-
-            Q = self.WQ(x).view(B, N, self.n_heads, self.head_dim).transpose(1, 2)
-            K = self.WK(x).view(B, N, self.n_heads, self.head_dim).transpose(1, 2)
-            V = self.WV(x).view(B, N, self.n_heads, self.head_dim).transpose(1, 2)
-
-            # Implementing a simplified version of retention mechanism
-            # Retention using relative distance decay
-            D = self.relative_distance_decay(N, K.device)
-            retention_scores = (Q @ K.transpose(-2, -1)) * D
-            retention_out = (retention_scores @ V).transpose(1, 2).contiguous().view(B, N, self.d_model)
-
-            # Applying normalization
-            retention_out = self.group_norm(retention_out)
-
-            return retention_out
-
-        def relative_distance_decay(self, N, device):
-            D = torch.zeros(N, N, device=device)
-            for i in range(N):
-                for j in range(i, N):
-                    D[i, j] = torch.exp(-float(j - i))
-            return D
-
-    class AttentionPooling(nn.Module):
-        def __init__(self, d_model):
-            super(retmil.AttentionPooling, self).__init__()
-            self.W = nn.Linear(d_model, d_model)
-            self.U = nn.Linear(d_model, d_model)
-            self.gamma = nn.Parameter(torch.zeros(1))
-
-        def forward(self, x):
-            alpha = F.softmax(self.gamma * torch.tanh(self.W(x)) * torch.sigmoid(self.U(x)), dim=1)
-            out = torch.sum(alpha * x, dim=1)
-            return out
-
 class weighted_mean_mil(nn.Module):
     """
     Multiple instance learning model with weighted mean pooling. Instances are inversely weighted by their variance.
@@ -1229,75 +1126,6 @@ class weighted_mean_mil(nn.Module):
         
         return output
 
-class aodmil(nn.Module):
-    """
-    Attention-based Outlier Detection Multiple Instance Learning model. The model computes the mean embedding of the bag,
-    computes the similarity of each instance to the mean embedding, and computes the attention weights based on the similarity.
-    The final prediction is made using a linear classifier.
-    The method aims to detect patches that show abnormal behavior with respect to the other patches in the bag.
-
-    Parameters
-    ----------
-    n_feats : int
-        Number of input features
-    n_out : int
-        Number of output classes
-    z_dim : int
-        Dimensionality of the hidden layer
-    dropout_p : float
-        Dropout probability
-    
-    Attributes
-    ----------
-    encoder : nn.Sequential
-        Encoder network
-    attention : nn.Sequential
-        Attention network
-    head : nn.Sequential
-        Prediction head network
-    
-    Methods
-    -------
-    forward(bags)
-        Forward pass through the model
-    """
-
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1):
-        super(aodmil, self).__init__()
-        self.encoder = nn.Sequential(
-            nn.Linear(n_feats, z_dim),
-            nn.ReLU()
-        )
-        self.attention = nn.Sequential(
-            nn.Linear(z_dim, 1),
-            nn.Sigmoid()
-        )
-        self.head = nn.Sequential(
-            nn.BatchNorm1d(z_dim),
-            nn.Dropout(dropout_p),
-            nn.Linear(z_dim, n_out)
-        )
-
-    def forward(self, bags):
-        batch_size, n_patches, _ = bags.shape
-        embeddings = self.encoder(bags)
-        
-        # Compute the mean embedding of the bag
-        mean_embedding = embeddings.mean(dim=1, keepdim=True)  # Mean along patches, retain batch dimension
-        
-        # Compute similarity of each instance to the mean embedding
-        similarities = F.cosine_similarity(embeddings, mean_embedding, dim=-1)
-        
-        # Inverse attention based on similarity
-        attention_weights = 1.0 - similarities
-        attention_weights = self.attention(attention_weights.unsqueeze(-1)).squeeze(-1)
-        
-        # Weighted aggregation of embeddings
-        weighted_embeddings = embeddings * attention_weights.unsqueeze(-1)
-        aggregated_embedding = weighted_embeddings.mean(dim=1)  # Mean along patches, retain batch dimension
-        
-        output = self.head(aggregated_embedding)  # Shape: [batch_size, n_out]
-        return output
 
 class clam_mil(nn.Module):
     """
