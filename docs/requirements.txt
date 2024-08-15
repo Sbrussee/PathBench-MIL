@@ -1,5 +1,6 @@
 sphinx
 sphinx_rtd_theme
+slideflow
 absl-py==2.1.0
 aenum==3.1.15
 affine==2.4.0
