@@ -327,7 +327,7 @@ CONFIG_FILE=conf.yaml
 python3 main.py $CONFIG_FILE
 ```
 # Features
-
+- Support for binary/multiclass classification, regression and time-to-event (e.g. survival prediction) problems.
 - Benchmarking w.r.t.
     - Tile sizes, magnifications (e.g. 256px, 20x)
     - Normalization methods (e.g. Macenko, Reinhard)
