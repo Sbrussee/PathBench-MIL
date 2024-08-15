@@ -8,6 +8,7 @@ import random
 import shutil
 import logging
 from ..utils.utils import increase_file_limit
+from huggingface_hub import login
 
 def read_config(config_file : str):
     """
@@ -73,6 +74,8 @@ class Experiment():
             if self.config['hf_token'] is not None:
                 HF_TOKEN = self.config['hf_token']
                 os.environ['HF_TOKEN'] = HF_TOKEN
+                login(token=HF_TOKEN)
+                logging.info("Logged in to Hugging Face")
         #Set pretrained weights directory
         WEIGHTS_DIR = self.config['weights_dir']
         # Set environment variables

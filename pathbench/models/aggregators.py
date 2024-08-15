@@ -676,6 +676,7 @@ class cluster_pooling_mil(nn.Module):
 
         # Stack the pooled embeddings to form a tensor of shape (batch_size, z_dim * n_clusters)
         pooled_embeddings = torch.stack(pooled_embeddings, dim=0)
+        print("Shape of clustered pooled embeddings: ", pooled_embeddings.shape)
 
         # Pass the pooled embeddings through the prediction head
         scores = self.head(pooled_embeddings)  # Shape: (batch_size, n_out)
@@ -1009,54 +1010,48 @@ class hierarchical_cluster_mil(nn.Module):
         batch_size, n_patches, n_feats = bags.shape
         all_region_embeddings = []
 
-        # Process each batch element independently
         for i in range(batch_size):
-            # Encode patches
             embeddings = self.encoder(bags[i])  # Shape: (n_patches, z_dim)
 
-            # Perform KMeans clustering for each item in the batch
             n_clusters = min(self.kmeans.n_clusters, n_patches)
             if n_clusters < 2:
-                # If fewer than 2 patches, use the mean of all embeddings
                 region_embeddings = embeddings.mean(dim=0, keepdim=True).unsqueeze(0)  # Shape: (1, z_dim)
                 all_region_embeddings.append(region_embeddings)
                 continue
 
             clusters = self.kmeans.fit_predict(embeddings.detach().cpu().numpy())
-
             region_embeddings = []
 
-            # Process each cluster within the batch item
             for j in range(n_clusters):
                 cluster_mask = torch.tensor(clusters == j, dtype=torch.bool, device=embeddings.device)
                 cluster_patches = embeddings[cluster_mask]  # Shape: (n_cluster_patches, z_dim)
 
-                if cluster_patches.size(0) == 0:  # If no patches in this cluster
-                    continue  # Skip this cluster
+                if cluster_patches.size(0) == 0:
+                    continue
 
-                # Apply attention within each region
                 attention_weights = F.softmax(self.region_attention(cluster_patches), dim=0)
                 region_embedding = torch.sum(attention_weights * cluster_patches, dim=0)  # Shape: (z_dim)
-                region_embeddings.append(self.region_head(region_embedding.unsqueeze(0)))  # Shape: (1, z_dim)
+
+                # Skip BatchNorm1d if there's only one region embedding
+                if region_embedding.size(0) == 1:
+                    region_embeddings.append(region_embedding.unsqueeze(0))  # Shape: (1, z_dim)
+                else:
+                    region_embeddings.append(self.region_head(region_embedding.unsqueeze(0)))  # Shape: (1, z_dim)
 
             if region_embeddings:
                 all_region_embeddings.append(torch.cat(region_embeddings, dim=0))  # Shape: (n_clusters, z_dim)
 
         if len(all_region_embeddings) > 0:
-            # Stack all region embeddings across the batch
             region_embeddings = torch.stack(all_region_embeddings, dim=0)  # Shape: (batch_size, n_clusters, z_dim)
         else:
             raise ValueError("No regions were found. Check your clustering or input data.")
 
-        # Ensure that region_embeddings has at least 2 dimensions for BatchNorm
         if region_embeddings.dim() == 2:
             region_embeddings = region_embeddings.unsqueeze(1)
 
-        # Attention pooling across regions within each batch item
         region_attention_weights = F.softmax(self.slide_attention(region_embeddings), dim=1)  # Shape: (batch_size, n_clusters, 1)
         slide_embedding = torch.sum(region_attention_weights * region_embeddings, dim=1)  # Shape: (batch_size, z_dim)
 
-        # Final slide-level prediction
         scores = self.slide_head(slide_embedding)  # Shape: (batch_size, n_out)
         return scores
 

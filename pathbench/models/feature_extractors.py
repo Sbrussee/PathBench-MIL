@@ -14,7 +14,7 @@ from timm.models.vision_transformer import VisionTransformer, _cfg
 from timm.models.layers import PatchEmbed
 from timm.layers import SwiGLUPacked
 from transformers import AutoImageProcessor, ViTModel, AutoModel
-from huggingface_hub import login, hf_hub_download
+from huggingface_hub import hf_hub_download
 import os
 import yaml
 import math
@@ -27,9 +27,6 @@ from operator import mul
 WEIGHTS_DIR = "pretrained_weights"
 os.environ['TORCH_HOME'] = WEIGHTS_DIR
 os.environ['HF_HOME'] = WEIGHTS_DIR
-
-# Get Hugging Face API keys from environment variables
-key = os.getenv('HF_TOKEN')
 
 def get_pretrained_url_vit(key : str):
     """
@@ -420,9 +417,6 @@ class uni(TorchFeatureExtractor):
 
     def __init__(self, tile_px=256):
         super().__init__()
-
-        login(token=key)
-
         local_dir = WEIGHTS_DIR
         model_name = "uni.bin"
         model_temp_name = "pytorch_model.bin"
