@@ -15,19 +15,6 @@ def patch_dropout(bag: torch.Tensor, dropout_rate: float = 0.5) -> torch.Tensor:
     mask = torch.from_numpy(np.random.binomial(1, 1 - dropout_rate, size=bag.shape[0])).bool()
     return bag[mask]
 
-def shuffle_patches(bag: torch.Tensor) -> torch.Tensor:
-    """
-    Randomly shuffles the order of instances within the bag.
-
-    Parameters:
-    bag (torch.Tensor): A 2D tensor of shape (num_instances, num_features) representing a bag of instances.
-
-    Returns:
-    torch.Tensor: A new bag with the instances shuffled.
-    """
-    indices = torch.randperm(bag.size(0))
-    return bag[indices]
-
 def add_gaussian_noise(bag: torch.Tensor, std_dev: float = 0.01) -> torch.Tensor:
     """
     Adds Gaussian noise to each feature in the bag.
@@ -111,31 +98,6 @@ def feature_permutation(bag: torch.Tensor) -> torch.Tensor:
     """
     return bag[torch.randperm(bag.size(0))]
 
-def patch_erasure(bag: torch.Tensor, erasure_rate: float = 0.2) -> torch.Tensor:
-    """
-    Randomly erases (sets to zero) entire instances in the bag based on a given erasure rate.
-
-    Parameters:
-    bag (torch.Tensor): A 2D tensor of shape (num_instances, num_features) representing a bag of instances.
-    erasure_rate (float): The probability of erasing each instance in the bag.
-
-    Returns:
-    torch.Tensor: A new bag with some instances erased (set to zero).
-    """
-    mask = torch.from_numpy(np.random.binomial(1, 1 - erasure_rate, size=(bag.shape[0], 1))).float()
-    return bag * mask
-
-def patchwise_reflection(bag: torch.Tensor) -> torch.Tensor:
-    """
-    Reverses the order of instances within the bag.
-
-    Parameters:
-    bag (torch.Tensor): A 2D tensor of shape (num_instances, num_features) representing a bag of instances.
-
-    Returns:
-    torch.Tensor: A new bag with the instances in reversed order.
-    """
-    return bag.flip(dims=[0])
 
 def patch_mixing(bag: torch.Tensor, mixing_rate: float = 0.5) -> torch.Tensor:
     """
