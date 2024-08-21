@@ -621,10 +621,11 @@ def benchmark(config, project):
 
             qc_list = []
             for qc_method in qc_methods:
-                if qc_method == 'CLAHE-Otsu':
-                    qc_method = getattr(qc, 'Otsu')(with_clahe=True)
                 #Retrieve the QC method by name from the qc module
-                qc_method = getattr(qc, qc_method)()
+                if qc_method == 'Otsu-CLAHE':
+                    qc_method = getattr(qc, 'Otsu')(with_clahe=True)
+                else:
+                    qc_method = getattr(qc, qc_method)()
                 qc_list.append(qc_method)
 
             logging.info(f"QC methods: {qc_list}")
@@ -634,10 +635,10 @@ def benchmark(config, project):
             all_data.extract_tiles(enable_downsample=False,
                                     save_tiles=False,
                                     qc=qc_list,
-                                    grayspace_fraction = qc_filters['grayspace_fraction'],
-                                    whitespace_fraction = qc_filters['whitespace_fraction'],
-                                    grayspace_threshold = qc_filters['grayspace_threshold'],
-                                    whitespace_threshold = qc_filters['whitespace_threshold'],
+                                    grayspace_fraction = float(config['experiment']['qc_filters']['grayspace_fraction']),
+                                    whitespace_fraction = float(config['experiment']['qc_filters']['whitespace_fraction']),
+                                    grayspace_threshold = float(config['experiment']['qc_filters']['grayspace_threshold']),
+                                    whitespace_threshold = int(config['experiment']['qc_filters']['whitespace_threshold']),
                                     num_threads = config['experiment']['num_workers'])
                                 
             train_set = all_data.filter(filters={'dataset' : 'train'})
@@ -1024,7 +1025,7 @@ def optimize_parameters(config, project):
             'tile_um': tile_um,
             'normalization': normalization,
             'feature_extraction': feature_extraction,
-            'mil': mil
+            'mil': mil,
             'loss': loss,
             'augmentation': augmentation,
             'activation_function': activation_function
@@ -1053,6 +1054,15 @@ def optimize_parameters(config, project):
 
         qc_list = []
         for qc_method in qc_methods:
+            if qc_method == 'Otsu-CLAHE':
+                qc_method = getattr(qc, 'Otsu')(with_clahe=True)
+            #Retrieve the QC method by name from the qc module
+            else:
+                qc_method = getattr(qc, qc_method)()
+            qc_list.append(qc_method)
+
+        logging.info(f"QC methods: {qc_list}")
+        logging.info(f"QC filter parameters: {qc_filters}")
 
         #Extract tiles with QC for all datasets
         all_data.extract_tiles(enable_downsample=False,
