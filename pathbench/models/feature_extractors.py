@@ -28,6 +28,10 @@ WEIGHTS_DIR = "pretrained_weights"
 os.environ['TORCH_HOME'] = WEIGHTS_DIR
 os.environ['HF_HOME'] = WEIGHTS_DIR
 
+#Free up GPU space
+torch.cuda.empty_cache()
+
+
 def get_pretrained_url_vit(key : str):
     """
     Get the URL for the pretrained weights of the Vision Transformer model

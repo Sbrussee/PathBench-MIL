@@ -34,6 +34,9 @@ def visualize_activations(config : dict, dataset : str,
     """
     #Retrieve features from bags
     dts_ftrs = sf.DatasetFeatures.from_bags(bag_dir)
+
+    #Get slide-level embeddings
+
     #Create slidemap using these features
     slide_map = sf.SlideMap.from_features(dts_ftrs)
     if 'umap' in config['experiment']['visualization'] or 'mosaic' in config['experiment']['visualization']:
@@ -59,7 +62,7 @@ def visualize_activations(config : dict, dataset : str,
             os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations/patch_level_umap_label_{save_string}_{dataset}")
         slide_map.save_plot(
             filename=f"experiments/{config['experiment']['project_name']}/visualizations/patch_level_umap_label_{save_string}_{dataset}",
-            title="Feature UMAP, by label",
+            title="Patch UMAP, by slide label",
             subsample=2000
         )
 
@@ -83,7 +86,7 @@ def visualize_activations(config : dict, dataset : str,
         logging.info("Building mosaic...")
         # Get list of all directories in the tfrecords dir with full path
         try:
-            mosaic = project.generate_mosaic(dts_ftrs)
+            mosaic =  slide_map.build_mosaic()
             mosaic.save(
                 filename=f"experiments/{config['experiment']['project_name']}/visualizations/slide_level_mosaic_{save_string}.png"
             )
