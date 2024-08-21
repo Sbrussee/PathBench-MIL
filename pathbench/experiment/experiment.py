@@ -7,7 +7,6 @@ from ..benchmarking.benchmark import optimize_parameters
 import random
 import shutil
 import logging
-from ..utils.utils import increase_file_limit
 from huggingface_hub import login
 
 def read_config(config_file : str):
@@ -81,9 +80,6 @@ class Experiment():
         # Set environment variables
         os.environ['TORCH_HOME'] = WEIGHTS_DIR
         os.environ['HF_HOME'] = WEIGHTS_DIR
-
-        #Increase open file limit, useful for multiprocessing
-        increase_file_limit(16384)
 
     def run(self):
         if self.config['experiment']['mode'] == 'benchmark':

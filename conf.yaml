@@ -1,19 +1,29 @@
 experiment:
-  project_name: MF_TEST # Name of the project
-  annotation_file: /exports/path-cutane-lymfomen-hpc/siemen/MF_annotations_corrected.csv # Path to the annotation file
+  project_name: Exp1 # Name of the project
+  annotation_file: /path/to/your/annotations # Path to the annotation file
   balancing: category # Balancing can be 'tile', 'slide', 'patient' or 'category'
   split_technique: k-fold # Split technique can be 'k-fold' or 'fixed'
   k: 3 # Number of folds for k-fold cross-validation
   val_fraction: 0.1 # Fraction of the training data to be used for validation
-  epochs: 5 # Number of epochs for training
+  best_epoch_based_on: val_loss # Metric to be used for selecting the best epoch, can be val_loss or any metric in evaluation
+  epochs: 25 # Number of epochs for training
   batch_size: 32 # Batch size for training
   bag_size: 512 # Bag size for MIL models
+  num_workers: 0 # Number of workers for data loading, 0 for no parallelization.
   with_continue: True # If True, the model will continue training from the last checkpoint.
   aggregation_level: slide # Aggregation level can be 'slide' or 'patient'
   task: classification # Task can be 'classification', 'regression' or 'survival'
   mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
-  #custom_loss:  # Can be any loss as specified in utils/losses.py, or None, in which case the default task loss will be used.
-  #custom_metrics: # Can be any list of metrics as specified in utils/metrics.py, or None, in which case the default task metrics will be used.
+
+  qc: # List of quality control methods to be used
+    - GaussianV2
+    - Otsu-CLAHE
+
+  qc_filters: #Tile-level filters for discarding tiles
+    - grayspace_threshold : 0.05 #Pixels below this value (ranged 0-1) are considered gray.
+    - grayspace_fraction: 0.6 # Image tiles with grayspace above this fraction are discarded.
+    - whitespace_threshold: 230 #Pixel intensities (0-255) above this value are considered white.
+    - whitespace_fraction: 1.0 # Image tiles with whitespace above this fraction are discarded.
 
   evaluation: # Evaluation metrics to be used
     - balanced_accuracy
@@ -33,16 +43,16 @@ optimization: # Optimization parameters
 
 
 datasets: # List of datasets to be used
-  - name: int_MF # Name of the dataset
-    slide_path: ../../../Thom_Doeleman/CLAM_train_cropped # Path to the slide data
-    tfrecord_path: int_MF/tfrecrods # Path to save tfrecords
-    tile_path: int_MF/tiles # Path to save tiles
+  - name: training1 # Name of the dataset
+    slide_path: path/to/your/slides # Path to the slide data
+    tfrecord_path: path/to/your/tfrecords # Path to save tfrecords
+    tile_path: path/to/save/tiles # Path to save tiles
     used_for: training # Whether the dataset is used for training or testing
 
-  - name: ext_MF
-    slide_path: ../../../Thom_Doeleman/CLAM_validate_cropped
-    tfrecord_path: ext_MF/tfrecrods
-    tile_path: ext_MF/tiles
+  - name: testing1
+    slide_path: path/to/your/slides
+    tfrecord_path: path/to/your/tfrecords
+    tile_path: path/to/save/tiles
     used_for: testing
 
 benchmark_parameters:
@@ -53,19 +63,28 @@ benchmark_parameters:
   normalization: # Normalization methods, can be 'macenko', 'reinhard' or 'cyclegan'
     - macenko
     - reinhard
-  feature_extraction: # Feature extraction methods
+  feature_extraction: # Feature extraction methods, as specified in feature_extractors.py
     - resnet50_imagenet
     - CTransPath
     - RetCCL
     - virchow
     - uni
 
-  mil: # MIL models
+  mil: # MIL models, as specified in aggregators.py
     - clam_mil
     - dsmil
     - varmil
     - attention_mil
 
+  loss: # Loss functions, as specified in losses.py
+    - CrossEntropyLoss
 
-weights_dir: /exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/pretrained_weights # Path to pretrained weights and/or where to save retrieved weights
+  augmentation: # MIL-friendly augmentations, as specified in augmentations.py
+    - patch_mixing
+
+  activation_function: # activation function for the MIL encoder, supports any pytorch.nn activation function.
+    - ReLU
+
+
+weights_dir: /path/to/save/weights # Path to pretrained weights and/or where to save retrieved weights
 hf_key: YOUR_HUGGINGFACE_TOKEN # Token for Hugging Face model hub to access gated models, if you do not have one, just set to None

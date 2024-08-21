@@ -31,6 +31,8 @@ from slideflow.stats.metrics import ClassifierMetrics
 
 from slideflow.mil import eval_mil, train_mil, mil_config
 
+from slideflow.slide import qc
+
 import slideflow as sf
 
 from ..models.feature_extractors import *
@@ -530,9 +532,6 @@ def find_and_apply_best_model(config : dict, val_df_agg : pd.DataFrame, test_df_
             best_test_model_config = None
 
     bags = test_df['weights'].iloc[0]  # Get the bags directory
-    logging.info("BEST TEST MODEL CONFIG:")
-    logging.info(best_test_model_dict)
-    logging.info(f"BAGS DIRECTORY: {test_df['bag_dir'].iloc[0]}")
 
     # Run the best model (on the test set)
     run_best_model(config, 'test', test, test_df['bag_dir'].iloc[0], best_test_model_config, target, best_test_weights)
@@ -616,10 +615,30 @@ def benchmark(config, project):
                                     )
             
             logging.info("Extracting tiles...")
+
+            qc_methods = config['experiment']['qc']
+            qc_filters = config['experiment']['qc_filters']
+
+            qc_list = []
+            for qc_method in qc_methods:
+                if qc_method == 'CLAHE-Otsu':
+                    qc_method = getattr(qc, 'Otsu')(with_clahe=True)
+                #Retrieve the QC method by name from the qc module
+                qc_method = getattr(qc, qc_method)()
+                qc_list.append(qc_method)
+
+            logging.info(f"QC methods: {qc_list}")
+            logging.info(f"QC filter parameters: {qc_filters}")
+
             #Extract tiles with QC for all datasets
             all_data.extract_tiles(enable_downsample=False,
                                     save_tiles=False,
-                                    qc="both")
+                                    qc=qc_list,
+                                    grayspace_fraction = qc_filters['grayspace_fraction'],
+                                    whitespace_fraction = qc_filters['whitespace_fraction'],
+                                    grayspace_threshold = qc_filters['grayspace_threshold'],
+                                    whitespace_threshold = qc_filters['whitespace_threshold'],
+                                    num_threads = config['experiment']['num_workers'])
                                 
             train_set = all_data.filter(filters={'dataset' : 'train'})
 
@@ -632,7 +651,7 @@ def benchmark(config, project):
             splits = split_datasets(config, project, splits_file, target, project_directory, train_set)
 
             save_string = "_".join([f"{value}" for value in combination_dict.values()])
-            string_without_mil = "_".join([f"{value}" for key, value in combination_dict.items() if key != 'mil'])
+            string_without_mil = "_".join([f"{value}" for key, value in combination_dict.items() if key != 'mil' and key != 'loss' and key != 'augmentation' and key != 'activation_function'])
             
             logging.debug(f"Save string: {save_string}") 
             #Run with current parameters
@@ -665,7 +684,10 @@ def benchmark(config, project):
                     val_dataset=val,
                     bags=bags,
                     exp_label=f"{save_string}_{index}",
-                    pb_config=config
+                    pb_config=config,
+                    loss = combination_dict['loss'],
+                    augmentation = combination_dict['augmentation'],
+                    activation_function = combination_dict['activation_function']
                 )
                 #Get current newest MIL model number
                 number = get_highest_numbered_filename(f"experiments/{config['experiment']['project_name']}/mil/")
@@ -699,7 +721,8 @@ def benchmark(config, project):
                     bags=bags,
                     config=mil_conf,
                     outdir=f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}",
-                    pb_config=config
+                    pb_config=config,
+                    activation_function = combination_dict['activation_function']
                 )   
                 if combination_dict['mil'].lower() in ['clam_sb', 'clam_mb', 'attention_mil', 'mil_fc', 'mil_fc_mc', 'transmil', 'bistro.transformer']:
                     model_string = combination_dict['mil'].lower()
@@ -981,18 +1004,20 @@ def optimize_parameters(config, project):
         # Load hyperparameters from the config file
         epochs = trial.suggest_int('epochs', config['experiment']['epochs'], config['experiment']['epochs'])
         batch_size = trial.suggest_int('batch_size', config['experiment']['batch_size'], config['experiment']['batch_size'])
-        balancing = trial.suggest_categorical('balancing', [config['experiment']['balancing']])
+        z_dim = trial.suggest_int('z_dim', config['experiment']['z_dim'], config['experiment']['z_dim'])
         tile_px = trial.suggest_categorical('tile_px', config['benchmark_parameters']['tile_px'])
         tile_um = trial.suggest_categorical('tile_um', config['benchmark_parameters']['tile_um'])
         normalization = trial.suggest_categorical('normalization', config['benchmark_parameters']['normalization'])
         feature_extraction = trial.suggest_categorical('feature_extraction', config['benchmark_parameters']['feature_extraction'])
         mil = trial.suggest_categorical('mil', config['benchmark_parameters']['mil'])
+        loss = trial.suggest_categorical('loss', config['benchmark_parameters']['loss'])
+        augmentation = trial.suggest_categorical('augmentation', config['benchmark_parameters']['augmentation'])
+        activation_function = trial.suggest_categorical('activation_function', config['benchmark_parameters']['activation_function'])
         logging.info(f"Using suggested hyperparameters: epochs={epochs}, batch_size={batch_size}, balancing={balancing}, tile_px={tile_px}, tile_um={tile_um}, normalization={normalization}, feature_extraction={feature_extraction}, mil={mil}")
 
         # Update config with suggested hyperparameters
         config['experiment']['epochs'] = epochs
         config['experiment']['batch_size'] = batch_size
-        config['experiment']['balancing'] = balancing
 
         combination_dict = {
             'tile_px': tile_px,
@@ -1000,6 +1025,9 @@ def optimize_parameters(config, project):
             'normalization': normalization,
             'feature_extraction': feature_extraction,
             'mil': mil
+            'loss': loss,
+            'augmentation': augmentation,
+            'activation_function': activation_function
         }
         #try:
             #Get all column values
@@ -1019,10 +1047,16 @@ def optimize_parameters(config, project):
                                 )
         
         logging.info("Extracting tiles...")
+
+        qc_methods = config['experiment']['qc']
+        qc_filters = config['experiment']['qc_filters']
+
+        qc_list = []
+        for qc_method in qc_methods:
+
         #Extract tiles with QC for all datasets
         all_data.extract_tiles(enable_downsample=False,
-                                save_tiles=False,
-                                qc="both")
+                               save_tiles=False, qc="both")
                             
         train_set = all_data.filter(filters={'dataset' : 'train'})
 
@@ -1035,7 +1069,7 @@ def optimize_parameters(config, project):
         splits = split_datasets(config, project, splits_file, target, project_directory, train_set)
 
         save_string = "_".join([f"{value}" for value in combination_dict.values()])
-        string_without_mil = "_".join([f"{value}" for key, value in combination_dict.items() if key != 'mil'])
+        string_without_mil = "_".join([f"{value}" for key, value in combination_dict.items() if key != 'mil' and key != 'loss' and key != 'augmentation' and key != 'activation_function'])
         
         logging.debug(f"Save string: {save_string}") 
         #Run with current parameters

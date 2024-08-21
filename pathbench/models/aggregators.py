@@ -10,87 +10,25 @@ from torch import nn
 import torch.nn.functional as F
 from sklearn.cluster import KMeans
 
+def get_activation_function(activation_name: str):
+    """Return the corresponding activation function from a string name."""
+    try:
+        return getattr(nn, activation_name)()
+    except AttributeError:
+        raise ValueError(f"Unsupported activation function: {activation_name}")
 
-class simple_linear_mil(nn.Module):
-    """
-    Simple Multiple instance learning model with linear layers, useful for linear evaluation.
-    
-    Parameters
-    ----------
-    n_feats : int
-        Number of input features
-    n_out : int
-        Number of output classes
-    z_dim : int
-        Dimensionality of the hidden layer
-    dropout_p : float
-        Dropout probability
-    
-    Attributes
-    ----------
-    encoder : nn.Sequential
-        Encoder network
-    head : nn.Sequential
-        Prediction head network
-
-    Methods
-    -------
-    forward(bags)
-        Forward pass through the model
-    """
-
-
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1) -> None:
-        super().__init__()
-        self.encoder = nn.Linear(n_feats, n_out)
-        self.head = nn.Linear(n_out, n_out)
-
-    def forward(self, bags):
-        embeddings = self.encoder(bags)
-        pooled_embeddings = embeddings.mean(dim=1)
-        scores = self.head(pooled_embeddings)
-        return scores
-        
-
-class linear_mil(nn.Module):
-    """
-    Multiple instance learning model with linear layers.
-    
-    Parameters
-    ----------
-    n_feats : int
-        Number of input features
-    n_out : int
-        Number of output classes
-    z_dim : int
-        Dimensionality of the hidden layer
-    dropout_p : float
-        Dropout probability
-    
-    Attributes
-    ----------
-    encoder : nn.Sequential
-        Encoder network
-    head : nn.Sequential
-        Prediction head network
-
-    Methods
-    -------
-    forward(bags)
-        Forward pass through the model
-    """
-
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1) -> None:
+class linear_evaluation_mil(nn.Module):
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, activation_function='ReLU') -> None:
         super().__init__()
         self.encoder = nn.Sequential(
-            nn.Linear(n_feats, z_dim)
+            nn.Linear(n_feats, n_out),
+            get_activation_function(activation_function)
         )
-        self.head = nn.Sequential(
-            nn.Flatten(),
-            nn.BatchNorm1d(z_dim),
-            nn.Dropout(dropout_p),
-            nn.Linear(z_dim, n_out)
-        )
+        self.head = nn.Linear(n_out, n_out)
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        initialize_weights(self)
 
     def forward(self, bags):
         embeddings = self.encoder(bags)
@@ -98,39 +36,13 @@ class linear_mil(nn.Module):
         scores = self.head(pooled_embeddings)
         return scores
 
-class mean_mil(nn.Module):
-    """
-    Multiple instance learning model with mean pooling.
 
-    Parameters
-    ----------
-    n_feats : int
-        Number of input features
-    n_out : int
-        Number of output classes
-    z_dim : int
-        Dimensionality of the hidden layer
-    dropout_p : float
-        Dropout probability
-    
-    Attributes
-    ----------
-    encoder : nn.Sequential
-        Encoder network
-    head : nn.Sequential
-        Prediction head network
-
-    Methods
-    -------
-    forward(bags)
-        Forward pass through the model
-    
-    """
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1) -> None:
+class linear_mil(nn.Module):
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, activation_function='ReLU') -> None:
         super().__init__()
         self.encoder = nn.Sequential(
             nn.Linear(n_feats, z_dim),
-            nn.ReLU()
+            get_activation_function(activation_function)
         )
         self.head = nn.Sequential(
             nn.Flatten(),
@@ -138,6 +50,35 @@ class mean_mil(nn.Module):
             nn.Dropout(dropout_p),
             nn.Linear(z_dim, n_out)
         )
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        initialize_weights(self)
+
+    def forward(self, bags):
+        embeddings = self.encoder(bags)
+        pooled_embeddings = embeddings.mean(dim=1)
+        scores = self.head(pooled_embeddings)
+        return scores
+
+
+class mean_mil(nn.Module):
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, activation_function='ReLU') -> None:
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(n_feats, z_dim),
+            get_activation_function(activation_function)
+        )
+        self.head = nn.Sequential(
+            nn.Flatten(),
+            nn.BatchNorm1d(z_dim),
+            nn.Dropout(dropout_p),
+            nn.Linear(z_dim, n_out)
+        )
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        initialize_weights(self)
 
     def forward(self, bags):
         embeddings = self.encoder(bags)
@@ -147,38 +88,11 @@ class mean_mil(nn.Module):
 
 
 class max_mil(nn.Module):
-    """
-    Multiple instance learning model with max pooling.
-    
-        Parameters
-    ----------
-    n_feats : int
-        Number of input features
-    n_out : int
-        Number of output classes
-    z_dim : int
-        Dimensionality of the hidden layer
-    dropout_p : float
-        Dropout probability
-    
-    Attributes
-    ----------
-    encoder : nn.Sequential
-        Encoder network
-    head : nn.Sequential
-        Prediction head network
-
-    Methods
-    -------
-    forward(bags)
-        Forward pass through the model
-    """
-
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1) -> None:
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, activation_function='ReLU') -> None:
         super().__init__()
         self.encoder = nn.Sequential(
             nn.Linear(n_feats, z_dim),
-            nn.ReLU()
+            get_activation_function(activation_function)
         )
         self.head = nn.Sequential(
             nn.Flatten(),
@@ -186,6 +100,10 @@ class max_mil(nn.Module):
             nn.Dropout(dropout_p),
             nn.Linear(z_dim, n_out)
         )
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        initialize_weights(self)
 
     def forward(self, bags):
         embeddings = self.encoder(bags)
@@ -193,44 +111,13 @@ class max_mil(nn.Module):
         scores = self.head(pooled_embeddings)
         return scores
 
+
 class lse_mil(nn.Module):
-    """
-    Multiple instance learning model with log-sum-exp pooling.
-
-    Parameters
-    ----------
-    n_feats : int
-        Number of input features
-    n_out : int
-        Number of output classes
-    z_dim : int
-        Dimensionality of the hidden layer
-    dropout_p : float
-        Dropout probability
-    r : float
-        scaling factor for log-sum-exp pooling
-    
-    Attributes
-    ----------
-    encoder : nn.Sequential
-        Encoder network
-    head : nn.Sequential
-        Prediction head network
-    r : float
-        scaling factor for log-sum-exp pooling
-
-    Methods
-    -------
-    forward(bags)
-        Forward pass through the model
-    
-    """
-
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, r: float = 1.0) -> None:
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, r: float = 1.0, activation_function='ReLU') -> None:
         super().__init__()
         self.encoder = nn.Sequential(
             nn.Linear(n_feats, z_dim),
-            nn.ReLU()
+            get_activation_function(activation_function)
         )
         self.head = nn.Sequential(
             nn.Flatten(),
@@ -239,6 +126,10 @@ class lse_mil(nn.Module):
             nn.Linear(z_dim, n_out)
         )
         self.r = r
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        initialize_weights(self)
 
     def forward(self, bags):
         embeddings = self.encoder(bags)
@@ -248,46 +139,13 @@ class lse_mil(nn.Module):
 
 
 class lstm_mil(nn.Module):
-    """
-    Multiple instance learning model with LSTM-based pooling.
+    use_lens = True
 
-    Parameters
-    ----------
-    n_feats : int
-        Number of input features
-    n_out : int
-        Number of output classes
-    z_dim : int
-        Dimensionality of the hidden layer
-    lstm_dim : int
-        Dimensionality of the LSTM hidden state
-    dropout_p : float
-        Dropout probability
-    
-    Attributes
-    ----------
-    encoder : nn.Sequential
-        Encoder network
-    lstm : nn.LSTM
-        LSTM network
-    head : nn.Sequential
-        Prediction head network
-    
-
-    Methods
-    -------
-    forward(bags)
-        Forward pass through the model
-    
-    """
-
-    use_lens=True
-
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, lstm_dim: int = 128, dropout_p: float = 0.1) -> None:
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, lstm_dim: int = 128, dropout_p: float = 0.1, activation_function='ReLU') -> None:
         super().__init__()
         self.encoder = nn.Sequential(
             nn.Linear(n_feats, z_dim),
-            nn.ReLU()
+            get_activation_function(activation_function)
         )
         self.lstm = nn.LSTM(z_dim, lstm_dim, batch_first=True)
         self.head = nn.Sequential(
@@ -295,65 +153,44 @@ class lstm_mil(nn.Module):
             nn.Dropout(dropout_p),
             nn.Linear(lstm_dim, n_out)
         )
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        initialize_weights(self)
 
     def forward(self, bags, lens):
-        embeddings = self.encoder(bags)  # Shape: (batch_size, num_instances, z_dim)
-        lens_cpu = lens.cpu().to(dtype=torch.int64)  # Ensure lengths are on CPU and of type int64 for packing
+        embeddings = self.encoder(bags)
+        lens_cpu = lens.cpu().to(dtype=torch.int64)
         packed_embeddings = nn.utils.rnn.pack_padded_sequence(embeddings, lens_cpu, batch_first=True, enforce_sorted=False)
         packed_output, (hidden, cell) = self.lstm(packed_embeddings)
         lstm_output, _ = nn.utils.rnn.pad_packed_sequence(packed_output, batch_first=True)
-        # Use the last hidden state of the LSTM as the pooled representation
         pooled_embeddings = hidden[-1]
         scores = self.head(pooled_embeddings)
         return scores
 
-class deepset_mil(nn.Module):
-    """Multiple instance learning model with DeepSet-based pooling.
-    
-    Parameters
-    ----------
-    n_feats : int
-        Number of input features
-    n_out : int
-        Number of output classes
-    z_dim : int
-        Dimensionality of the hidden layer
-    dropout_p : float
-        Dropout probability
-    
-    Attributes
-    ----------
-    encoder : nn.Sequential
-        Encoder network
-    deepset_phi : nn.Sequential
-        DeepSet phi network
-    deepset_rho : nn.Sequential
-        DeepSet rho network
-    
-    Methods
-    -------
-    forward(bags)
-        Forward pass through the model
-    
-    """
 
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1) -> None:
+class deepset_mil(nn.Module):
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, activation_function='ReLU') -> None:
         super().__init__()
         self.encoder = nn.Sequential(
             nn.Linear(n_feats, z_dim),
-            nn.ReLU()
+            get_activation_function(activation_function)
         )
         self.deepset_phi = nn.Sequential(
             nn.Linear(z_dim, z_dim),
-            nn.ReLU(),
+            get_activation_function(activation_function),
             nn.Linear(z_dim, z_dim)
         )
         self.deepset_rho = nn.Sequential(
             nn.Linear(z_dim, z_dim),
-            nn.ReLU(),
+            get_activation_function(activation_function),
             nn.Dropout(dropout_p),
             nn.Linear(z_dim, n_out)
         )
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        initialize_weights(self)
 
     def forward(self, bags):
         embeddings = self.encoder(bags)
@@ -364,104 +201,37 @@ class deepset_mil(nn.Module):
 
 
 class distributionpooling_mil(nn.Module):
-    """
-    Multiple instance learning model with distribution pooling (mean and variance).
-    
-    Parameters
-    ----------
-    n_feats : int
-        Number of input features
-    n_out : int
-        Number of output classes
-    z_dim : int
-        Dimensionality of the hidden layer
-    dropout_p : float
-        Dropout probability
-    
-    Attributes
-    ----------
-    encoder : nn.Sequential
-        Encoder network
-    head : nn.Sequential
-        Prediction head network
-    
-    Methods
-    -------
-    forward(bags)
-        Forward pass through the model
-    """
-
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1) -> None:
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, activation_function='ReLU') -> None:
         super().__init__()
-        # Encoder to transform raw features into a higher-dimensional space
         self.encoder = nn.Sequential(
             nn.Linear(n_feats, z_dim),
-            nn.ReLU()
+            get_activation_function(activation_function)
         )
-        # Head network to produce final classification scores
         self.head = nn.Sequential(
-            nn.BatchNorm1d(z_dim * 2),  # Since we'll concatenate mean and variance
+            nn.BatchNorm1d(z_dim * 2),
             nn.Dropout(dropout_p),
             nn.Linear(z_dim * 2, n_out)
         )
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        initialize_weights(self)
 
     def forward(self, bags):
-        # Encode each instance in the bag
         embeddings = self.encoder(bags)
-        # Calculate the mean and variance of the embeddings
         mean_embeddings = embeddings.mean(dim=1)
         variance_embeddings = embeddings.var(dim=1)
-        # Concatenate the mean and variance
         pooled_embeddings = torch.cat([mean_embeddings, variance_embeddings], dim=1)
-        # Pass through the head network to get final scores
         scores = self.head(pooled_embeddings)
         return scores
 
+
 class dsmil(nn.Module):
-    """
-    Dual-Stream Multiple Instance Learning model with attention mechanism and Conv1D bag-level classifier.
-    DSMIL first computes instance-level embeddings and scores, then aggregates them into bag-level embeddings,
-    based on an attention mechanism. Finally, a Conv1D classifier is used to predict the bag-level label.
-
-    Parameters
-    ----------
-    n_feats : int
-        Number of input features
-    n_out : int
-        Number of output classes
-    z_dim : int
-        Dimensionality of the hidden layer
-    dropout_p : float
-        Dropout probability
-    
-    Attributes
-    ----------
-    instance_encoder : nn.Sequential
-        Instance encoder network
-    instance_classifier : nn.Linear
-        Instance classifier network
-    
-    attention : nn.Sequential
-        Attention network
-    conv1d : nn.Conv1d
-        Conv1D network
-    bag_classifier : nn.Sequential
-        Bag-level classifier network
-    
-    Methods
-    -------
-    forward(bags, return_attention)
-        Forward pass through the model
-    
-    calculate_attention(bags, lens, apply_softmax)
-        Calculate attention scores for the given bags
-    """
-
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1) -> None:
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, activation_function='ReLU') -> None:
         super().__init__()
         self.instance_encoder = nn.Sequential(
             nn.Linear(n_feats, z_dim),
-            nn.ReLU()
+            get_activation_function(activation_function)
         )
         self.instance_classifier = nn.Linear(z_dim, 1)
         self.attention = nn.Sequential(
@@ -475,25 +245,21 @@ class dsmil(nn.Module):
             nn.Dropout(dropout_p),
             nn.Linear(z_dim, n_out)
         )
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        initialize_weights(self)
 
     def forward(self, bags, return_attention=False):
         batch_size, num_instances, _ = bags.size()
-
-        # Instance-level encoding and classification
         instance_features = self.instance_encoder(bags.view(-1, bags.size(-1)))
         instance_scores = self.instance_classifier(instance_features).view(batch_size, num_instances)
-
-        # Max pooling stream
         max_score, max_idx = instance_scores.max(dim=1)
         critical_instance = bags[torch.arange(batch_size), max_idx]
-
-        # Attention mechanism
         instance_embeddings = instance_features.view(batch_size, num_instances, -1)
         critical_embeddings = instance_embeddings[torch.arange(batch_size), max_idx]
         attention_weights = F.softmax(self.attention(instance_embeddings - critical_embeddings.unsqueeze(1)), dim=1)
         bag_embeddings = (attention_weights * instance_embeddings).sum(dim=1)
-
-        # Bag-level classification
         bag_embeddings = bag_embeddings.unsqueeze(-1)
         conv_out = self.conv1d(bag_embeddings).squeeze(-1)
         scores = self.bag_classifier(conv_out)
@@ -503,64 +269,25 @@ class dsmil(nn.Module):
         else:
             return scores
 
-
     def calculate_attention(self, bags, lens=None, apply_softmax=None):
         batch_size, num_instances, _ = bags.size()
-        
-        # Instance-level encoding
         instance_features = self.instance_encoder(bags.view(-1, bags.size(-1)))
         instance_embeddings = instance_features.view(batch_size, num_instances, -1)
-
-        # Get critical instance
         instance_scores = self.instance_classifier(instance_features).view(batch_size, num_instances)
         max_score, max_idx = instance_scores.max(dim=1)
         critical_embeddings = instance_embeddings[torch.arange(batch_size), max_idx]
-        
-        # Compute attention scores
         attention_scores = self.attention(instance_embeddings - critical_embeddings.unsqueeze(1))
         if apply_softmax:
             attention_scores = F.softmax(attention_scores, dim=1)
-        
         return attention_scores
 
 
 class varmil(nn.Module):
-    """Multiple instance learning model with attention-based mean and variance pooling.
-    
-    Parameters
-    ----------
-    n_feats : int
-        Number of input features
-    n_out : int
-        Number of output classes
-    z_dim : int
-        Dimensionality of the hidden layer
-    dropout_p : float
-        Dropout probability
-    
-    Attributes
-    ----------
-    encoder : nn.Sequential
-        Encoder network
-    attention : nn.Sequential
-        Attention network
-    head : nn.Sequential
-        Prediction head network
-    
-    Methods
-    -------
-    forward(bags, return_attention)
-        Forward pass through the model
-        
-    calculate_attention(bags, lens, apply_softmax)
-        Calculate attention scores for the given bags
-    """
-
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1) -> None:
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, activation_function='ReLU') -> None:
         super().__init__()
         self.encoder = nn.Sequential(
             nn.Linear(n_feats, z_dim),
-            nn.ReLU()
+            get_activation_function(activation_function)
         )
         self.attention = nn.Sequential(
             nn.Linear(z_dim, z_dim),
@@ -573,6 +300,10 @@ class varmil(nn.Module):
             nn.Dropout(dropout_p),
             nn.Linear(z_dim * 2, n_out)
         )
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        initialize_weights(self)
 
     def forward(self, bags, return_attention=False):
         embeddings = self.encoder(bags)
@@ -593,136 +324,58 @@ class varmil(nn.Module):
             attention_scores = F.softmax(attention_scores, dim=1)
         return attention_scores
 
-class cluster_pooling_mil(nn.Module):
-    """
-    Multiple instance learning model with cluster-based pooling. It first clusters patches into regions, pools each region using mean pooling
-    and then aggregates region embeddings into the slide-level label using a linear classifier.
 
-    Parameters
-    ----------
-    n_feats : int
-        Number of input features
-    n_out : int
-        Number of output classes
-    z_dim : int
-        Dimensionality of the hidden layer
-    n_clusters : int
-        Number of clusters
-    dropout_p : float
-        Dropout probability
-    
-    Attributes
-    ----------
-    encoder : nn.Sequential
-        Encoder network
-    kmeans : KMeans
-        KMeans clustering model
-    head : nn.Sequential
-        Prediction head network
-    
-    Methods
-    -------
-    forward(bags)
-        Forward pass through the model
-    """
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, n_clusters: int = 4, dropout_p: float = 0.1) -> None:
+class cluster_pooling_mil(nn.Module):
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, n_clusters: int = 4, dropout_p: float = 0.1, activation_function='ReLU') -> None:
         super().__init__()
         self.encoder = nn.Sequential(
             nn.Linear(n_feats, z_dim),
-            nn.ReLU()
+            get_activation_function(activation_function)
         )
         self.kmeans = KMeans(n_clusters=n_clusters)
         self.head = nn.Sequential(
-            nn.BatchNorm1d(z_dim * n_clusters),  # Adjusted to account for the number of clusters
+            nn.BatchNorm1d(z_dim * n_clusters),
             nn.Dropout(dropout_p),
             nn.Linear(z_dim * n_clusters, n_out)
         )
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        initialize_weights(self)
 
     def forward(self, bags):
         batch_size, n_patches, n_feats = bags.shape
         pooled_embeddings = []
 
-        # Process each batch element independently
         for i in range(batch_size):
-            # Encode each patch in the current batch element
-            embeddings = self.encoder(bags[i])  # Shape: (n_patches, z_dim)
-
-            # Determine the number of clusters based on the number of patches
+            embeddings = self.encoder(bags[i])
             n_clusters = min(self.kmeans.n_clusters, n_patches)
-            
             if n_clusters < 2:
-                # If we have fewer than 2 patches, use the mean of all embeddings
                 cluster_embedding = embeddings.mean(dim=0)
                 pooled_embeddings.append(cluster_embedding)
                 continue
-            
-            # Perform KMeans clustering for the current batch element
             kmeans = KMeans(n_clusters=n_clusters)
             clusters = kmeans.fit_predict(embeddings.detach().cpu().numpy())
-
-            # Pool embeddings within each cluster
             cluster_embeddings = []
             for j in range(n_clusters):
                 cluster_indices = torch.tensor(clusters == j, dtype=torch.bool, device=embeddings.device)
                 if cluster_indices.sum() > 0:
                     cluster_embedding = embeddings[cluster_indices].mean(dim=0)
                 else:
-                    # Handle the case where a cluster has no elements
                     cluster_embedding = torch.zeros(embeddings.size(-1), device=embeddings.device)
                 cluster_embeddings.append(cluster_embedding)
-            
-            # Concatenate the pooled embeddings for each cluster
             pooled_embeddings.append(torch.cat(cluster_embeddings, dim=0))
-
-        # Stack the pooled embeddings to form a tensor of shape (batch_size, z_dim * n_clusters)
         pooled_embeddings = torch.stack(pooled_embeddings, dim=0)
-        print("Shape of clustered pooled embeddings: ", pooled_embeddings.shape)
-
-        # Pass the pooled embeddings through the prediction head
-        scores = self.head(pooled_embeddings)  # Shape: (batch_size, n_out)
-
+        scores = self.head(pooled_embeddings)
         return scores
 
+
 class gated_attention_mil(nn.Module):
-    """
-    Multiple instance learning model with gated attention mechanism.
-
-    Parameters
-    ----------
-    n_feats : int
-        Number of input features
-    n_out : int
-        Number of output classes
-    z_dim : int
-        Dimensionality of the hidden layer
-    dropout_p : float
-        Dropout probability
-
-    Attributes
-    ----------
-    encoder : nn.Sequential
-        Encoder network
-    attention_V : nn.Sequential
-        Attention network
-    attention_U : nn.Sequential
-        Attention network
-    attention_weights : nn.Linear
-        Attention network
-    head : nn.Sequential
-        Prediction head network
-    
-
-    Methods
-    -------
-    forward(bags)
-        Forward pass through the model
-
-    """
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1) -> None:
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, activation_function='ReLU') -> None:
         super().__init__()
         self.encoder = nn.Sequential(
             nn.Linear(n_feats, z_dim),
-            nn.ReLU()
+            get_activation_function(activation_function)
         )
         self.attention_V = nn.Sequential(
             nn.Linear(z_dim, z_dim),
@@ -738,7 +391,10 @@ class gated_attention_mil(nn.Module):
             nn.Dropout(dropout_p),
             nn.Linear(z_dim, n_out)
         )
+        self._initialize_weights()
 
+    def _initialize_weights(self):
+        initialize_weights(self)
 
     def forward(self, bags):
         embeddings = self.encoder(bags)
@@ -758,45 +414,13 @@ class gated_attention_mil(nn.Module):
             attention_weights = F.softmax(attention_weights, dim=1)
         return attention_weights
 
+
 class topk_mil(nn.Module):
-    """
-    Multiple instance learning model which selects the top k instances based on attention scores and aggregates them using mean pooling.
-
-    Parameters
-    ----------
-    n_feats : int
-        Number of input features
-    n_out : int
-        Number of output classes
-    z_dim : int
-        Dimensionality of the hidden layer
-    k : int
-        Number of top instances to select
-    dropout_p : float
-        Dropout probability
-
-    Attributes
-    ----------
-    encoder : nn.Sequential
-        Encoder network
-    attention : nn.Sequential
-        Attention network
-    head : nn.Sequential
-        Prediction head network
-    k : int
-        Number of top instances to select
-    
-    Methods
-    -------
-    forward(bags)
-        Forward pass through the model
-
-    """
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, k: int = 20, dropout_p: float = 0.1):
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, k: int = 20, dropout_p: float = 0.1, activation_function='ReLU'):
         super().__init__()
         self.encoder = nn.Sequential(
             nn.Linear(n_feats, z_dim),
-            nn.ReLU()
+            get_activation_function(activation_function)
         )
         self.attention = nn.Sequential(
             nn.Linear(z_dim, 1),
@@ -807,31 +431,21 @@ class topk_mil(nn.Module):
             nn.Linear(z_dim, n_out)
         )
         self.k = k
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        initialize_weights(self)
 
     def forward(self, bags):
-        # Assuming `bags` has shape (batch_size, n_patches, n_feats)
         batch_size, n_patches, n_feats = bags.shape
         embeddings = self.encoder(bags.view(-1, n_feats))
         embeddings = embeddings.view(batch_size, n_patches, -1)
-        
-        # Compute attention scores for each instance
         scores = self.attention(embeddings).squeeze(-1)
-        
-        # Adjust k to be no greater than the number of patches
         k = min(self.k, n_patches)
-        
-        # Select top k instances for each item in the batch
         topk_scores, topk_indices = torch.topk(scores, k, dim=1)
-        
-        # Gather top k embeddings for each batch item
         topk_embeddings = torch.gather(embeddings, 1, topk_indices.unsqueeze(-1).expand(-1, -1, embeddings.size(-1)))
-        
-        # Mean pooling over the selected top k instances
         pooled_embeddings = topk_embeddings.mean(dim=1)
-        
-        # Pass the pooled embeddings through the prediction head
         scores = self.head(pooled_embeddings)
-        
         return scores
 
     def calculate_attention(self, bags, lens=None, apply_softmax=None):
@@ -843,49 +457,13 @@ class topk_mil(nn.Module):
             scores = F.softmax(scores, dim=1)
         return scores
 
+
 class hierarchical_mil(nn.Module):
-    """
-    Hierarchical Multiple Instance Learning model with attention mechanism. It first groups consecutive patches into regions,
-    weights instances per region using attention and then aggregates region embeddings into slide embeddings using an attention mechanism.
-    Finally, it predicts the slide-level label using a linear classifier.
-
-    Parameters
-    ----------
-    n_feats : int
-        Number of input features
-    n_out : int
-        Number of output classes
-    z_dim : int
-        Dimensionality of the hidden layer
-    region_size : int
-        Number of patches per region
-    dropout_p : float
-        Dropout probability
-    
-    Attributes
-    ----------
-    encoder : nn.Sequential
-        Encoder network
-    region_attention : nn.Sequential
-        Region attention network
-    region_head : nn.Sequential
-        Region head network
-    slide_attention : nn.Sequential
-        Slide attention network
-    slide_head : nn.Sequential
-        Slide head network
-
-    Methods
-    -------
-    forward(bags)
-        Forward pass through the model
-
-    """
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, region_size: int = 4, dropout_p: float = 0.1):
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, region_size: int = 4, dropout_p: float = 0.1, activation_function='ReLU'):
         super().__init__()
         self.encoder = nn.Sequential(
             nn.Linear(n_feats, z_dim),
-            nn.ReLU()
+            get_activation_function(activation_function)
         )
         self.region_attention = nn.Sequential(
             nn.Linear(z_dim, z_dim),
@@ -908,12 +486,13 @@ class hierarchical_mil(nn.Module):
             nn.Linear(z_dim, n_out)
         )
         self.region_size = region_size
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        initialize_weights(self)
 
     def forward(self, bags):
-        # Split into regions
         batch_size, n_patches, n_feats = bags.shape
-        print(bags)
-        print(bags.shape)
         embeddings = self.encoder(bags.view(-1, n_feats))
         embeddings = embeddings.view(batch_size, n_patches, -1)
         n_regions = n_patches // self.region_size
@@ -926,64 +505,18 @@ class hierarchical_mil(nn.Module):
             region_embeddings.append(self.region_head(region_embedding))
 
         region_embeddings = torch.stack(region_embeddings, dim=1)
-
-        # Attention pooling across regions
         region_attention_weights = F.softmax(self.slide_attention(region_embeddings), dim=1)
         slide_embedding = torch.sum(region_attention_weights * region_embeddings, dim=1)
-
-        # Final slide-level prediction
         scores = self.slide_head(slide_embedding)
         return scores
 
-class hierarchical_cluster_mil(nn.Module):
-    """
-    Inspired by "Cluster-to-Conquer: A Framework for End-to-End
-    Multi-Instance Learning for Whole Slide Image Classification".
-
-    Hierarchical Cluster MIL model with attention mechanism. It first clusters patches into regions, weights instances
-    per region using attention and then aggregates region embeddings into slide embeddings using an attention mechanism.
-    Finally, it predicts the slide-level label using a linear classifier.
-
-    Parameters
-    ----------
-    n_feats : int
-        Number of input features
-    n_out : int
-        Number of output classes
-    z_dim : int
-        Dimensionality of the hidden layer
-    n_clusters : int
-        Number of clusters
-    dropout_p : float
-        Dropout probability
-
-    Attributes
-    ----------
-    encoder : nn.Sequential
-        Encoder network
-    kmeans : KMeans
-        KMeans clustering model
-    region_attention : nn.Sequential
-        Region attention network
-    region_head : nn.Sequential
-        Region head network
-    slide_attention : nn.Sequential
-        Slide attention network
-    slide_head : nn.Sequential
-        Slide head network
-
-    Methods
-    -------
-    forward(bags)
-        Forward pass through the model
-    """
 
 class hierarchical_cluster_mil(nn.Module):
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, n_clusters: int = 10, dropout_p: float = 0.1):
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, n_clusters: int = 10, dropout_p: float = 0.1, activation_function='ReLU'):
         super().__init__()
         self.encoder = nn.Sequential(
             nn.Linear(n_feats, z_dim),
-            nn.ReLU()
+            get_activation_function(activation_function)
         )
         self.kmeans = KMeans(n_clusters=n_clusters)
         self.region_attention = nn.Sequential(
@@ -1005,152 +538,95 @@ class hierarchical_cluster_mil(nn.Module):
             nn.Dropout(dropout_p),
             nn.Linear(z_dim, n_out)
         )
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        initialize_weights(self)
 
     def forward(self, bags):
         batch_size, n_patches, n_feats = bags.shape
         all_region_embeddings = []
 
         for i in range(batch_size):
-            embeddings = self.encoder(bags[i])  # Shape: (n_patches, z_dim)
-
+            embeddings = self.encoder(bags[i])
             n_clusters = min(self.kmeans.n_clusters, n_patches)
             if n_clusters < 2:
-                region_embeddings = embeddings.mean(dim=0, keepdim=True).unsqueeze(0)  # Shape: (1, z_dim)
+                region_embeddings = embeddings.mean(dim=0, keepdim=True).unsqueeze(0)
                 all_region_embeddings.append(region_embeddings)
                 continue
-
             clusters = self.kmeans.fit_predict(embeddings.detach().cpu().numpy())
             region_embeddings = []
 
             for j in range(n_clusters):
                 cluster_mask = torch.tensor(clusters == j, dtype=torch.bool, device=embeddings.device)
-                cluster_patches = embeddings[cluster_mask]  # Shape: (n_cluster_patches, z_dim)
+                cluster_patches = embeddings[cluster_mask]
 
                 if cluster_patches.size(0) == 0:
                     continue
 
                 attention_weights = F.softmax(self.region_attention(cluster_patches), dim=0)
-                region_embedding = torch.sum(attention_weights * cluster_patches, dim=0)  # Shape: (z_dim)
+                region_embedding = torch.sum(attention_weights * cluster_patches, dim=0)
 
-                # Skip BatchNorm1d if there's only one region embedding
                 if region_embedding.size(0) == 1:
-                    region_embeddings.append(region_embedding.unsqueeze(0))  # Shape: (1, z_dim)
+                    region_embeddings.append(region_embedding.unsqueeze(0))
                 else:
-                    region_embeddings.append(self.region_head(region_embedding.unsqueeze(0)))  # Shape: (1, z_dim)
+                    region_embeddings.append(self.region_head(region_embedding.unsqueeze(0)))
 
             if region_embeddings:
-                all_region_embeddings.append(torch.cat(region_embeddings, dim=0))  # Shape: (n_clusters, z_dim)
+                all_region_embeddings.append(torch.cat(region_embeddings, dim=0))
 
         if len(all_region_embeddings) > 0:
-            region_embeddings = torch.stack(all_region_embeddings, dim=0)  # Shape: (batch_size, n_clusters, z_dim)
+            region_embeddings = torch.stack(all_region_embeddings, dim=0)
         else:
             raise ValueError("No regions were found. Check your clustering or input data.")
 
         if region_embeddings.dim() == 2:
             region_embeddings = region_embeddings.unsqueeze(1)
 
-        region_attention_weights = F.softmax(self.slide_attention(region_embeddings), dim=1)  # Shape: (batch_size, n_clusters, 1)
-        slide_embedding = torch.sum(region_attention_weights * region_embeddings, dim=1)  # Shape: (batch_size, z_dim)
-
-        scores = self.slide_head(slide_embedding)  # Shape: (batch_size, n_out)
+        region_attention_weights = F.softmax(self.slide_attention(region_embeddings), dim=1)
+        slide_embedding = torch.sum(region_attention_weights * region_embeddings, dim=1)
+        scores = self.slide_head(slide_embedding)
         return scores
 
-class weighted_mean_mil(nn.Module):
-    """
-    Multiple instance learning model with weighted mean pooling. Instances are inversely weighted by their variance.
-    This effectively makes the model more robust to noisy instances.
 
-    Parameters
-    ----------
-    n_feats : int
-        Number of input features
-    n_out : int
-        Number of output classes
-    z_dim : int
-        Dimensionality of the hidden layer
-    dropout_p : float
-        Dropout probability
-    
-    Attributes
-    ----------
-    encoder : nn.Sequential
-        Encoder network
-    head : nn.Sequential
-        Prediction head network
-    
-    Methods
-    -------
-    forward(bags)
-        Forward pass through the model
-        
-    """
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1):
+class weighted_mean_mil(nn.Module):
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, activation_function='ReLU'):
         super(weighted_mean_mil, self).__init__()
         self.encoder = nn.Sequential(
             nn.Linear(n_feats, z_dim),
-            nn.ReLU()
+            get_activation_function(activation_function)
         )
         self.head = nn.Sequential(
             nn.BatchNorm1d(z_dim),
             nn.Dropout(dropout_p),
             nn.Linear(z_dim, n_out)
         )
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        initialize_weights(self)
 
     def forward(self, bags):
-        # Assume bags has shape (batch_size, n_patches, n_feats)
         batch_size, n_patches, n_feats = bags.shape
-        
-        # Encode each patch
-        embeddings = self.encoder(bags.view(-1, n_feats))  # Shape: (batch_size * n_patches, z_dim)
-        embeddings = embeddings.view(batch_size, n_patches, -1)  # Reshape to (batch_size, n_patches, z_dim)
-        
-        # Compute variances for each feature across patches in each batch
-        variances = embeddings.var(dim=1, unbiased=False)  # Shape: (batch_size, z_dim)
-        
-        # Compute weights as inverse of variances
-        weights = 1.0 / (variances + 1e-5)  # Shape: (batch_size, z_dim)
-        
-        # Compute weighted sum of embeddings across patches for each batch
-        weighted_sum = torch.sum(weights.unsqueeze(1) * embeddings, dim=1)  # Shape: (batch_size, z_dim)
-        
-        # Compute robust mean by dividing by the sum of weights
-        robust_mean = weighted_sum / torch.sum(weights, dim=1, keepdim=True)  # Shape: (batch_size, z_dim)
-
-        # Pass the robust mean through the prediction head
-        output = self.head(robust_mean)  # Shape: (batch_size, n_out)
-        
+        embeddings = self.encoder(bags.view(-1, n_feats))
+        embeddings = embeddings.view(batch_size, n_patches, -1)
+        variances = embeddings.var(dim=1, unbiased=False)
+        weights = 1.0 / (variances + 1e-5)
+        weighted_sum = torch.sum(weights.unsqueeze(1) * embeddings, dim=1)
+        robust_mean = weighted_sum / torch.sum(weights, dim=1, keepdim=True)
+        output = self.head(robust_mean)
         return output
 
 
 class clam_mil(nn.Module):
-    """
-    Clustering-constrained Attention Multiple Instance Learning (CLAM)
-    model with attention-based pooling and instance-level clustering.
-
-    Parameters
-    ----------
-    n_feats : int
-        Number of input features.
-    n_out : int
-        Number of output classes.
-    z_dim : int
-        Dimensionality of the hidden layer.
-    dropout_p : float
-        Dropout probability.
-    """
-
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 512, dropout_p: float = 0.25):
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 512, dropout_p: float = 0.25, activation_function='ReLU'):
         super(clam_mil, self).__init__()
         self.n_out = n_out
-        
-        # Encoder Network
         self.encoder = nn.Sequential(
             nn.Linear(n_feats, z_dim),
-            nn.ReLU(),
+            get_activation_function(activation_function),
             nn.Dropout(dropout_p)
         )
-        
-        # Attention Network (shared backbone)
         self.attention_U = nn.Sequential(
             nn.Linear(z_dim, z_dim),
             nn.Sigmoid()
@@ -1159,44 +635,33 @@ class clam_mil(nn.Module):
             nn.Linear(z_dim, z_dim),
             nn.Tanh()
         )
-        
-        # Class-specific Attention and Classification branches
         self.attention_branches = nn.ModuleList([nn.Linear(z_dim, 1) for _ in range(n_out)])
         self.classifiers = nn.ModuleList([nn.Linear(z_dim, 1) for _ in range(n_out)])
-        
-        # Clustering Layer for instance-level clustering
         self.instance_cluster = nn.ModuleList([nn.Linear(z_dim, 2) for _ in range(n_out)])
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        initialize_weights(self)
 
     def forward(self, bags, return_attention=False):
         embeddings = self.encoder(bags)
-        
         slide_level_representations = []
         attention_weights_list = []
 
-        # Loop through each class-specific branch
         for i in range(self.n_out):
             attention_U_output = self.attention_U(embeddings)
             attention_V_output = self.attention_V(embeddings)
             attention_scores = self.attention_branches[i](attention_U_output * attention_V_output).softmax(dim=1)
             attention_weights_list.append(attention_scores)
-            
-            # Slide-level representation
             slide_level_representation = torch.sum(attention_scores * embeddings, dim=1)
             slide_level_representations.append(slide_level_representation)
 
-        # Stack all slide-level representations
         slide_level_representations = torch.stack(slide_level_representations, dim=1)
-        
-        # Final classification scores
         scores = []
         for i in range(self.n_out):
             score = self.classifiers[i](slide_level_representations[:, i, :])
             scores.append(score)
-        
-        # Aggregate scores into a tensor
         scores = torch.cat(scores, dim=1)
-        
-        # Concatenate attention weights into a single tensor
         attention_weights = torch.cat(attention_weights_list, dim=1)
 
         if return_attention:
@@ -1205,75 +670,41 @@ class clam_mil(nn.Module):
             return scores
 
     def cluster_patches(self, bags):
-        """
-        Perform instance-level clustering using pseudo-labels generated 
-        by the attention scores.
-        """
         embeddings = self.encoder(bags)
         cluster_predictions = []
         for i in range(self.n_out):
             cluster_pred = self.instance_cluster[i](embeddings)
             cluster_predictions.append(cluster_pred)
-        
         return cluster_predictions
 
     def calculate_attention(self, bags, lens=None, apply_softmax=False):
-        """
-        Calculate attention scores for the given bags.
-        Returns a tensor of attention scores.
-        """
         embeddings = self.encoder(bags)
         attention_weights_list = []
 
-        # Loop through each class-specific branch
         for i in range(self.n_out):
             attention_U_output = self.attention_U(embeddings)
             attention_V_output = self.attention_V(embeddings)
             attention_scores = self.attention_branches[i](attention_U_output * attention_V_output).softmax(dim=1)
             attention_weights_list.append(attention_scores)
 
-        # Concatenate attention weights across classes into a single tensor
         attention_weights = torch.cat(attention_weights_list, dim=1)
-
         if apply_softmax:
             attention_weights = F.softmax(attention_weights, dim=1)
-
         return attention_weights
 
+
 class clam_mil_mb(nn.Module):
-    """
-    Multi-Branch Clustering-constrained Attention Multiple Instance Learning (CLAM)
-    model with attention-based pooling and instance-level clustering.
-
-    Parameters
-    ----------
-    n_feats : int
-        Number of input features.
-    n_out : int
-        Number of output classes.
-    z_dim : int
-        Dimensionality of the hidden layer.
-    dropout_p : float
-        Dropout probability.
-    n_branches : int
-        Number of independent branches.
-    """
-
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 512, dropout_p: float = 0.25, n_branches: int = 3):
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 512, dropout_p: float = 0.25, n_branches: int = 3, activation_function='ReLU'):
         super(clam_mil_mb, self).__init__()
         self.n_out = n_out
         self.n_branches = n_branches
-
-        # Separate encoder, attention, and classifier for each branch
         self.encoders = nn.ModuleList([
             nn.Sequential(
                 nn.Linear(n_feats, z_dim),
-                nn.ReLU(),
+                get_activation_function(activation_function),
                 nn.Dropout(dropout_p)
             ) for _ in range(n_branches)
         ])
-        
-        # Attention networks for each branch
         self.attention_U = nn.ModuleList([
             nn.Sequential(
                 nn.Linear(z_dim, z_dim),
@@ -1286,113 +717,24 @@ class clam_mil_mb(nn.Module):
                 nn.Tanh()
             ) for _ in range(n_branches)
         ])
-        
-        # Class-specific Attention and Classification branches for each branch
         self.attention_branches = nn.ModuleList([
             nn.ModuleList([nn.Linear(z_dim, 1) for _ in range(n_out)]) for _ in range(n_branches)
         ])
         self.classifiers = nn.ModuleList([
-            nn.ModuleList([nn.Linear(z_dim, 1) for _ in range(n_out)]) for _ in range(n_branches)
+            nn.ModuleList([nn.Linear(z_dim, 1) for _ in range(n_out)]) for _ in range(n.branches)
         ])
-        
-        # Clustering Layer for instance-level clustering for each branch
         self.instance_cluster = nn.ModuleList([
-            nn.ModuleList([nn.Linear(z_dim, 2) for _ in range(n_out)]) for _ in range(n_branches)
+            nn.ModuleList([nn.Linear(z_dim, 2) for _ in range(n_out)]) for _ in range(n.branches)
         ])
+        self._initialize_weights()
 
-    def forward(self, bags, return_attention=False):
-        all_slide_level_representations = []
-        all_attention_weights = []
 
-        # Loop through each branch
-        for b in range(self.n_branches):
-            embeddings = self.encoders[b](bags)
-            slide_level_representations = []
-            attention_weights_list = []
+def initialize_weights(module):
+    for m in module.modules():
+        if isinstance(m, nn.Linear):
+            nn.init.xavier_normal_(m.weight)
+            m.bias.data.zero_()
 
-            # Loop through each class-specific branch
-            for i in range(self.n_out):
-                attention_U_output = self.attention_U[b](embeddings)
-                attention_V_output = self.attention_V[b](embeddings)
-                attention_scores = self.attention_branches[b][i](attention_U_output * attention_V_output).softmax(dim=1)
-                attention_weights_list.append(attention_scores)
-
-                # Slide-level representation
-                slide_level_representation = torch.sum(attention_scores * embeddings, dim=1)
-                slide_level_representations.append(slide_level_representation)
-
-            # Stack slide-level representations for the current branch
-            slide_level_representations = torch.stack(slide_level_representations, dim=1)
-            all_slide_level_representations.append(slide_level_representations)
-
-            # Concatenate attention weights for the current branch into a single tensor
-            branch_attention_weights = torch.cat(attention_weights_list, dim=1)
-            all_attention_weights.append(branch_attention_weights)
-
-        # Aggregate representations from all branches (e.g., by summing)
-        aggregated_representations = torch.sum(torch.stack(all_slide_level_representations, dim=0), dim=0)
-
-        # Final classification scores
-        scores = []
-        for i in range(self.n_out):
-            score = 0
-            for b in range(self.n_branches):
-                score += self.classifiers[b][i](aggregated_representations[:, i, :])
-            scores.append(score)
-
-        # Aggregate scores into a tensor
-        scores = torch.cat(scores, dim=1)
-
-        # Stack attention weights from all branches into a single tensor
-        attention_weights = torch.stack(all_attention_weights, dim=0)
-
-        if return_attention:
-            return scores, attention_weights
-        else:
-            return scores
-
-    def cluster_patches(self, bags):
-        """
-        Perform instance-level clustering using pseudo-labels generated 
-        by the attention scores for each branch.
-        """
-        all_cluster_predictions = []
-        
-        for b in range(self.n_branches):
-            embeddings = self.encoders[b](bags)
-            branch_cluster_predictions = []
-            for i in range(self.n_out):
-                cluster_pred = self.instance_cluster[b][i](embeddings)
-                branch_cluster_predictions.append(cluster_pred)
-            all_cluster_predictions.append(branch_cluster_predictions)
-        
-        return all_cluster_predictions
-
-    def calculate_attention(self, bags, lens=None, apply_softmax=False):
-        """
-        Calculate attention scores for the given bags for each branch.
-        Returns a tensor of attention scores.
-        """
-        all_attention_weights = []
-
-        for b in range(self.n_branches):
-            embeddings = self.encoders[b](bags)
-            attention_weights_list = []
-
-            # Loop through each class-specific branch
-            for i in range(self.n_out):
-                attention_U_output = self.attention_U[b](embeddings)
-                attention_V_output = self.attention_V[b](embeddings)
-                attention_scores = self.attention_branches[b][i](attention_U_output * attention_V_output).softmax(dim=1)
-                attention_weights_list.append(attention_scores)
-
-            # Concatenate attention weights across classes for this branch
-            branch_attention_weights = torch.cat(attention_weights_list, dim=1)
-            all_attention_weights.append(branch_attention_weights)
-
-        # Stack attention weights from all branches into a single tensor
-        attention_weights = torch.stack(all_attention_weights, dim=0)
-
-        if apply_softmax:
-            attention_weights = F.softmax(attention_weights, dim=2)
-        return attention_weights
+        elif isinstance(m, nn.BatchNorm1d):
+            nn.init.constant_(m.weight, 1)
+            nn.init.constant_(m.bias, 0)
