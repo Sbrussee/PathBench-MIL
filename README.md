@@ -1,6 +1,6 @@
-<div style="text-align: center;">
+<p align="center">
  <img src="thumbnail_PathBench-logo-horizontaal.png" alt="PathBench" width="800" height="200">
-</div>
+</p>
 
 # PathBench-MIL: A comprehensive, flexible Benchmarking/AutoML package for multiple instance learning in pathology.
 
@@ -721,6 +721,6 @@ For more fundamental changes, and adding new normalization methods, one needs to
 ## Developing PathBench
 PathBench is currently in its early development stages, but we welcome collaboration on the development of PathBench. Please use pull requests to add new features or open issues if you encounter bugs or would like to see certain features.
 
-<div style="text-align: center;">
- <img src="PathBench-logo-gecentreerd.png" alt="PathBench Logo" width="550" height="400">
-</div>
+<p align="center">
+  <img src="PathBench-logo-gecentreerd.png" alt="PathBench Logo" width="550" height="400">
+</p>
