@@ -1,6 +1,6 @@
-<div style="text-align: center;">
+<p align="center">
  <img src="thumbnail_PathBench-logo-horizontaal.png" alt="PathBench" width="800" height="200">
-</div>
+</p>
 
 # PathBench-MIL: A comprehensive, flexible Benchmarking/AutoML package for multiple instance learning in pathology.
 
@@ -95,14 +95,15 @@ To use PathBench, you need to provide a configuration file in YAML format. Below
 experiment:
   project_name: Example_Project # Name of the project, where the results will be saved
   annotation_file: /path/to/your/annotation_file.csv # Path to the annotation file
-  #splits: /path/to/your/split_file.json # Path to the split file, not required.
-  balancing: category # Training set balancing strategy, can be None, category, slide, patient or tile. 
+  balancing: category # Training set balancing strategy, can be None, category, slide, patient or tile.
+  num_workers: 0 # Number of workers for data loading, 0 for no parallelization.
   split_technique: k-fold # Splitting technique, can be k-fold or fixed
   epochs: 5 # Number of training epochs
   batch_size: 32 # Batch size
   bag_size : 512 # Bag size for MIL
   k: 2 # Number of folds, if split-technique is k-fold
   val_fraction: 0.1 # Fraction of the training set used for validation
+  best_epoch_based_on: val_loss # Metric to be used for selecting the best epoch, can be val_loss or any metric in evaluation
   aggregation_level: slide # Aggregation level, can be slide or patient
   with_continue: True # Continue training from a previous checkpoint, if available
   task: classification # Task, can be classification, regression or survival
@@ -112,6 +113,18 @@ experiment:
     - roc_curve
     - umap
   mode: optimization # Mode to use, either benchmark or optimization
+
+  custom_metrics: [RocAuc]: List of evaluation metrics to measure in the validation set during model training. Needs to be either specified in metrics.py or a fastai metric: https://docs.fast.ai/metrics.html
+
+  qc: # List of quality control methods to be used, supports Otsu, Gaussian, GaussianV2 and Otsu-CLAHE
+    - GaussianV2 # Faster version of Gaussian blur tissue detection
+    - Otsu-CLAHE # Otsu thresholding tissue detection with CLAHE-enhanced V-channel in HSV space for increased contrast.
+
+  qc_filters: #Tile-level filters for discarding tiles
+    - grayspace_threshold : 0.05 #Pixels below this value (ranged 0-1) are considered gray.
+    - grayspace_fraction: 0.6 # Image tiles with grayspace above this fraction are discarded.
+    - whitespace_threshold: 230 #Pixel intensities (0-255) above this value are considered white.
+    - whitespace_fraction: 1.0 # Image tiles with whitespace above this fraction are discarded.
 
 optimization:
   objective_metric: balanced_accuracy # Objective metric to optimize
@@ -148,6 +161,15 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
   mil: # Multiple instance learning aggregation methods
     - Attention_MIL
     - dsmil
+
+  loss: # Loss functions, as specified in losses.py
+    - CrossEntropyLoss
+
+  augmentation: # MIL-friendly augmentations, as specified in augmentations.py
+    - patch_mixing
+
+  activation_function: # activation function for the MIL encoder, supports any pytorch.nn activation function.
+    - ReLU
 
 # Available normalization methods:
 # - macenko
@@ -197,6 +219,29 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 # - dsmil
 # - varmil
 
+#Available Loss functions
+  # - Classification:
+     # - CrossEntropyLoss
+     # - FocalLoss
+     # - LabelSmoothingCrossEntropyLoss
+     # - CrossEntropyWithEntropyMinimizationLoss
+     # - AttentionEntropyMinimizedCrossEntropyLoss
+     # - DiversityRegularizedCrossEntropyLoss
+     # - SparseAttentionCrossEntropyLoss
+
+#Available MIL-friendly augmentations:
+  # - patch_dropout
+  # - add_gaussian_noise
+  # - random_scaling
+  # - feature_masking
+  # - feature_dropout
+  # - patchwise_scaling
+  # - feature_permutation
+  # - patch_mixing
+  # - cutmix
+
+
+
 weights_dir : ./pretrained_weights # Path to the model weights, and where newly retrieved model weights will be saved
 hf_key: YOUR_HUGGINGFACE_TOKEN # Token for Hugging Face model hub to access gated models, if you do not have one, just set to None
 ```
@@ -215,6 +260,7 @@ PathBench inherits the project functionality from SlideFlow. PathBench allows cr
 - `split_technique`: The split technique to be used. This can be `k-fold` or `fixed`.
 - `k`: The number of folds for k-fold cross-validation.
 - `val_fraction`: The fraction of the training data to be used for validation.
+- `best_epoch_based_on` : measure to base the epoch selection for selecting the optimal model state on. Can be 'val_loss', any of the task default metrics (roc_auc_score, c_index, r2_score), or any of the custom metrics defined.
 - `epochs`: The number of epochs for training.
 - `batch_size`: The batch size for training.
 - `bag_size`: The bag size for MIL models.
@@ -225,7 +271,7 @@ PathBench inherits the project functionality from SlideFlow. PathBench allows cr
 - `with_continue`: If `True`, the model will continue training, skipping already finished parameter combinations.
 - `task`: The task can be `classification`, `regression`, or `survival`.
 - `mode`: The mode can be either `benchmark` or `optimization`.
-
+- `num_workers` : Number of workers for parallelization, set to 0 to disable parallel processing.
 
 # Datasets
 The datasets to be used in the project can be specified in the datasets section. One can add any arbitrary number of data sources to a project and specify whether these should be used for training/validation or as testing datasets:
@@ -331,6 +377,9 @@ python3 main.py $CONFIG_FILE
     - Normalization methods (e.g. Macenko, Reinhard)
     - Feature extractors (e.g. UNI, GigaPath)
     - MIL aggregators (e.g. CLAM, DSMIL)
+    - Loss functions
+    - MIL-friendly (feature-space) augmentations
+    - Activation functions
 - Interpretable visualizations of benchmark output
 - Plotly-based benchmark visualization tool
 - Efficient Tile processing and QC pipeline inherited by Slideflow
@@ -351,6 +400,7 @@ python3 main.py $CONFIG_FILE
       - calculate_feature_similarity.py # Calculate feature extractor similarity
       - utils.py # Util functions
       - losses.py # Houses custom losses for training models
+      - augmentations.py # Houses MIL-friendly augmentations
       - metrics.py # Houses custom metrics to calculate during training
     - visualization
       - visualization.py # Houses visualization functions
@@ -554,34 +604,59 @@ The MIL aggregation function should take the bags in its forward function and ou
 ```
 Which calculates attention for the input bags. This can then be used to generate attention heatmaps.
 3. **Custom Losses**
-Custom losses can be added to pathbench/utils/losses.py and need to be specified in the configuration file under custom_loss to be active during benchmarking. An example:
+Custom losses can be added to pathbench/utils/losses.py and need to be specified in the configuration file under custom_loss to be active during benchmarking. As some loss functions rely on attention values to be calculated, one has to specify whether the loss function requires attention, and if so, give it as a parameter to the forward function (attention_weights). Note that PathBench will use the default task loss when an attention-specific loss is specified but the current MIL method does not use/support attention values. An example:
 ```python
-class CoxPHLoss(nn.Module):
-    """Loss function for CoxPH model."""
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, preds, targets):
+class AttentionEntropyMinimizedCrossEntropyLoss(nn.Module):
+    def __init__(self, entropy_lambda: float = 1.0, weight: Optional[Tensor] = None):
         """
         Args:
-            preds (torch.Tensor): Predictions from the model.
-            targets (torch.Tensor): Target values.
-        
-        Returns:
-            torch.Tensor: Loss value.
+            entropy_lambda (float): Regularization strength for the entropy minimization.
+            weight (Tensor, optional): A manual rescaling weight given to each class. If given, has to be a Tensor of size `C`.
         """
-        durations = targets[:, 0]
-        events = targets[:, 1]
+        super().__init__()
+        self.require_attention = True
+        self.entropy_lambda = entropy_lambda
+        self.cross_entropy = nn.CrossEntropyLoss(weight=weight)
+
+    def forward(self, preds: Tensor, targets: Tensor, attention_weights: Tensor) -> Tensor:
+        # Standard cross-entropy loss
+        ce_loss = self.cross_entropy(preds, targets)
+
+        # Check if attention weights are normalized
+        if attention_weights.dim() > 1:
+            attention_weights = torch.softmax(attention_weights, dim=-1)
+
+        # Entropy minimization term
+        entropy = -torch.sum(attention_weights * torch.log(attention_weights + 1e-9), dim=1)
+        entropy_min_reg = torch.mean(entropy)
         
-        # Check for zero events and handle accordingly
-        if torch.sum(events) == 0:
-            logging.warning("No events in batch, returning near zero loss")
-            return torch.tensor(1e-6, dtype=preds.dtype, device=preds.device)
-        
-        loss = cox_ph_loss(preds, durations, events).float()
+        # Total loss
+        loss = ce_loss + self.entropy_lambda * entropy_min_reg
         return loss
 ```
-4. **Custom Training Metrics**
+4.   **Custom Augmentations**
+Custom augmentations are added to augmentations.py and expect the input to be bags of shape (tiles, features). An example:
+```python
+
+def patch_mixing(bag: torch.Tensor, mixing_rate: float = 0.5) -> torch.Tensor:
+    """
+    Randomly selects and mixes two instances within the same bag based on a given mixing rate.
+
+    Parameters:
+    bag (torch.Tensor): A 2D tensor of shape (num_instances, num_features) representing a bag of instances.
+    mixing_rate (float): The probability of selecting features from one instance over another during mixing.
+
+    Returns:
+    torch.Tensor: A new bag where one instance is replaced by a mix of two randomly selected instances.
+    """
+    indices = torch.randperm(bag.size(0))[:2]
+    instance1, instance2 = bag[indices]
+    mask = torch.from_numpy(np.random.binomial(1, mixing_rate, size=instance1.shape)).bool()
+    mixed_instance = torch.where(mask, instance1, instance2)
+    bag[indices[0]] = mixed_instance
+    return bag
+```
+6.   **Custom Training Metrics**
 Similarly, one can add custom training metrics which will be measured during training. The metrics needs to inheret from fastai's Metric class and have the methods as given down below:
 ```python
 class ConcordanceIndex(Metric):
@@ -642,6 +717,10 @@ class ConcordanceIndex(Metric):
 ```
 ## Futher extension
 For more fundamental changes, and adding new normalization methods, one needs to change the underlying slideflow code. PathBench uses a [forked version](https://github.com/Sbrussee/slideflow_fork) of the slideflow code, which is added as a submodule in PathBench's repository.
-<div style="text-align: center;">
- <img src="PathBench-logo-gecentreerd.png" alt="PathBench Logo" width="550" height="400">
-</div>
+
+## Developing PathBench
+PathBench is currently in its early development stages, but we welcome collaboration on the development of PathBench. Please use pull requests to add new features or open issues if you encounter bugs or would like to see certain features.
+
+<p align="center">
+  <img src="PathBench-logo-gecentreerd.png" alt="PathBench Logo" width="550" height="400">
+</p>
