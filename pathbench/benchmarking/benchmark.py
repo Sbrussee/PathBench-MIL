@@ -686,9 +686,9 @@ def benchmark(config, project):
                     bags=bags,
                     exp_label=f"{save_string}_{index}",
                     pb_config=config,
-                    loss = combination_dict['loss'],
-                    augmentation = combination_dict['augmentation'],
-                    activation_function = combination_dict['activation_function']
+                    loss = combination_dict['loss'] if 'loss' in combination_dict else None,
+                    augmentation = combination_dict['augmentation'] if 'augmentation' in combination_dict else None,
+                    activation_function = combination_dict['activation_function'] if 'activation_function' in combination_dict else None
                 )
                 #Get current newest MIL model number
                 number = get_highest_numbered_filename(f"experiments/{config['experiment']['project_name']}/mil/")
@@ -723,7 +723,7 @@ def benchmark(config, project):
                     config=mil_conf,
                     outdir=f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}",
                     pb_config=config,
-                    activation_function = combination_dict['activation_function']
+                    activation_function = combination_dict['activation_function'] if 'activation_function' in combination_dict else None
                 )   
                 if combination_dict['mil'].lower() in ['clam_sb', 'clam_mb', 'attention_mil', 'mil_fc', 'mil_fc_mc', 'transmil', 'bistro.transformer']:
                     model_string = combination_dict['mil'].lower()
@@ -1085,6 +1085,7 @@ def optimize_parameters(config, project):
         #Run with current parameters
         
         logging.info("Feature extraction...")
+        free_up_gpu_memory()
         feature_extractor = build_feature_extractor(combination_dict['feature_extraction'].lower(),
                                                     tile_px=combination_dict['tile_px'])
         

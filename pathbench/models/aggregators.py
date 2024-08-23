@@ -441,11 +441,19 @@ class topk_mil(nn.Module):
         embeddings = self.encoder(bags.view(-1, n_feats))
         embeddings = embeddings.view(batch_size, n_patches, -1)
         scores = self.attention(embeddings).squeeze(-1)
+        
         k = min(self.k, n_patches)
         topk_scores, topk_indices = torch.topk(scores, k, dim=1)
         topk_embeddings = torch.gather(embeddings, 1, topk_indices.unsqueeze(-1).expand(-1, -1, embeddings.size(-1)))
-        pooled_embeddings = topk_embeddings.mean(dim=1)
-        scores = self.head(pooled_embeddings)
+        
+        # Apply softmax to top-k scores to get attention weights
+        topk_attention_weights = F.softmax(topk_scores, dim=1)
+        
+        # Compute the weighted sum of the top-k embeddings
+        weighted_sum = torch.sum(topk_embeddings * topk_attention_weights.unsqueeze(-1), dim=1)
+        
+        # Pass through the head
+        scores = self.head(weighted_sum)
         return scores
 
     def calculate_attention(self, bags, lens=None, apply_softmax=None):
@@ -457,7 +465,62 @@ class topk_mil(nn.Module):
             scores = F.softmax(scores, dim=1)
         return scores
 
+class learnable_topk_mil(nn.Module):
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, initial_k: int = 20, dropout_p: float = 0.1, activation_function='ReLU'):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(n_feats, z_dim),
+            get_activation_function(activation_function)
+        )
+        self.attention = nn.Sequential(
+            nn.Linear(z_dim, 1),
+        )
+        self.head = nn.Sequential(
+            nn.BatchNorm1d(z_dim),
+            nn.Dropout(dropout_p),
+            nn.Linear(z_dim, n_out)
+        )
+        
+        # Always learnable k
+        self.k_param = nn.Parameter(torch.tensor(float(initial_k)))
+        
+        self._initialize_weights()
 
+    def _initialize_weights(self):
+        initialize_weights(self)
+
+    def forward(self, bags):
+        batch_size, n_patches, n_feats = bags.shape
+        embeddings = self.encoder(bags.view(-1, n_feats))
+        embeddings = embeddings.view(batch_size, n_patches, -1)
+        scores = self.attention(embeddings).squeeze(-1)
+
+        # Bound k to be between 1 and n_patches
+        k = torch.clamp(self.k_param, 1, n_patches).int()
+        
+        topk_scores, topk_indices = torch.topk(scores, k, dim=1)
+        topk_embeddings = torch.gather(embeddings, 1, topk_indices.unsqueeze(-1).expand(-1, -1, embeddings.size(-1)))
+        
+        # Apply softmax to top-k scores to get attention weights
+        topk_attention_weights = F.softmax(topk_scores, dim=1)
+        
+        # Compute the weighted mean of the top-k embeddings
+        weighted_sum = torch.sum(topk_embeddings * topk_attention_weights.unsqueeze(-1), dim=1)
+        weighted_mean = weighted_sum / torch.sum(topk_attention_weights, dim=1, keepdim=True)
+        
+        # Pass through the head
+        scores = self.head(weighted_mean)
+        return scores
+
+    def calculate_attention(self, bags, lens=None, apply_softmax=None):
+        batch_size, n_patches, n_feats = bags.shape
+        embeddings = self.encoder(bags.view(-1, n_feats))
+        embeddings = embeddings.view(batch_size, n_patches, -1)
+        scores = self.attention(embeddings).squeeze(-1)
+        if apply_softmax:
+            scores = F.softmax(scores, dim=1)
+        return scores
+        
 class hierarchical_mil(nn.Module):
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, region_size: int = 4, dropout_p: float = 0.1, activation_function='ReLU'):
         super().__init__()
