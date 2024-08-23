@@ -129,3 +129,14 @@ def save_correct(result: pd.DataFrame, save_string: str, dataset_type: str, conf
 
     logging.info(f"Correct predictions saved to {correct_save_path}")
     logging.info(f"Incorrect predictions saved to {incorrect_save_path}")
+
+
+def free_up_gpu_memory():
+    # Free up cached memory in PyTorch
+    torch.cuda.empty_cache()
+    
+    # Set the environment variable to reduce memory fragmentation
+    os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+    
+    # Optional: Print confirmation that the memory has been freed and the setting applied
+    logging.debug("GPU memory has been cleared and expandable_segments has been enabled.")
