@@ -631,6 +631,7 @@ def benchmark(config, project):
             logging.info(f"QC methods: {qc_list}")
             logging.info(f"QC filter parameters: {qc_filters}")
 
+            cleanup_multiprocessing_semaphores()
             #Extract tiles with QC for all datasets
             all_data.extract_tiles(enable_downsample=False,
                                     save_tiles=False,
@@ -640,7 +641,8 @@ def benchmark(config, project):
                                     grayspace_threshold = float(config['experiment']['qc_filters']['grayspace_threshold']),
                                     whitespace_threshold = int(config['experiment']['qc_filters']['whitespace_threshold']),
                                     num_threads = config['experiment']['num_workers'])
-                                
+            cleanup_multiprocessing_semaphores()
+
             train_set = all_data.filter(filters={'dataset' : 'train'})
 
             #Balance the training dataset
@@ -652,7 +654,7 @@ def benchmark(config, project):
             splits = split_datasets(config, project, splits_file, target, project_directory, train_set)
 
             save_string = "_".join([f"{value}" for value in combination_dict.values()])
-            string_without_mil = "_".join([f"{value}" for key, value in combination_dict.items() if key != 'mil' and key != 'loss' and key != 'augmentation' and key != 'activation_function'])
+            string_without_mil = "_".join([f"{value}" for key, value in combination_dict.items() if key != 'mil' and key != 'loss' and key != 'augmentation' and key != 'activation_function' and key != 'optimizer'])
             
             logging.debug(f"Save string: {save_string}") 
             #Run with current parameters
@@ -676,7 +678,7 @@ def benchmark(config, project):
             logging.info("Starting training...")
             for train, val in splits:
                 logging.info(f"Split {index} started...")
-
+                cleanup_multiprocessing_semaphores()
                 # Train the MIL model
                 val_result = project.train_mil(
                     config=mil_conf,
@@ -688,7 +690,8 @@ def benchmark(config, project):
                     pb_config=config,
                     loss = combination_dict['loss'] if 'loss' in combination_dict else None,
                     augmentation = combination_dict['augmentation'] if 'augmentation' in combination_dict else None,
-                    activation_function = combination_dict['activation_function'] if 'activation_function' in combination_dict else None
+                    activation_function = combination_dict['activation_function'] if 'activation_function' in combination_dict else None,
+                    optimizer = combination_dict['optimizer'] if 'optimizer' in combination_dict else None
                 )
                 #Get current newest MIL model number
                 number = get_highest_numbered_filename(f"experiments/{config['experiment']['project_name']}/mil/")
@@ -1003,9 +1006,10 @@ def calculate_brier_score(durations : np.array, events : np.array, predictions :
 def optimize_parameters(config, project):
     def objective(trial):
         # Load hyperparameters from the config file
-        epochs = trial.suggest_int('epochs', config['experiment']['epochs'], config['experiment']['epochs'])
-        batch_size = trial.suggest_int('batch_size', config['experiment']['batch_size'], config['experiment']['batch_size'])
-        z_dim = trial.suggest_int('z_dim', config['experiment']['z_dim'], config['experiment']['z_dim'])
+        epochs = trial.suggest_int('epochs', 10, 50)
+        batch_size = trial.suggest_int('batch_size', 8, 64)
+        z_dim = trial.suggest_int('z_dim', 128, 512)
+        encoder_layers = trial.suggest_int('encoder_layers', 1, 3)
         tile_px = trial.suggest_categorical('tile_px', config['benchmark_parameters']['tile_px'])
         tile_um = trial.suggest_categorical('tile_um', config['benchmark_parameters']['tile_um'])
         normalization = trial.suggest_categorical('normalization', config['benchmark_parameters']['normalization'])
@@ -1014,11 +1018,14 @@ def optimize_parameters(config, project):
         loss = trial.suggest_categorical('loss', config['benchmark_parameters']['loss'])
         augmentation = trial.suggest_categorical('augmentation', config['benchmark_parameters']['augmentation'])
         activation_function = trial.suggest_categorical('activation_function', config['benchmark_parameters']['activation_function'])
+        optimizer = trial.suggest_categorical('optimizer', config['benchmark_parameters']['optimizer'])
         logging.info(f"Using suggested hyperparameters: epochs={epochs}, batch_size={batch_size}, balancing={balancing}, tile_px={tile_px}, tile_um={tile_um}, normalization={normalization}, feature_extraction={feature_extraction}, mil={mil}")
 
         # Update config with suggested hyperparameters
         config['experiment']['epochs'] = epochs
         config['experiment']['batch_size'] = batch_size
+        config['experiment']['z_dim'] = z_dim
+        config['experiment']['encoder_layers'] = encoder_layers
 
         combination_dict = {
             'tile_px': tile_px,
@@ -1028,7 +1035,8 @@ def optimize_parameters(config, project):
             'mil': mil,
             'loss': loss,
             'augmentation': augmentation,
-            'activation_function': activation_function
+            'activation_function': activation_function,
+            'optimizer': optimizer
         }
         #try:
             #Get all column values
@@ -1104,7 +1112,7 @@ def optimize_parameters(config, project):
         logging.info("Starting training...")
         for train, val in splits:
             logging.info(f"Split {index} started...")
-
+            free_up_gpu_memory()
             val_result = project.train_mil(
                 config=mil_conf,
                 outcomes=target,
@@ -1112,7 +1120,11 @@ def optimize_parameters(config, project):
                 val_dataset=val,
                 bags=bags,
                 exp_label=f"{save_string}_{index}",
-                pb_config=config
+                pb_config=config,
+                loss = combination_dict['loss'] if 'loss' in combination_dict else None,
+                augmentation = combination_dict['augmentation'] if 'augmentation' in combination_dict else None,
+                activation_function = combination_dict['activation_function'] if 'activation_function' in combination_dict else None,
+                optimizer = combination_dict['optimizer'] if 'optimizer' in combination_dict else None
             )
             #Get current newest MIL model number
             number = get_highest_numbered_filename(f"experiments/{config['experiment']['project_name']}/mil/")
@@ -1146,7 +1158,8 @@ def optimize_parameters(config, project):
                 bags=bags,
                 config=mil_conf,
                 outdir=f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}",
-                pb_config=config
+                pb_config=config,
+                activation_function = combination_dict['activation_function'] if 'activation_function' in combination_dict else None
             )   
             if combination_dict['mil'].lower() in ['clam_sb', 'clam_mb', 'attention_mil', 'mil_fc', 'mil_fc_mc', 'transmil', 'bistro.transformer']:
                 model_string = combination_dict['mil'].lower()

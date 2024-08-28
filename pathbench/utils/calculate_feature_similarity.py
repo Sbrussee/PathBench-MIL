@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.manifold import MDS
 from sklearn.neighbors import NearestNeighbors
@@ -6,6 +7,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from scipy.stats import kendalltau, spearmanr
 import torch
 import os
+import random
 from itertools import combinations
 
 def create_directory(path):
@@ -39,71 +41,6 @@ def calculate_neighbor_rankings(embedding_dict, feature_methods, k, method='knn'
             raise ValueError("Invalid method. Use 'knn', 'cosine', or 'pearson'.")
         rankings_dict[feature_method] = indices
     return rankings_dict
-
-def calculate_kendall_tau(rankings_dict, feature_methods):
-    """Calculate Kendall's Tau between rankings of feature extractors."""
-    combinations = [(feature_methods[i], feature_methods[j]) for i in range(len(feature_methods)) for j in range(i+1, len(feature_methods))]
-    distance_scores = {}
-    for combination in combinations:
-        ranks1 = rankings_dict[combination[0]]
-        ranks2 = rankings_dict[combination[1]]
-        distance = 0
-        for i in range(len(ranks1)):
-            tau, _ = kendalltau(ranks1[i], ranks2[i])
-            distance += 1 - tau
-        distance /= len(ranks1)
-        distance_scores[combination] = distance
-    return distance_scores
-
-def calculate_spearman(rankings_dict, feature_methods):
-    """Calculate Spearman's rank correlation between rankings of feature extractors."""
-    combinations = [(feature_methods[i], feature_methods[j]) for i in range(len(feature_methods)) for j in range(i+1, len(feature_methods))]
-    distance_scores = {}
-    for combination in combinations:
-        ranks1 = rankings_dict[combination[0]]
-        ranks2 = rankings_dict[combination[1]]
-        distance = 0
-        for i in range(len(ranks1)):
-            rho, _ = spearmanr(ranks1[i], ranks2[i])
-            distance += 1 - rho
-        distance /= len(ranks1)
-        distance_scores[combination] = distance
-    return distance_scores
-
-def rbo_score(l1, l2, p=0.9):
-    """Calculate Rank-Biased Overlap (RBO) between two rankings."""
-    def helper(l1, l2, p):
-        k = 1
-        A_d, S_d = set(), set()
-        A_size, S_size = 0, 0
-        sum1, sum2, sum3 = 0, 0, 0
-        while k <= len(l1):
-            A_d.add(l1[k-1])
-            S_d.add(l2[k-1])
-            A_size += 1
-            S_size += 1
-            X_d = len(A_d.intersection(S_d))
-            sum1 += X_d / k * p ** k
-            sum2 += X_d / A_size * p ** k
-            sum3 += X_d / S_size * p ** k
-            k += 1
-        rbo_ext = (sum1 + sum2 + sum3) * (1 - p) / p
-        return rbo_ext
-    return helper(l1, l2, p)
-
-def calculate_rbo(rankings_dict, feature_methods, p=0.9):
-    """Calculate RBO between rankings of feature extractors."""
-    combinations = [(feature_methods[i], feature_methods[j]) for i in range(len(feature_methods)) for j in range(i+1, len(feature_methods))]
-    distance_scores = {}
-    for combination in combinations:
-        ranks1 = rankings_dict[combination[0]]
-        ranks2 = rankings_dict[combination[1]]
-        distance = 0
-        for i in range(len(ranks1)):
-            distance += 1 - rbo_score(list(ranks1[i]), list(ranks2[i]), p)
-        distance /= len(ranks1)
-        distance_scores[combination] = distance
-    return distance_scores
 
 def calculate_shared_neighbors(rankings_dict, feature_methods, k):
     """Calculate shared neighbors between rankings of feature extractors."""
@@ -177,40 +114,14 @@ def calculate_similarity(slide, bag_directory, feature_methods, mag, tile_size, 
         for ranking_method in ranking_methods:
             for k in k_values:
                 rankings_dict = calculate_neighbor_rankings(embedding_dict, feature_methods, k, method=neighbor_method)
-                if ranking_method == 'kendall_tau':
-                    distance_scores = calculate_kendall_tau(rankings_dict, feature_methods)
-                    similarity_matrix = construct_similarity_matrix(distance_scores, feature_methods)
-                elif ranking_method == 'spearman':
-                    distance_scores = calculate_spearman(rankings_dict, feature_methods)
-                    similarity_matrix = construct_similarity_matrix(distance_scores, feature_methods)
-                elif ranking_method == 'rbo':
-                    distance_scores = calculate_rbo(rankings_dict, feature_methods)
-                    similarity_matrix = construct_similarity_matrix(distance_scores, feature_methods)
-                elif ranking_method == 'shared_neighbors':
+                if ranking_method == 'shared_neighbors':
                     similarity_scores = calculate_shared_neighbors(rankings_dict, feature_methods, k)
                     similarity_matrix = construct_similarity_matrix(similarity_scores, feature_methods, shared_neighbors=True)
                 else:
-                    raise ValueError("Invalid ranking method. Use 'kendall_tau', 'spearman', 'rbo', or 'shared_neighbors'.")
+                    raise ValueError("Invalid ranking method. Use 'shared_neighbors'.")
                 similarity_matrices[neighbor_method][ranking_method][k] = similarity_matrix
-                plot_similarity_matrix(similarity_matrix, feature_methods, slide, f"Similarity Matrix ({neighbor_method}, {ranking_method}, k={k})")
-                create_2d_map(similarity_matrix, feature_methods, slide, f"{neighbor_method}_{ranking_method}_k={k}", method='mds', n_components=2)
 
     return similarity_matrices
-
-def plot_k_similarity_change(similarity_matrices, feature_methods, neighbor_method, ranking_method):
-    """Plot how similarity changes with different k values for all pairs of feature extractors and neighbor selection method."""
-    k_values = sorted(similarity_matrices[neighbor_method][ranking_method].keys())
-    for (feature_method_1, feature_method_2) in combinations(feature_methods, 2):
-        similarities = [similarity_matrices[neighbor_method][ranking_method][k][feature_method_1, feature_method_2] for k in k_values]
-        plt.figure(figsize=(10, 6))
-        plt.plot(k_values, similarities, marker='o', label=f'{feature_method_1} vs {feature_method_2}')
-        plt.xlabel("k")
-        plt.ylabel("Similarity")
-        plt.title(f"Similarity between {feature_method_1} and {feature_method_2} vs. k ({neighbor_method}, {ranking_method})")
-        plt.legend()
-        plt.savefig(f"similarity_results/k_similarity_change_{neighbor_method}_{ranking_method}_{feature_method_1}_{feature_method_2}.png")
-        plt.tight_layout()
-        plt.close()
 
 def calculate_overall_similarity(similarity_matrices, feature_methods, k_values, neighbor_methods, ranking_methods):
     """Calculate overall similarity across all slides."""
@@ -230,23 +141,42 @@ def calculate_overall_similarity(similarity_matrices, feature_methods, k_values,
     
     return overall_similarity_matrices
 
-def main():
+def plot_k_similarity_change(similarity_matrices, feature_methods, neighbor_method, ranking_method):
+    """Plot how similarity changes with different k values for all pairs of feature extractors and neighbor selection method."""
+    k_values = sorted(similarity_matrices[neighbor_method][ranking_method].keys())
+    for (feature_method_1, feature_method_2) in combinations(range(len(feature_methods)), 2):
+        similarities = [similarity_matrices[neighbor_method][ranking_method][k][feature_method_1, feature_method_2] for k in k_values]
+        plt.figure(figsize=(10, 6))
+        plt.plot(k_values, similarities, marker='o', label=f'{feature_methods[feature_method_1]} vs {feature_methods[feature_method_2]}')
+        plt.xlabel("k")
+        plt.ylabel("Similarity")
+        plt.title(f"Similarity between {feature_methods[feature_method_1]} and {feature_methods[feature_method_2]} vs. k ({neighbor_method}, {ranking_method})")
+        plt.legend()
+        plt.savefig(f"similarity_results/k_similarity_change_{neighbor_method}_{ranking_method}_{feature_methods[feature_method_1]}_{feature_methods[feature_method_2]}.png")
+        plt.tight_layout()
+        plt.close()
+
+def main(N=None):
     # Set the magnification and tile size
     mag = "20x"
     tile_size = 256
     # Set normalization
     normalization = "macenko"
     # Set the methods to compare, including new methods
-    feature_methods = ["CTransPath", 'resnet50_imagenet', 'RetCCL', "HistoSSL", "PLIP", 'uni', 'gigapath', 'kaiko_b8', 'kaiko_b16', 'kaiko_s8', 'kaiko_s16',
-    'kaiko_l14', 'h_optimus_0', 'swav', 'mocov2', 'barlow_twins', 'dino']
+    feature_methods = ["CTransPath", 'resnet50_imagenet', 'gigapath', 'kaiko_b8', 'kaiko_b16', 'kaiko_s8', 'kaiko_s16',
+                       'kaiko_l14', 'h_optimus_0', 'phikon', 'dino', 'virchow', 'virchow2', 'hibou_b', 'hibou_l']
     # Get some test slides from the training MF set
-    slides = pd.read_csv("/exports/path-cutane-lymfomen-hpc/siemen/MF_annotations.csv")['slide'].unique()
+    slides = pd.read_csv("/exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/MF_annotations_corrected.csv")['slide'].unique()
+    
+    if N is not None:
+        slides = random.sample(list(slides), N)
+
     # Get the directory with the corresponding feature vectors per tile:
-    bag_directory = "/exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/MF_TEST/bags"
+    bag_directory = "/exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/experiments/MF_TEST/bags"
 
     k_values = [5, 10, 20, 50, 100]  # Example k values
-    neighbor_methods = ['knn', 'cosine', 'pearson']  # Different neighbor selection methods
-    ranking_methods = [ 'rbo', 'shared_neighbors']  # Different ranking methods
+    neighbor_methods = ['knn', 'cosine']  # Different neighbor selection methods
+    ranking_methods = ['shared_neighbors']  # Different ranking methods
 
     similarity_matrices = {neighbor_method: {ranking_method: {k: [] for k in k_values} for ranking_method in ranking_methods} for neighbor_method in neighbor_methods}
     for slide in slides:
@@ -256,15 +186,11 @@ def main():
                 for ranking_method in ranking_methods:
                     for k in k_values:
                         similarity_matrices[neighbor_method][ranking_method][k].append(slide_similarity_matrices[neighbor_method][ranking_method][k])
-        except:
-            print(f"Error processing slide {slide}")
-            pass
+        except Exception as e:
+            print(f"Error processing slide {slide}: {e}")
     overall_similarity_matrices = calculate_overall_similarity(similarity_matrices, feature_methods, k_values, neighbor_methods, ranking_methods)
-    
-    # Plot similarity change with k for all pairs of feature extractors and neighbor methods
-    for neighbor_method in neighbor_methods:
-        for ranking_method in ranking_methods:
-            plot_k_similarity_change(overall_similarity_matrices, feature_methods, neighbor_method, ranking_method)
 
 if __name__ == "__main__":
-    main()
+    # Example usage: To use all slides, call `main()` without arguments. 
+    # To use N random slides, call `main(N=<number of slides>)`.
+    main(N=100)  # Use 100 random slides for example

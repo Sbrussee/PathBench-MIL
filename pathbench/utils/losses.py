@@ -72,7 +72,7 @@ class CrossEntropyLoss(nn.Module):
         self.criterion = nn.CrossEntropyLoss(weight=weight)
 
     def forward(self, preds: Tensor, targets: Tensor) -> Tensor:
-        return self.criterion(preds, targets)
+        return self.criterion(preds.float(), targets.float())
 
 
 class FocalLoss(nn.Module):

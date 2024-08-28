@@ -8,6 +8,8 @@ import random
 import shutil
 import logging
 from huggingface_hub import login
+import multiprocessing as mp
+mp.set_start_method('fork')
 
 def read_config(config_file : str):
     """
@@ -99,7 +101,6 @@ class Experiment():
         os.makedirs('experiments', exist_ok=True)
 
         self.project_name = self.config['experiment']['project_name']
-
         if 'datasets' in self.config:
             first_dataset = self.config['datasets'][0]
         #Create project based on first dataset
@@ -110,6 +111,7 @@ class Experiment():
             annotations=self.config['experiment']['annotation_file'])
             logging.info(f"Project {self.project_name} loaded")
             logging.info(f"Annotations in project: {self.project.annotations}")
+            logging.info(f"Slides in project: {self.project.slides}")
         else:
             logging.info(f"Creating project {self.project_name}")
             os.makedirs(f"experiments", exist_ok=True)
@@ -118,9 +120,11 @@ class Experiment():
                 name=self.project_name,
                 root=f"experiments/{self.project_name}",
                 annotations=self.config['experiment']['annotation_file'],
-                slides=first_dataset['slide_path']
-            ) 
+                slides=first_dataset['slide_path'])
+            
             logging.info(f"Project {self.project_name} created")
+            logging.info(f"Annotations in project: {self.project.annotations}")
+            logging.info(f"Slides in project: {self.project.slides}")
 
         #Add additional datasets to the project
         if len(self.config['datasets']) > 1:
@@ -131,71 +135,10 @@ class Experiment():
                     tfrecords=source['tfrecord_path'],
                     tiles=source['tile_path']
                 )
-        
-        
-    """
-    def ssl(self):
-        ssl_parameters = self.config['ssl']
-        (method, backbone, train_path, val_path, val_split,
-        ssl_model_name) = (ssl_parameters['method'],
-            ssl_parameters['backbone'], ssl_parameters['train_path'],
-            ssl_parameters['val_path'], ssl_parameters['val_split'],
-            ssl_parameters['ssl_model_name'])
-        
-        os.makedirs(f'{self.config["experiment"]["project_name"]}/ssl_train', exist_ok=True)
-        os.makedirs(f'{self.config["experiment"]["project_name"]}/ssl_val', exist_ok=True)
-
-        if val_path == None and val_split != None:
-            #Get all directories in the training directory
-            train_slides = os.listdir(train_path)
-            print("Total number of slides: ", len(train_slides))
-
-            #Shuffle the directory
-            random.shuffle(train_slides)
-            #Split training data into training and validation data
-            val_size = int(val_split * len(train_slides))
-            val_files = train_slides[:val_size]
-            train_files = train_slides[val_size:]
-
-            for slide in train_files:
-                images = os.listdir(f'{train_path}/{slide}')
-                for image in images:
-                    shutil.copy(f'{train_path}/{slide}/{image}', f"{self.config['experiment']['project_name']}/ssl_train/{image}")
-
-            for slide in val_files:
-                images = os.listdir(f'{train_path}/{slide}')
-                for image in images:
-                    shutil.copy(f'{train_path}/{slide}/{image}', f"{self.config['experiment']['project_name']}/ssl_val/{image}")
-
-        elif val_path != None:
-            #Copy all files from the training directory to the ssl_train directory
-            for slide in os.listdir(train_path):
-                for image in os.listdir(f"{train_path}/{slide}"):
-                    shutil.copy(f'{train_path}/{slide}/{image}', f"{self.config['experiment']['project_name']}/ssl_train/{image}")
-            #Copy all files from the validation directory to the ssl_val directory
-            for slide in os.listdir(val_path):
-                for image in os.listdir(f"{val_path}/{slide}"):
-                    shutil.copy(f'{val_path}/{slide}/{image}', f"{self.config['experiment']['project_name']}/ssl_val/{image}")
-        else:
-            for slide in os.listdir(train_path):
-                for image in os.listdir(f"{train_path}/{slide}"):
-                    shutil.copy(f'{train_path}/{slide}/{image}', f"{self.config['experiment']['project_name']}/ssl_train/{image}")
-
-        if val_path != None:
-            train_ssl_model(method, backbone, ssl_model_name, f"{self.config['experiment']['project_name']}/ssl_train",
-                        f"{self.config['experiment']['project_name']}/ssl_val")
-        else:
-            train_ssl_model(method, backbone, ssl_model_name, f"{self.config['experiment']['project_name']}/ssl_train")
-    """
+                logging.info(f"Added source {source['name']} to project {self.project_name}")
     def benchmark(self):
         #Iterate over all possible combinations of hyperparameters
         benchmark(self.config, self.project)
 
     def optimize_parameters(self):
         optimize_parameters(self.config, self.project)
-
-    """
-    def hpo(self):
-        optimizer = HyperParameterOptimizer()
-        optimizer.run()
-    """

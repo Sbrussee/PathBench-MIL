@@ -3,6 +3,10 @@ import numpy as np
 import os
 import logging
 import resource
+import gc
+import multiprocessing
+import weakref
+import torch
 
 def calculate_entropy(row : pd.Series):
     """
@@ -140,3 +144,31 @@ def free_up_gpu_memory():
     
     # Optional: Print confirmation that the memory has been freed and the setting applied
     logging.debug("GPU memory has been cleared and expandable_segments has been enabled.")
+
+def cleanup_multiprocessing_semaphores():
+    """
+    This function triggers garbage collection and attempts to manually release any semaphores
+    used by the multiprocessing library that are still allocated.
+    """
+    # Trigger garbage collection to free up unreferenced objects
+    gc.collect()
+
+    # Iterate through all objects tracked by the garbage collector
+    for obj in gc.get_objects():
+        # Check if the object is an instance of the Semaphore class
+        if isinstance(obj, multiprocessing.synchronize.Semaphore):
+            try:
+                # Manually release the semaphore if it has been acquired
+                while obj.get_value() > 0:
+                    obj.release()
+                # Explicitly close the semaphore to free system resources
+                obj._semlock.close()
+            except Exception as e:
+                print(f"Failed to clean up semaphore: {e}")
+
+    # Remove remaining weak references to ensure all objects are cleaned up
+    for ref in weakref.getweakrefs(obj):
+        ref()
+
+    # Another garbage collection to clean up any lingering objects
+    gc.collect()

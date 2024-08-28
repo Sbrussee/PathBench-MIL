@@ -14,7 +14,7 @@ from timm.models.vision_transformer import VisionTransformer, _cfg
 from timm.models.layers import PatchEmbed
 from timm.layers import SwiGLUPacked
 from transformers import AutoImageProcessor, ViTModel, AutoModel
-from huggingface_hub import hf_hub_download
+from huggingface_hub import hf_hub_download, PyTorchModelHubMixin
 import os
 import yaml
 import math
@@ -424,11 +424,11 @@ class uni(TorchFeatureExtractor):
         model_path = os.path.join(local_dir, model_name)
 
         if not os.path.exists(model_path):
-            temp_model_path = hf_hub_download(repo_id="MahmoodLab/UNI", filename=model_temp_name, local_dir=local_dir)
+            temp_model_path = hf_hub_download(repo_id="MahmoodLab/UNI", filename=model_temp_name, local_dir=local_dir, force_download=True)
             os.rename(temp_model_path, model_path)
         
         self.model = timm.create_model(
-            "vit_large_patch16_224", img_size=224, init_values=1e-5, num_classes=0
+            "vit_large_patch16_224", img_size=224, patch_size=16, init_values=1e-5, num_classes=0, dynamic_img_size=True
         )
         
         self.model.load_state_dict(torch.load(model_path, map_location="cpu"), strict=True)
@@ -1361,9 +1361,10 @@ class virchow(TorchFeatureExtractor):
             """
             def __init__(self):
                 super(VirchowEmbedder, self).__init__()
+                self.base_model = base_model.cuda()
 
             def forward(self, x):
-                x = base_model(x)
+                x = self.base_model(x)
                 cls_token = x[:, 0]
                 patch_tokens = x[:, 1:]
                 avg_pool = patch_tokens.mean(dim=1)
@@ -1418,9 +1419,10 @@ class virchow2(TorchFeatureExtractor):
             """
             def __init__(self):
                 super(VirchowEmbedder, self).__init__()
+                self.base_model = base_model.cuda()
 
             def forward(self, x):
-                x = base_model(x)
+                x = self.base_model(x)
                 cls_token = x[:, 0]
                 patch_tokens = x[:, 5:]
                 avg_pool = patch_tokens.mean(dim=1)
@@ -1553,7 +1555,7 @@ class transpath_mocov3(TorchFeatureExtractor):
             'kwargs': {}
         }
 
-
+@register_torch
 class exaone_path(TorchFeatureExtractor):
     """
     EXAONE Path feature extractor, with Vision Transformer backbone
@@ -1847,16 +1849,17 @@ class exaone_path(TorchFeatureExtractor):
                         output.append(self.norm(x))
                 return output
 
-        model = VisionTransformer().from_pretrained("LGAI-EXAONE/EXAONEPath")
+        self.model = VisionTransformer().from_pretrained("LGAI-EXAONE/EXAONEPath").eval()
         self.num_features = 768
         self.transform = transforms.Compose(
         [
             transforms.Resize(256, interpolation=transforms.InterpolationMode.BICUBIC),
             transforms.CenterCrop(224),
+            transforms.ConvertImageDtype(torch.float32),
             transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ]
         )
-        self.model.eval()
+        self.model.to('cuda')
         self.preprocess_kwargs = {'standardize': False}
 
     def dump_config(self):
