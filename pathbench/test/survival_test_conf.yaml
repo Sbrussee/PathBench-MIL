@@ -59,7 +59,7 @@ benchmark_parameters:
   tile_px:
     - 256
   tile_um:
-    - 20x
+    - 150
   normalization:
     - macenko
     - reinhard
@@ -88,4 +88,4 @@ benchmark_parameters:
     - Adam
 
 weights_dir: pretrained_weights
-hf_token: None
+#hf_token: None

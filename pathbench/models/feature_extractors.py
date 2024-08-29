@@ -1853,8 +1853,7 @@ class exaone_path(TorchFeatureExtractor):
         self.num_features = 768
         self.transform = transforms.Compose(
         [
-            transforms.Resize(256, interpolation=transforms.InterpolationMode.BICUBIC),
-            transforms.CenterCrop(224),
+            transforms.Resize(224, interpolation=transforms.InterpolationMode.BICUBIC),
             transforms.ConvertImageDtype(torch.float32),
             transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ]
