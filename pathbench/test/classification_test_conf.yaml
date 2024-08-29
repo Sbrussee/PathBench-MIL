@@ -51,8 +51,7 @@ benchmark_parameters:
     - 256
     - 512
   tile_um:
-    - 20x
-    - 40x
+    - 150
   normalization:
     #- macenko
     - reinhard
@@ -71,4 +70,4 @@ benchmark_parameters:
 
 
 weights_dir: /exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/pretrained_weights
-hf_token: None
+#hf_token: None

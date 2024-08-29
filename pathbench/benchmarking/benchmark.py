@@ -570,6 +570,7 @@ def benchmark(config, project):
     annotations = project.annotations
     logging.info(f"Using {project_directory} for project directory...")
     logging.info(f"Using {annotations} for annotations...")
+
     #Determine splits file
     splits_file = determine_splits_file(config, project_directory)
     
@@ -606,14 +607,14 @@ def benchmark(config, project):
 
         try:
             target = determine_target_variable(task, config)
-
+            logging.info(f"Target variable: {target}")
             annotation_df = pd.read_csv(project.annotations)
 
             #Split datasets into train, val and test
             all_data = project.dataset(tile_px=combination_dict['tile_px'],
                                     tile_um=combination_dict['tile_um'],
                                     )
-            
+            logging.info(f"Datasets: {all_data}")
             logging.info("Extracting tiles...")
 
             qc_methods = config['experiment']['qc']
@@ -633,7 +634,7 @@ def benchmark(config, project):
 
             cleanup_multiprocessing_semaphores()
             #Extract tiles with QC for all datasets
-            all_data.extract_tiles(enable_downsample=False,
+            all_data.extract_tiles(enable_downsample=True,
                                     save_tiles=False,
                                     qc=qc_list,
                                     grayspace_fraction = float(config['experiment']['qc_filters']['grayspace_fraction']),

@@ -26,4 +26,5 @@ def test():
     experiment.run()
     logging.info("Optimization test passed")
 
-test()
+if __name__ == "__main__":
+    test()

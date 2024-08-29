@@ -10,6 +10,7 @@ from torch import nn
 import torch.nn.functional as F
 from sklearn.cluster import KMeans
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
+from sklearn.mixture import GaussianMixture
 
 def get_activation_function(activation_name: str):
     """Return the corresponding activation function from a string name."""
@@ -667,7 +668,7 @@ class hierarchical_cluster_mil(nn.Module):
         self.encoder = build_encoder(n_feats, z_dim, encoder_layers, activation_function, dropout_p, True)
         
         # Learnable weights for clusters
-        self.cluster_weights = nn.Parameter(torch.ones(max_clusters))
+        self.cluster_weights = nn.Parameter(torch.randn(z_dim, max_clusters))
         self.max_clusters = max_clusters
         
         self.region_attention = nn.Sequential(
@@ -699,43 +700,17 @@ class hierarchical_cluster_mil(nn.Module):
         all_region_embeddings = []
 
         for i in range(batch_size):
-            # Flatten the embeddings for clustering
             embeddings = self.encoder(bags[i].view(-1, n_feats))
-            embeddings = embeddings.view(n_patches, -1)  # (n_patches, z_dim)
-            
-            # Soft assignment of patches to clusters
-            logits = embeddings @ self.cluster_weights.view(-1, 1)  # [n_patches, max_clusters]
+            logits = embeddings @ self.cluster_weights.view(-1, 1).squeeze()  # [n_patches, max_clusters]
             cluster_probs = F.softmax(logits, dim=1)  # [n_patches, max_clusters]
             
-            # Generate cluster assignments (soft clustering)
-            clusters = Categorical(cluster_probs).sample()
-            region_embeddings = []
+            region_embeddings = cluster_probs.t() @ embeddings  # [max_clusters, z_dim]
+            region_embeddings = self.region_head(region_embeddings)
+            all_region_embeddings.append(region_embeddings)
 
-            for j in range(self.max_clusters):
-                cluster_mask = (clusters == j)
-                cluster_patches = embeddings[cluster_mask]
-
-                if cluster_patches.size(0) == 0:
-                    continue
-
-                attention_weights = F.softmax(self.region_attention(cluster_patches), dim=0)
-                region_embedding = torch.sum(attention_weights * cluster_patches, dim=0)
-                region_embeddings.append(self.region_head(region_embedding.unsqueeze(0)))
-
-            if region_embeddings:
-                region_embeddings = torch.cat(region_embeddings, dim=0)
-                all_region_embeddings.append(region_embeddings)
-
-        if len(all_region_embeddings) > 0:
-            region_embeddings = torch.stack(all_region_embeddings, dim=0)
-        else:
-            raise ValueError("No regions were found. Check your clustering or input data.")
-
-        if region_embeddings.dim() == 2:
-            region_embeddings = region_embeddings.unsqueeze(1)
-
-        region_attention_weights = F.softmax(self.slide_attention(region_embeddings), dim=1)
-        slide_embedding = torch.sum(region_attention_weights * region_embeddings, dim=1)
+        region_embeddings = torch.stack(all_region_embeddings, dim=0)  # [batch_size, max_clusters, z_dim]
+        slide_attention_weights = F.softmax(self.slide_attention(region_embeddings), dim=1)
+        slide_embedding = torch.sum(slide_attention_weights * region_embeddings, dim=1)
         scores = self.slide_head(slide_embedding)
         return scores
 
@@ -792,7 +767,7 @@ class adaptive_gmm_mil(nn.Module):
             component_embeddings = torch.cat(component_embeddings, dim=0)  # [max_components, z_dim]
             
             # Apply single-layer attention to the component embeddings
-            attention_scores = self.attention_layer(component_embeddings).squeeze(-1)  # [max_components]
+            attention_scores = self.attention_layer(component_embeddings.float()).squeeze(-1)  # [max_components]
             attention_weights = F.softmax(attention_scores, dim=0)  # [max_components]
             bag_embedding = torch.sum(attention_weights.unsqueeze(-1) * component_embeddings, dim=0)  # [z_dim]
             
@@ -820,24 +795,30 @@ class dpp_mil(nn.Module):
         embeddings = self.encoder(bags.view(-1, n_feats))
         embeddings = embeddings.view(batch_size, n_patches, -1)
 
-        # Calculate the determinant of the kernel matrix
+        # Compute the kernel matrix
         kernel_matrix = torch.matmul(embeddings, embeddings.transpose(1, 2))
-        kernel_det = torch.det(kernel_matrix + torch.eye(kernel_matrix.size(1)).to(embeddings.device) * 1e-5)
+        
+        # Add a small value to the diagonal for numerical stability
+        kernel_matrix += torch.eye(kernel_matrix.size(1)).to(embeddings.device) * 1e-5
+        
+        # Compute determinant along the batch dimension
+        kernel_det = kernel_matrix.det()  # Shape: (batch_size,)
+        
+        # Get top indices across patches, keeping the batch size intact
+        _, top_indices = torch.topk(kernel_det, k=1, dim=1)  # Shape: (batch_size, 1)
+        
+        # Make sure top_indices is compatible for gathering
+        top_indices = top_indices.unsqueeze(-1).expand(batch_size, 1, embeddings.size(-1))
+        
+        # Gather selected embeddings while preserving batch size
+        selected_embeddings = torch.gather(embeddings, 1, top_indices)
 
-        # Select the top determinant index (corrected dimension)
-        _, top_indices = torch.topk(kernel_det, 1, dim=0)
-
-        # Prepare the top_indices for gathering
-        top_indices = top_indices.unsqueeze(-1).expand(-1, embeddings.size(2))
-
-        # Gather the selected embeddings
-        selected_embeddings = torch.gather(embeddings, 1, top_indices.unsqueeze(1))
-
-        # Pool the selected embeddings
-        pooled_embeddings = selected_embeddings.mean(dim=1)
-
-        # Pass through the head to get the final scores
-        scores = self.head(pooled_embeddings)
+        # Average the selected embeddings across the patch dimension
+        pooled_embeddings = selected_embeddings.mean(dim=1)  # Shape: (batch_size, z_dim)
+        
+        # Compute final scores
+        scores = self.head(pooled_embeddings)  # Shape: (batch_size, n_out)
+        
         return scores
 
 class il_mil(nn.Module):
@@ -869,7 +850,7 @@ class capsule_mil(nn.Module):
         super(capsule_mil, self).__init__()
         self.encoder = build_encoder(n_feats, z_dim, encoder_layers, activation_function, dropout_p, True)
         self.capsule_layer = self.CapsuleLayer(num_capsules, n_out, z_dim, capsule_dim, routing_iters)
-        self.classifier = nn.Linear(capsule_dim, 1)
+        self.classifier = nn.Linear(capsule_dim, n_out)
         self._initialize_weights()
 
     def forward(self, bags):
@@ -877,7 +858,7 @@ class capsule_mil(nn.Module):
         embeddings = self.encoder(bags.view(-1, n_feats))
         embeddings = embeddings.view(batch_size, n_patches, -1).permute(0, 2, 1)
         capsules = self.capsule_layer(embeddings)
-        bag_scores = self.classifier(capsules).squeeze(-1)
+        bag_scores = self.classifier(capsules).mean(dim=-1)  # Adjust to match the required dimension
         return bag_scores
 
     def _initialize_weights(self):
@@ -901,7 +882,7 @@ class capsule_mil(nn.Module):
 
             for i in range(self.routing_iters):
                 c = F.softmax(b, dim=2)
-                c = c.permute(0, 2, 1, 3)  # Permute to match u's shape
+                c = c.permute(0, 2, 1).unsqueeze(-1)  # Permute to match u's shape
                 s = (c * u).sum(dim=2, keepdim=True)
                 v = self.squash(s)
                 if i < self.routing_iters - 1:
@@ -922,53 +903,44 @@ class prototype_attention_mil(nn.Module):
         self.n_out = n_out
         self.n_prototypes = n_prototypes
         
-        # Encoder to get embeddings from instances
         self.encoder = build_encoder(n_feats, z_dim, encoder_layers, activation_function, dropout_p, True)
-        
-        # Initial prototypes for each class
         self.prototype_base = nn.Parameter(torch.randn(n_out, n_prototypes, z_dim))
-        
-        # Attention mechanism to generate dynamic prototypes
         self.prototype_attention = nn.Sequential(
             nn.Linear(z_dim, z_dim),
             nn.ReLU(),
             nn.Linear(z_dim, n_prototypes)
         )
-        
-        # Attention mechanism based on prototypes
         self.attention = nn.Linear(z_dim, 1)
-        
-        # Final classifier
         self.classifier = nn.Linear(z_dim, n_out)
 
     def forward(self, bags):
         batch_size, n_patches, n_feats = bags.shape
-        
-        # Encode instances
         embeddings = self.encoder(bags.view(-1, n_feats))
         embeddings = embeddings.view(batch_size, n_patches, -1)
-        
-        # Generate dynamic prototypes for each class
+
         dynamic_prototypes = []
         for i in range(self.n_out):
-            proto_attention_weights = F.softmax(self.prototype_attention(embeddings.mean(dim=1)), dim=-1)  # (batch_size, n_prototypes)
-            proto_base = self.prototype_base[i].unsqueeze(0)  # (1, n_prototypes, z_dim)
-            dynamic_proto = torch.einsum('bp,pd->bd', proto_attention_weights, proto_base)  # (batch_size, z_dim)
+            proto_attention_weights = F.softmax(self.prototype_attention(embeddings.mean(dim=1)), dim=-1)  
+            proto_base = self.prototype_base[i]  # (n_prototypes, z_dim)
+
+            # Ensure proto_attention_weights and proto_base have compatible dimensions
+            assert proto_attention_weights.shape[-1] == self.n_prototypes, f"Mismatch: {proto_attention_weights.shape[-1]} vs {self.n_prototypes}"
+            assert proto_base.shape[0] == self.n_prototypes, f"Mismatch: {proto_base.shape[0]} vs {self.n_prototypes}"
+
+            dynamic_proto = torch.einsum('bp...,pd->bd...', proto_attention_weights, proto_base)  # Result: (batch_size, z_dim)
+
             dynamic_prototypes.append(dynamic_proto)
-        
-        dynamic_prototypes = torch.stack(dynamic_prototypes, dim=1)  # (batch_size, n_out, z_dim)
-        
-        # Calculate similarities and apply attention over prototypes
-        proto_attention_scores = torch.einsum('bnd,bcd->bnc', embeddings, dynamic_prototypes)  # (batch_size, n_patches, n_out)
-        proto_attention_scores = proto_attention_scores.max(dim=1)[0]  # Max over patches (batch_size, n_out)
-        proto_attention_scores = F.softmax(proto_attention_scores, dim=-1)  # Softmax over classes (batch_size, n_out)
-        
-        # Weighted sum over the dynamic prototypes based on attention scores
-        bag_embeddings = torch.einsum('bn,bnc->bc', proto_attention_scores, dynamic_prototypes)  # (batch_size, z_dim)
-        
-        # Final classification
-        bag_scores = self.classifier(bag_embeddings)
-        
+
+        # Stack along a new dimension for consistent size
+        dynamic_prototypes = torch.stack(dynamic_prototypes, dim=1)  # Shape: (batch_size, n_out, z_dim)
+
+        proto_attention_scores = torch.einsum('bnd,bcd->bnc', embeddings, dynamic_prototypes.unsqueeze(0))  # Shape: (batch_size, n_out, n_prototypes)
+        proto_attention_scores = proto_attention_scores.max(dim=1)[0]  
+        proto_attention_scores = F.softmax(proto_attention_scores, dim=-1)
+
+        bag_embeddings = torch.einsum('bn,bnc->bc', proto_attention_scores, dynamic_prototypes)  # Shape: (batch_size, z_dim)
+
+        bag_scores = self.classifier(bag_embeddings)  # Shape: (batch_size, n_out)
         return bag_scores
 
 class weighted_mean_mil(nn.Module):

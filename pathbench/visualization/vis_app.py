@@ -1,10 +1,10 @@
 import dash
-from dash import dcc, html, Input, Output, State, callback_context
+from dash import dcc, html, Input, Output, State, callback_context, ALL
 import pandas as pd
 import plotly.express as px
 import dash_bootstrap_components as dbc
-import argparse
 import os
+import argparse
 
 # Parse the arguments
 parser = argparse.ArgumentParser(description='Visualize the PathBench results')
@@ -14,7 +14,7 @@ args = parser.parse_args()
 # Initialize the Dash app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
-# Load all aggregated CSV files in the directory
+# Load your data (example data loaded here, replace with your data)
 df_dict = {}
 for file in os.listdir(args.results):
     if file.endswith(".csv") and 'agg' in file:
@@ -36,6 +36,29 @@ def create_legend_text(df):
 for key, df in df_dict.items():
     df_dict[key] = create_legend_text(df)
 
+def generate_filter_dropdowns(df):
+    filter_dropdowns = []
+    for column in df.columns:
+        # Check if the column is either categorical or specifically 'tile_px'
+        if (column == 'tile_px' or df[column].dtype == 'object' or pd.api.types.is_categorical_dtype(df[column])) and column != 'legend_text':
+            unique_values = df[column].dropna().unique()  # Ensure to remove NaN values
+            if len(unique_values) > 0:
+                filter_dropdowns.append(
+                    dbc.Col([
+                        html.Label(column, className='font-weight-bold', style={'font-size': '12px'}),
+                        dcc.Dropdown(
+                            id={'type': 'filter-dropdown', 'index': column},
+                            options=[{'label': str(val), 'value': val} for val in unique_values],
+                            multi=True,
+                            clearable=True,
+                            placeholder=f'Select {column} values',
+                            className='mb-3',
+                            style={'font-size': '12px'}
+                        )
+                    ], width=3)  # Adjust the width here to make the columns smaller
+                )
+    return filter_dropdowns
+
 # Global variable to track dynamically created columns
 created_columns = []
 
@@ -43,31 +66,27 @@ def group_by_x_axis(df, x_axis, y_axis):
     global created_columns
     
     if x_axis and y_axis:
-        # Create a new column for the mean of the y_axis values grouped by x_axis
-        new_column_name = f'{y_axis}_mean'
+        # Create a new column for the mean of the y_axis values grouped by the x_axis with respect to the filtered data
+        new_column_name = f'{y_axis}_mean_grouped_by_{x_axis}'
         df[new_column_name] = df.groupby(x_axis)[y_axis].transform('mean')
         
         # Sort the DataFrame by the new mean column in descending order and the x_axis in ascending order
         sorted_df = df.sort_values(by=[new_column_name, x_axis], ascending=[False, True]).reset_index(drop=True)
         
-        # Keep track of the created column
-        created_columns.append(new_column_name)
+        # Keep track of the created column to avoid reusing it in y-axis options
+        if new_column_name not in created_columns:
+            created_columns.append(new_column_name)
         
         return sorted_df, new_column_name
+    
     return df, y_axis
 
 # Define layout
 app.layout = dbc.Container([
     dbc.Row([
-        dbc.Col(html.Img(src='../../PathBench-logo-gecentreerd.png', height="100px"), width="auto", style={'display': 'flex', 'align-items': 'center', 'justify-content': 'center'}),
-        dbc.Col(html.H1("PathBench Visualization Dashboard"), className="text-center mt-4 mb-4", width="auto")
+        dbc.Col(html.H1("PathBench Visualization Dashboard"), className="text-center mt-4 mb-4")
     ], justify="center"),
     
-    # Add a Row with some space before the options menu
-    dbc.Row([
-        dbc.Col(width=12, style={"margin-bottom": "20px"})  # Adding space
-    ]),
-
     dbc.Row([
         dbc.Col([
             html.Label('Select Dataset', className='font-weight-bold'),
@@ -116,11 +135,15 @@ app.layout = dbc.Container([
             )
         ], width=6)
     ]),
-    
-    # Add a Row with some space before the plotly plot
+
     dbc.Row([
-        dbc.Col(width=12, style={"margin-bottom": "10px"})  # Adding space
+        dbc.Col([
+            html.Label('Filters', className='font-weight-bold'),
+        ], width=12)
     ]),
+    
+    dbc.Row(id='filter-dropdowns'),
+
     dbc.Row([
         dbc.Col([
             html.Label('Heatmap Value', className='font-weight-bold'),
@@ -143,138 +166,121 @@ app.layout = dbc.Container([
             dbc.Button("Reset", id="reset-button", color="secondary", className="mr-2", n_clicks=0)
         ], width=12, className="text-center mt-4")
     ])
-
-    
 ], fluid=True, style={
     'padding': '40px',
-    'backgroundColor': '#f8f9fa',  # Light grey background color
-    'minHeight': '100vh',  # Ensure the background covers the full height
+    'backgroundColor': '#f8f9fa',
+    'minHeight': '100vh',
 })
 
-# Combined callback for updating options, values, and the plot
+# Callback to update filter dropdowns dynamically
+@app.callback(
+    Output('filter-dropdowns', 'children'),
+    Input('dataset-selection', 'value')
+)
+def update_filter_dropdowns(dataset_selection):
+    df = df_dict[dataset_selection]
+    return generate_filter_dropdowns(df)
+
+# Callback to update x-axis and y-axis dropdown options based on selected dataset
 @app.callback(
     [Output('x-axis', 'options'),
      Output('y-axis', 'options'),
-     Output('heatmap-value', 'options'),
-     Output('heatmap-column', 'style'),
-     Output('plot', 'figure'),
-     Output('plot', 'style'),
      Output('x-axis', 'value'),
-     Output('y-axis', 'value'),
-     Output('heatmap-value', 'value')],
+     Output('y-axis', 'value')],
+    Input('dataset-selection', 'value')
+)
+def update_axis_options(dataset_selection):
+    df = df_dict[dataset_selection]
+    options = [{'label': col, 'value': col} for col in df.columns if col not in ['legend_text']]
+    
+    return options, options, None, None
+
+# Combined callback for updating the plot
+@app.callback(
+    [Output('heatmap-value', 'options'),
+     Output('heatmap-column', 'style'),
+     Output('plot', 'figure')],
     [Input('dataset-selection', 'value'),
      Input('plot-type', 'value'),
      Input('x-axis', 'value'),
      Input('y-axis', 'value'),
      Input('heatmap-value', 'value'),
      Input('group-button', 'n_clicks'),
-     Input('reset-button', 'n_clicks')],
+     Input('reset-button', 'n_clicks'),
+     Input({'type': 'filter-dropdown', 'index': ALL}, 'value')],
     [State('x-axis', 'value'),
      State('y-axis', 'value')]
 )
-def update_layout_and_plot(dataset_selection, plot_type, x_axis, y_axis, heatmap_value, n_clicks_group, n_clicks_reset, x_axis_state, y_axis_state):
+def update_layout_and_plot(dataset_selection, plot_type, x_axis, y_axis, heatmap_value, n_clicks_group, n_clicks_reset,
+                           filter_values, x_axis_state, y_axis_state):
     global created_columns
     
     df = df_dict[dataset_selection]
 
-    # Filter out created columns from the y-axis options
-    y_axis_options = [{'label': col, 'value': col} for col in df.columns if col not in created_columns]
-    x_axis_options = [{'label': col, 'value': col} for col in df.columns if col not in created_columns]
-    heatmap_value_options = [{'label': col, 'value': col} for col in df.columns if col not in created_columns]
+    # Construct filter dictionary from the inputs, safely getting the 'index' key
+    filter_values_dict = {}
+    for filter_id, val in zip(callback_context.inputs_list[7], filter_values):
+        filter_index = filter_id.get('id', {}).get('index')  # Safely retrieve the 'index'
+        if filter_index:
+            filter_values_dict[filter_index] = val
+
+    # Apply filters to exclude selected values
+    for col, filter_val in filter_values_dict.items():
+        if filter_val:
+            df = df[~df[col].isin(filter_val)]
+
+    if df.empty:
+        return ([], {'display': 'none'}, px.scatter(title="No Data Available"))
 
     # Determine the trigger of the callback
     triggered = callback_context.triggered[0]['prop_id'].split('.')[0]
 
-    # Handle reset button
-    if triggered == 'reset-button':
-        return (x_axis_options, y_axis_options, heatmap_value_options, {'display': 'none'}, {}, {'height': '600px'},
-                None, None, None)
+    # Grouping logic
+    if triggered == 'group-button' and x_axis_state and y_axis_state:
+        df, y_axis = group_by_x_axis(df, x_axis_state, y_axis_state)
+
+    # Check if y-axis is numeric:
+    if y_axis and df[y_axis].dtype == 'object':
+        df = df.sort_values(by=y_axis, ascending=False)
+
+    # Filter out created columns from the heatmap options
+    heatmap_value_options = [{'label': col, 'value': col} for col in df.columns if col not in created_columns]
 
     # Show heatmap column selector only when heatmap is selected
     heatmap_style = {'display': 'block'} if plot_type == 'heatmap' else {'display': 'none'}
 
-    # Group by x-axis and calculate mean of y-axis if group button is clicked
-    if triggered == 'group-button' and x_axis_state and y_axis_state:
-        df, y_axis = group_by_x_axis(df, x_axis_state, y_axis_state)
-
-    # Specify columns to include in hover data
-    hover_columns = ['tile_px', 'tile_um', 'normalization', 'feature_extraction', 'mil', 'loss', 'activation_function']
-    hover_data = {col: True for col in hover_columns if col in df.columns}
-    
-    # Determine if legend_text can be used for color
-    color_column = 'legend_text' if 'legend_text' in df.columns else None
-    
     # Generate the plot based on the plot type
-    if plot_type == 'scatter' and x_axis and y_axis:
-        fig = px.scatter(df, x=x_axis, y=y_axis, color=color_column,
-                         title=f'Scatter Plot of {y_axis} vs {x_axis}', 
-                         template='plotly_white', hover_data=hover_data)
+    if not x_axis or not y_axis:
+        fig = px.scatter(title="Please select X-axis and Y-axis values")
+    elif plot_type == 'scatter':
+        fig = px.scatter(df, x=x_axis, y=y_axis, color='legend_text' if 'legend_text' in df.columns else None,
+                         title=f'Scatter Plot of {y_axis} vs {x_axis}', template='plotly_white')
         
-    elif plot_type == 'histogram' and x_axis and y_axis:
-        # Using Histogram to plot the sorted data
+    elif plot_type == 'histogram':
         fig = px.histogram(df, x=x_axis, y=y_axis, color=x_axis, text_auto=True,
-                        title=f'Histogram of {y_axis} vs {x_axis}', 
-                        template='plotly_white', hover_data=hover_data,
-                        histfunc='avg')  # Set histfunc to sum to use the sorted means directly
+                           title=f'Histogram of {y_axis} vs {x_axis}', template='plotly_white',
+                           histfunc='avg' if y_axis else 'count')
         
-        # Format the text to show only three decimal points
-        fig.update_traces(texttemplate='%{y:.3f}')
+    elif plot_type == 'box':
+        fig = px.box(df, x=x_axis, y=y_axis, color=x_axis, title=f'Box Plot of {y_axis} grouped by {x_axis}', 
+                     template='plotly_white')
         
-        # Set barmode to overlay or group
-        fig.update_layout(barmode='overlay')
-
-        # Adjust the x-axis ordering to reflect the sorted data
-        fig.update_xaxes(categoryorder='total descending')
-
-    elif plot_type == 'bar' and x_axis and y_axis:
-        fig = px.bar(df, x=x_axis, y=y_axis, color=color_column, 
-                     title=f'Bar Plot of {y_axis} vs {x_axis}', 
-                     template='plotly_white', hover_data=hover_data,
-                     barmode='group')
-        fig.update_layout(xaxis=dict(categoryorder='category ascending'))
-    elif plot_type == 'heatmap' and x_axis and y_axis and heatmap_value:
+    elif plot_type == 'strip':
+        fig = px.strip(df, x=x_axis, y=y_axis, color='legend_text' if 'legend_text' in df.columns else None,
+                       title=f'Strip Plot of {y_axis} vs {x_axis}', template='plotly_white')
+        
+    elif plot_type == 'heatmap' and heatmap_value:
         agg_df = df.groupby([x_axis, y_axis]).agg({heatmap_value: 'mean'}).reset_index()
         fig = px.density_heatmap(agg_df, x=x_axis, y=y_axis, z=heatmap_value, 
-                                 color_continuous_scale='Viridis', 
-                                 title=f'Heatmap of Mean {heatmap_value} with {y_axis} vs {x_axis}', 
+                                 color_continuous_scale='Viridis', title=f'Heatmap of Mean {heatmap_value}', 
                                  template='plotly_white')
 
-        # Add text annotations with three decimal places
-        fig.update_traces(texttemplate='%{z:.3f}')
-        fig.update_layout(annotations=[
-            dict(
-                x=row[x_axis],
-                y=row[y_axis],
-                text=f'{row[heatmap_value]:.3f}',
-                showarrow=False,
-                font=dict(color="white" if row[heatmap_value] < agg_df[heatmap_value].mean() else "black")
-            ) for _, row in agg_df.iterrows()
-        ])
-        
-    elif plot_type == 'box' and x_axis and y_axis:
-        # Ensure a single boxplot per x-axis group
-        fig = px.box(df, x=x_axis, y=y_axis, color=x_axis, 
-                     title=f'Box Plot of {y_axis} grouped by {x_axis}', 
-                     template='plotly_white', hover_data=hover_data)
-    elif plot_type == 'strip' and x_axis and y_axis:
-        fig = px.strip(df, x=x_axis, y=y_axis, color=color_column, 
-                       title=f'Strip Plot of {y_axis} vs {x_axis}', 
-                       template='plotly_white', hover_data=hover_data)
-    else:
-        fig = px.scatter(title="Please select X-axis and Y-axis values")
-
-    # Dynamically adjust the legend text size
     fig.update_layout(
-        legend_title_text='Legend',
-        legend=dict(font=dict(size=10), itemwidth=30),  # Adjust legend text size here
-        height=600,  # Fix the plot height
-        showlegend=True,  # Ensure legend is shown
-        plot_bgcolor='#f8f9fa',  # Light grey background color
-        paper_bgcolor='#f8f9fa',  # Light grey background color
+        height=600,
+        plot_bgcolor='#f8f9fa',
+        paper_bgcolor='#f8f9fa',
     )
     
-    return (x_axis_options, y_axis_options, heatmap_value_options, heatmap_style, fig, {'height': '600px'},
-            x_axis, y_axis, heatmap_value)
-
+    return heatmap_value_options, heatmap_style, fig
 if __name__ == '__main__':
     app.run_server(debug=True)
