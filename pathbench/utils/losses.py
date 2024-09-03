@@ -64,6 +64,7 @@ class CoxPHLoss(nn.Module):
 class CrossEntropyLoss(nn.Module):
     def __init__(self, weight: Optional[Tensor] = None):
         """
+        Cross-entropy loss. This is the standard loss function for multi-class classification problems.
         Args:
             weight (Tensor, optional): A manual rescaling weight given to each class. If given, has to be a Tensor of size `C`.
         """
@@ -78,6 +79,8 @@ class CrossEntropyLoss(nn.Module):
 class FocalLoss(nn.Module):
     def __init__(self, alpha: float = 1.0, gamma: float = 2.0, reduction: str = 'mean', weight: Optional[Tensor] = None):
         """
+        Focal loss for imbalanced classification problems. Focal loss is designed to address class imbalance by
+        down-weighting the loss assigned to well-classified examples. 
         Args:
             alpha (float): Scaling factor for positive examples.
             gamma (float): Focusing parameter.
@@ -109,6 +112,8 @@ class FocalLoss(nn.Module):
 class LabelSmoothingCrossEntropyLoss(nn.Module):
     def __init__(self, smoothing: float = 0.1, weight: Optional[Tensor] = None):
         """
+        Cross-entropy loss with label smoothing. Label smoothing is a regularization technique that
+        encourages the model to be less confident about its predictions.
         Args:
             smoothing (float): Amount of label smoothing to apply.
             weight (Tensor, optional): A manual rescaling weight given to each class. If given, has to be a Tensor of size `C`.
@@ -150,6 +155,8 @@ class LabelSmoothingCrossEntropyLoss(nn.Module):
 class CrossEntropyWithEntropyMinimizationLoss(nn.Module):
     def __init__(self, weight_entropy: float = 1.0, weight: Optional[Tensor] = None):
         """
+        Cross-entropy loss with entropy minimization regularization.
+
         Args:
             weight_entropy (float): Weight of the entropy minimization loss.
             weight (Tensor, optional): A manual rescaling weight given to each class. If given, has to be a Tensor of size `C`.
@@ -181,6 +188,7 @@ class CrossEntropyWithEntropyMinimizationLoss(nn.Module):
 class AttentionEntropyMinimizedCrossEntropyLoss(nn.Module):
     def __init__(self, entropy_lambda: float = 1.0, weight: Optional[Tensor] = None):
         """
+        Entropy minimization loss for attention mechanisms.
         Args:
             entropy_lambda (float): Regularization strength for the entropy minimization.
             weight (Tensor, optional): A manual rescaling weight given to each class. If given, has to be a Tensor of size `C`.
@@ -209,6 +217,8 @@ class AttentionEntropyMinimizedCrossEntropyLoss(nn.Module):
 class DiversityRegularizedCrossEntropyLoss(nn.Module):
     def __init__(self, diversity_lambda: float = 1.0, weight: Optional[Tensor] = None):
         """
+        Diversity regularization loss for attention mechanisms. This loss encourages the attention weights to be diverse.
+
         Args:
             diversity_lambda (float): Regularization strength for the diversity regularization.
             weight (Tensor, optional): A manual rescaling weight given to each class. If given, has to be a Tensor of size `C`.
@@ -237,6 +247,8 @@ class DiversityRegularizedCrossEntropyLoss(nn.Module):
 class SparseAttentionCrossEntropyLoss(nn.Module):
     def __init__(self, attention_lambda: float = 1.0, weight: Optional[Tensor] = None):
         """
+        Sparse attention regularization loss for attention mechanisms. This loss encourages the attention weights to be sparse.
+
         Args:
             attention_lambda (float): Regularization strength for the attention sparsity.
             weight (Tensor, optional): A manual rescaling weight given to each class. If given, has to be a Tensor of size `C`.

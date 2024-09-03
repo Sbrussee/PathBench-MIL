@@ -43,6 +43,7 @@ from ..visualization.visualization import *
 
 from ..utils.losses import *
 from ..utils.metrics import *
+from ..utils.calculate_feature_similarity import *
 
 import optuna
 import optuna.visualization as opt_vis
@@ -650,6 +651,9 @@ def benchmark(config, project):
             train_set = balance_dataset(train_set, task, config)
 
             test_set = all_data.filter(filters={'dataset' : 'validate'})
+            
+            logging.info(f"Train set #slides: {len(train_set.slides())}")
+            logging.info(f"Test set #slides: {len(test_set.slides())}")
 
             logging.info("Splitting datasets...")
             splits = split_datasets(config, project, splits_file, target, project_directory, train_set)
@@ -754,11 +758,40 @@ def benchmark(config, project):
                 test_dict['weights'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}"
                 test_dict['mil_params'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/mil_params.json"
                 test_dict['bag_dir'] = bags
+                
                 # Visualize the activations, if applicable
                 if 'umap' in config['experiment']['visualization'] or 'mosaic' in config['experiment']['visualization']:
                     visualize_activations(config, "val", f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}", bags, target, save_string)
                     visualize_activations(config, "test", f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}", bags, target, save_string)
 
+                # Visualize the top 5 tiles, if applicable
+                if 'top_tiles' in config['experiment']['visualization']:
+                    #Select 10 random slides from train, val and test
+                    train_slides = random.sample(train.slides(), 10)
+                    val_slides = random.sample(val.slides(), 10)
+                    test_slides = random.sample(test_set.slides(), 10)
+
+                    os.makedirs(f"experiments/{config['experiment']['project_name']}/top_tiles", exist_ok=True)
+                    output_dir = f"experiments/{config['experiment']['project_name']}/top_tiles"
+                    for slide_name in train_slides:
+                        plot_top5_attended_tiles_per_class(slide_name,
+                                                            f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}",
+                                                            f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}",
+                                                            output_dir,
+                                                            annotation_df, target, "train", str(split), save_string)
+                    for slide_name in val_slides:
+                        plot_top5_attended_tiles_per_class(slide_name,
+                                                            f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}",
+                                                            f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}",
+                                                            output_dir,
+                                                            annotation_df, target, "val", str(split), save_string)
+                    for slide_name in test_slides:
+                        plot_top5_attended_tiles_per_class(slide_name,
+                                                            f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}",
+                                                            f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}",
+                                                            output_dir,
+                                                            annotation_df, target, "test", str(split), save_string)
+                    
                 test_df = test_df.append(test_dict, ignore_index=True)
                 print(test_df)
                 index += 1
@@ -1004,8 +1037,29 @@ def calculate_brier_score(durations : np.array, events : np.array, predictions :
     return np.mean(brier_scores)
 
 
-def optimize_parameters(config, project):
+def optimize_parameters(config : dict, project : sf.Project):
+    """
+    Optuna-based optimization of MIL-pipeline modules and parameters.
+
+    Args:
+        config: The pathbench configuration dictionary
+        project: The slideflow project
+    
+    Returns:
+        None
+    """
     def objective(trial):
+        """
+        Objective function for the Optuna optimization. The function first
+        samples the hyperparameters, then trains a MIL model based on the
+        configuration and returns the validation/test loss/given metric.
+
+        Args:
+            trial: The Optuna trial object
+        
+        Returns:
+            The loss/metric value
+        """
         # Load hyperparameters from the config file
         epochs = trial.suggest_int('epochs', 10, 50)
         batch_size = trial.suggest_int('batch_size', 8, 64)
@@ -1224,6 +1278,7 @@ def optimize_parameters(config, project):
 
         return np.mean(measure_df[objective_metric])  # Return the mean of the objective metric
 
+    # Load the specified configuration
     objective_metric = config['optimization']['objective_metric']
 
     task = config['experiment']['task']
@@ -1232,6 +1287,7 @@ def optimize_parameters(config, project):
     annotations = project.annotations
     logging.info(f"Using {project_directory} for project directory...")
     logging.info(f"Using {annotations} for annotations...")
+    
     #Determine splits file
     splits_file = determine_splits_file(config, project_directory)
 
@@ -1240,6 +1296,7 @@ def optimize_parameters(config, project):
 
     logging.info(f"Using {splits_file} splits for benchmarking...")
 
+    # Load the sampler/pruner
     sampler = config['optimization'].get('sampler', 'TPESampler')
     sampler_class = getattr(optuna.samplers, sampler, TPESampler)()
     if 'pruner' in config['optimization']:
@@ -1249,6 +1306,7 @@ def optimize_parameters(config, project):
     else:
         logging.info(f"Using {sampler} sampler...")
 
+    # Determine the direction of the optimization
     if config['optimization']['objective_mode'] == 'max':
         direction = 'maximize'
     elif config['optimization']['objective_mode'] == 'min':
@@ -1282,3 +1340,315 @@ def optimize_parameters(config, project):
 
     logging.info(f"Best parameters: {best_params} found in trial {study.best_trial}, with value: {study.best_value}")
     logging.info("Optimization finished...")
+
+
+
+def calculate_similarity_matrix(
+    bag_directory : str, 
+    slides : list, 
+    feature_methods : list, 
+    mag="20x",
+    tile_size=256, 
+    normalization="macenko", 
+    k=20, 
+    method='cosine', 
+    num_samples=100
+):
+    """
+    Calculate the similarity matrix based on random sample of slides.
+    First, embeddings are loaded for each slide, then neighbor rankings are calculated
+    and shared neighbors are counted. Finally, the similarity matrix is constructed.
+
+    Args:
+        bag_directory: The bag directory
+        slides: list of slides
+        feature_methods: list of feature methods
+        mag: magnification
+        tile_size: tile size
+        normalization: normalization method
+        k: number of neighbors
+        method: similarity method
+        num_samples: sample size for slides
+
+    Returns:
+        The similarity matrix
+    """
+    # Sample slides if there are more slides than num_samples
+    if len(slides) > num_samples:
+        slides = random.sample(list(slides), num_samples)
+
+    similarity_scores = []
+    
+    for slide in slides:
+        # Load embeddings and calculate neighbor rankings
+        embedding_dict = load_embeddings(bag_directory, tile_size, mag, normalization, feature_methods, slide)
+        rankings_dict = calculate_neighbor_rankings(embedding_dict, feature_methods, k, method=method)
+        similarity_scores.append(calculate_shared_neighbors(rankings_dict, feature_methods, k))
+    
+    # Average similarity scores across all slides
+    avg_similarity_scores = {}
+    for key in similarity_scores[0].keys():
+        avg_similarity_scores[key] = np.mean([score[key] for score in similarity_scores])
+    
+    return construct_similarity_matrix(avg_similarity_scores, feature_methods, shared_neighbors=True)
+
+
+def optimize_ensemble_model(
+    config : dict, 
+    project : sf.Project, 
+    all_bags : list, 
+    train : sf.Dataset, 
+    val : sf.Dataset, 
+    test: sf.Dataset = None, 
+    similarity_matrix: Optional[np.ndarray] = None,
+    weight_diversity: float = 0.5,
+    weight_performance: float = 0.5
+):
+    """
+    Optimize the ensemble model based on the ensemble diversity, feature extractor dissimilarity,
+    and prior benchmarking results. The optimization is performed by iteratively adding bags to the
+    ensemble and evaluating the performance on the validation set. The best-performing ensemble is
+    selected based on the performance metric.
+
+    Args:
+        config: The pathbench configuration dictionary
+        project: The slideflow project
+        all_bags: list of all bags to sample from
+        train: The training dataset
+        val: The validation dataset
+        test: The test dataset
+        similarity_matrix: The similarity matrix
+        weight_diversity: The weight for diversity
+        weight_performance: The weight for performance
+    
+    Returns:
+        best_bags: best performing bag ensemble
+        best_performance: best performance of the ensemble
+    """
+    # Load bag directories and names
+    bag_directory = f"experiments/{config['experiment']['project_name']}/bags"
+    bag_paths = [os.path.join(bag_directory, d) for d in os.listdir(bag_directory) if os.path.isdir(os.path.join(bag_directory, d))]
+    bag_names = {os.path.basename(d): d for d in bag_paths}
+    logging.info(f"Found bags: {bag_names}")
+
+    # Determine the target variable
+    target = determine_target_variable(config['experiment']['task'], config)
+    logging.info(f"Target variable: {target}")
+
+    # Configure MIL model
+    mil_conf = mil_config("mm_attention_mil")
+
+    # Create directory for ensemble models
+    ensemble_model_directory = f"experiments/{config['experiment']['project_name']}/ensemble_model"
+    os.makedirs(ensemble_model_directory, exist_ok=True)
+
+    max_bags = 10
+    current_ensemble = []
+    best_performance = 0
+    best_bags = []
+
+    # Performance column name from config
+    performance_column = config['experiment']['ensemble']['performance_column']
+    performance_dataset = config['experiment']['ensemble']['performance_dataset']
+
+    #Load previous benchmarking results
+    results_directory = f"experiments/{config['experiment']['project_name']}/results/{performance_dataset}_results_agg.csv"
+    if os.path.exists(results_directory):
+        results_df = pd.read_csv(results_directory, index_col=0)
+        logging.info(f"Results file {results_directory} found.")
+    else:
+        results_df = None
+        logging.warning(f"Results file {results_directory} not found; ensemble construction will not use previous results.")
+
+    # Step 1: Select the first bag as the best-performing model
+    if results_df is not None:
+        best_row = results_df.sort_values(by=performance_column, ascending=False).index[0]
+        #Get tile magnification, tile size, normalization and feature extraction method from the best row
+        tile_mag, tile_size, normalization, feature_extraction = best_row.split("_")[0:4]
+        #Get bag directory
+        best_initial_bag = f"{tile_mag}_{tile_size}_{normalization}_{feature_extraction}"
+        bag_path = bag_names[best_initial_bag]
+        current_ensemble.append(best_initial_bag)
+        logging.info(f"Starting ensemble with best performing bag: {best_initial_bag}")
+    
+    # Step 2: Iteratively add bags to the ensemble
+    for _ in range(1, max_bags):
+        remaining_bags = [bag for bag in bag_names.keys() if bag not in current_ensemble]
+        if not remaining_bags:
+            break
+        
+        if similarity_matrix is not None and len(current_ensemble) > 0:
+            current_indices = [list(bag_names.keys()).index(bag) for bag in current_ensemble]
+            similarity_scores = similarity_matrix[current_indices, :].mean(axis=0)
+            dissimilarity_scores = 1 - similarity_scores
+            dissimilarity_weights = dissimilarity_scores / dissimilarity_scores.sum()
+
+            # Combine weights based on diversity and performance
+            if results_df is not None:
+                performance_weights = results_df.loc[remaining_bags, performance_column].values
+                performance_weights /= performance_weights.sum()
+                combined_weights = (weight_diversity * dissimilarity_weights) + (weight_performance * performance_weights)
+            else:
+                combined_weights = dissimilarity_weights
+
+            # Normalize combined weights
+            combined_weights /= combined_weights.sum()
+
+            # Sort remaining bags by combined weight (highest weight first)
+            ranked_bags = [bag for _, bag in sorted(zip(combined_weights, remaining_bags), reverse=True)]
+        else:
+            ranked_bags = remaining_bags
+        
+        added = False
+        for new_bag in ranked_bags:
+            new_ensemble = current_ensemble + [new_bag]
+
+            # Check if this combination has been tried before using results_df
+            ensemble_key = "_".join(sorted(new_ensemble))
+            if results_df is not None and ensemble_key in results_df.index:
+                performance = results_df.loc[ensemble_key, performance_column]
+                logging.info(f"Found previous result for ensemble {ensemble_key}: {performance}")
+            else:
+                # Train the MIL model with the new ensemble and evaluate it
+                performance = evaluate_ensemble(new_ensemble, mil_conf, train, val, target, config, test, bag_names)
+
+                # Store the results in results_df
+                if results_df is not None:
+                    results_df.loc[ensemble_key, performance_column] = performance
+
+            # Update the best performance if the current ensemble improves it
+            if performance > best_performance:
+                best_performance = performance
+                best_bags = new_ensemble
+                current_ensemble = new_ensemble
+                logging.info(f"Improved performance to {best_performance} with bags: {best_bags}")
+                added = True
+                break
+        
+        if not added:
+            logging.info("No additional bags improved the performance; stopping the ensemble construction.")
+            break
+
+    logging.info(f"Final best performance: {best_performance} with bags: {best_bags}")
+    
+    return best_bags, best_performance
+
+def evaluate_ensemble(ensemble, mil_conf, train, val, target, config, test, bag_names):
+    """Function to train and evaluate the ensemble on the validation set, and optionally on the test set.
+    
+    Args:
+        ensemble (list): The ensemble of bags
+        mil_conf (mil-config): The MIL configuration
+        train (sf.Dataset): The training dataset
+        val (sf.Dataset): The validation dataset
+        target (str): The target variable
+        config (dict): The configuration dictionary
+        test (sf.Dataset): The test dataset
+        bag_names (dict): Dictionary mapping bag names to directories
+
+    Returns:
+        performance (float): The performance metric of the ensemble
+    """
+    # Train the MIL model with the new ensemble
+    train_result = project.train_mil(
+        config=mil_conf,
+        outcomes=target,
+        train_dataset=train,
+        val_dataset=val,
+        bags=[bag_names[bag] for bag in ensemble],
+        exp_label=f"ensemble_{len(ensemble)}",
+        pb_config=config
+    )
+
+    # Validate the model
+    number = get_highest_numbered_filename(f"experiments/{config['experiment']['project_name']}/mil/")
+    val_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil/{number}-ensemble_{len(ensemble)}/predictions.parquet")
+
+    # Evaluate validation performance
+    if config['experiment']['task'] == 'survival':
+        metrics, durations, events, predictions = calculate_survival_results(val_result)
+    elif config['experiment']['task'] == 'regression':
+        metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, "ensemble", "val")
+    else:  # Classification
+        metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, "ensemble", "val")
+
+    # Calculate validation performance metric
+    performance = np.mean(metrics[config['optimization']['objective_metric']])
+
+    # If test set is provided, evaluate on the test set as well
+    if test is not None:
+        test_result = project.eval_mil(
+            weights=f"experiments/{config['experiment']['project_name']}/mil/{number}-ensemble_{len(ensemble)}",
+            outcomes=target,
+            dataset=test,
+            bags=[bag_names[bag] for bag in ensemble],
+            config=mil_conf,
+            outdir=f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-ensemble_{len(ensemble)}"
+        )
+        test_result_df = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-ensemble_{len(ensemble)}/predictions.parquet")
+
+        if config['experiment']['task'] == 'survival':
+            test_metrics, test_durations, test_events, test_predictions = calculate_survival_results(test_result_df)
+        elif config['experiment']['task'] == 'regression':
+            test_metrics, test_tpr, test_fpr, test_pr_curves = calculate_results(test_result_df, config, "ensemble", "test")
+        else:  # Classification
+            test_metrics, test_tpr, test_fpr, test_pr_curves = calculate_results(test_result_df, config, "ensemble", "test")
+
+        logging.info(f"Test results for ensemble: {test_metrics}")
+
+    return performance
+
+def ensemble(project, config):
+    """
+    Main ensemble construction function. This function will optimize the ensemble model based on the
+    ensemble diversity, feature extractor dissimilarity, and prior benchmarking results. The optimization
+    is performed by iteratively adding bags to the ensemble and evaluating the performance on the validation set.
+    The best-performing ensemble is selected based on the performance metric.
+
+    Which bags are available is determined by the bags directory and options given in the
+    pathbench config file.
+
+    Args:
+        project: The slideflow project
+        config: The pathbench configuration dictionary
+    """
+    slides = pd.read_csv(project.annotations)['slide'].unique()
+    bag_directory = f"experiments/{config['experiment']['project_name']}/bags"
+    bag_paths = [os.path.join(bag_directory, d) for d in os.listdir(bag_directory) if os.path.isdir(os.path.join(bag_directory, d))]
+    bag_names = {os.path.basename(d): d for d in bag_paths}
+    logging.info(f"Found bags: {bag_names}")
+
+    #Get all feature extractor models
+    feature_extractors_models = config['benchmark_parameters']['feature_extraction']
+
+    # Determine the target variable
+    target = determine_target_variable(config['experiment']['task'], config)
+    logging.info(f"Target variable: {target}")
+
+    # Configure MIL model
+    mil_conf = mil_config("mm_attention_mil")
+
+    # Create directory for ensemble models
+    ensemble_model_directory = f"experiments/{config['experiment']['project_name']}/ensemble_model"
+    os.makedirs(ensemble_model_directory, exist_ok=True)
+    if results_df is not None:
+        logging.info(f"Results dataframe: {results_df}")
+
+    feature_methods = config['benchmark_parameters']['feature_extraction'] 
+    magnifications = config['benchmark_parameters']['tile_um']
+    tile_sizes = config['benchmark_parameters']['tile_px']
+    normalizations = config['benchmark_parameters']['normalization']
+    similarity_matrix = calculate_similarity_matrix(bag_directory, slides, feature_methods, mag=magnifications, tile_size=tile_sizes, normalization=normalizations)
+    logging.info(f"Similarity matrix: {similarity_matrix}")
+
+    tile_px, tile_um = magnifications[0], tile_sizes[0]
+    all_data = project.dataset(tile_px=tile_px,tile_um=tile_um)
+    train = all_data.filter(filters={'dataset': 'train'})
+    train = balance_dataset(train, config['experiment']['task'], config)
+    test_set = all_data.filter(filters={'dataset' : 'validate'})
+
+    train, val = split_datasets(config, project, determine_splits_file(config, f"experiments/{config['experiment']['project_name']}"), target, f"experiments/{config['experiment']['project_name']}")
+
+    best_bags, best_performance = optimize_ensemble_model(config, project, bag_names, train, val, test, similarity_matrix)
+
+

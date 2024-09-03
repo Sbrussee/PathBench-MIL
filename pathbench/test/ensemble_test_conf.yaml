@@ -16,7 +16,7 @@ experiment:
   with_continue: True # If True, the model will continue training from the last checkpoint.
   aggregation_level: slide # Aggregation level can be 'slide' or 'patient'
   task: classification # Task can be 'classification', 'regression' or 'survival'
-  mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
+  mode: ensemble # Mode can be either 'benchmark' or 'optimization'.
   custom_metrics: [RocAuc] # Custom metrics to be used, needs to be defined in metrics.py or as a fastai-metric: https://docs.fast.ai/metrics.html
 
   qc: # List of quality control methods to be used
@@ -38,6 +38,11 @@ experiment:
     - roc_curve
     - precision_recall_curve
 
+  ensemble:
+    results: /path/to/results
+    performance_column: balanced_accuracy_mean
+    performance_dataset: test
+
 datasets:
   - name: TCGA_LUSC
     slide_path: /exports/path-cutane-lymfomen-hpc/siemen/tcga/TCGA-LUSC
@@ -57,7 +62,7 @@ benchmark_parameters:
     - reinhard
   feature_extraction:
     - resnet50_imagenet
-    - CTransPath
+    #- CTransPath
     #- RetCCL
     #- PLIP
     #- uni

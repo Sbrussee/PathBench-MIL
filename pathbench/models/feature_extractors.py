@@ -1398,6 +1398,26 @@ class virchow(TorchFeatureExtractor):
 class virchow2(TorchFeatureExtractor):
     """
     Virchow2 feature extractor, with Huge Vision Transformer backbone.
+
+    Parameters
+    ----------
+    tile_px : int
+        The size of the tile
+    
+    Attributes
+    ----------
+    model : VirchowEmbedder
+        The Virchow model
+    transform : torchvision.transforms.Compose
+        The transformation pipeline
+    preprocess_kwargs : dict
+        The preprocessing arguments
+    
+    Methods
+    -------
+    dump_config()
+        Dump the configuration of the feature extractor
+    
     """
     tag = 'virchow2'
 

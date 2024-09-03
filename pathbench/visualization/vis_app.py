@@ -24,6 +24,19 @@ for file in os.listdir(args.results):
 
 # Function to concatenate specified columns for legend text
 def create_legend_text(df):
+    """
+    Create a new column 'legend_text' by concatenating specified columns in the DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to process
+    
+    Returns
+    -------
+    pd.DataFrame
+        The DataFrame with the new 'legend_text' column
+    """
     columns = ['tile_px', 'tile_um', 'normalization', 'feature_extraction', 'mil', 'loss', 'activation_function']
     existing_columns = [col for col in columns if col in df.columns]
     if existing_columns:
@@ -37,6 +50,19 @@ for key, df in df_dict.items():
     df_dict[key] = create_legend_text(df)
 
 def generate_filter_dropdowns(df):
+    """
+    Generate filter dropdowns for the categorical columns in the DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to generate filter dropdowns for
+    
+    Returns
+    -------
+    list
+        A list of Dash components (dbc.Col) containing the filter dropdowns
+    """
     filter_dropdowns = []
     for column in df.columns:
         # Check if the column is either categorical or specifically 'tile_px'
@@ -63,6 +89,25 @@ def generate_filter_dropdowns(df):
 created_columns = []
 
 def group_by_x_axis(df, x_axis, y_axis):
+    """
+    Group the DataFrame by the x-axis and calculate the mean of the y-axis values.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to group and calculate the mean
+    x_axis : str
+        The column to group by 
+    y_axis : str
+        The column to calculate the mean of
+    
+    Returns
+    -------
+    pd.DataFrame
+        The DataFrame with the new column and sorted values
+    str
+        The name of the created column
+    """
     global created_columns
     
     if x_axis and y_axis:
@@ -178,6 +223,19 @@ app.layout = dbc.Container([
     Input('dataset-selection', 'value')
 )
 def update_filter_dropdowns(dataset_selection):
+    """
+    Update the filter dropdowns based on the selected dataset.
+
+    Parameters
+    ----------
+    dataset_selection : str
+        The selected dataset
+    
+    Returns
+    -------
+    list
+        A list of Dash components (dbc.Col) containing the filter dropdowns
+    """    
     df = df_dict[dataset_selection]
     return generate_filter_dropdowns(df)
 
@@ -190,6 +248,25 @@ def update_filter_dropdowns(dataset_selection):
     Input('dataset-selection', 'value')
 )
 def update_axis_options(dataset_selection):
+    """
+    Update the x-axis and y-axis dropdown options based on the selected dataset.
+
+    Parameters
+    ----------
+    dataset_selection : str
+        The currently selected dataset
+    
+    Returns
+    -------
+    list
+        A list of options for the x-axis dropdown
+    list
+        A list of options for the y-axis dropdown
+    str
+        The default value for the x-axis dropdown
+    str
+        The default value for the y-axis dropdown
+    """
     df = df_dict[dataset_selection]
     options = [{'label': col, 'value': col} for col in df.columns if col not in ['legend_text']]
     
@@ -213,6 +290,33 @@ def update_axis_options(dataset_selection):
 )
 def update_layout_and_plot(dataset_selection, plot_type, x_axis, y_axis, heatmap_value, n_clicks_group, n_clicks_reset,
                            filter_values, x_axis_state, y_axis_state):
+    """
+    Update the layout and plot based on the selected dataset, plot type, axis values, and filter values.
+
+    Parameters
+    ----------
+    dataset_selection : str
+        The selected dataset
+    plot_type : str
+        The selected plot type
+    x_axis : str
+        The selected x-axis value
+    y_axis : str
+        The selected y-axis value
+    heatmap_value : str
+        The selected heatmap value
+    n_clicks_group : int
+        The number of clicks on the group button
+    n_clicks_reset : int
+        The number of clicks on the reset button
+    filter_values : list
+        The list of selected filter values
+    x_axis_state : str
+        The current x-axis value
+    y_axis_state : str
+        The current y-axis value
+    
+    """
     global created_columns
     
     df = df_dict[dataset_selection]

@@ -1,7 +1,6 @@
 """
 Here one can use pytorch modules as custom MIL aggregator models instead of the ones included in slideflow.
 The construted modules can be imported into the benchmark.py script to be used in the benchmarking process.
-As an example, we added some simple MIL methods (linear + mean, linear + max) below.
 
 """
 
@@ -13,7 +12,14 @@ from torch.nn import TransformerEncoder, TransformerEncoderLayer
 from sklearn.mixture import GaussianMixture
 
 def get_activation_function(activation_name: str):
-    """Return the corresponding activation function from a string name."""
+    """Return the corresponding activation function from a string name.
+    
+    Args:
+    - activation_name: Name of the activation function
+    
+    Returns:
+    - activation_function: Activation function
+    """
     if activation_name is None:
         return None
     try:
@@ -22,7 +28,19 @@ def get_activation_function(activation_name: str):
         raise ValueError(f"Unsupported activation function: {activation_name}")
 
 def build_encoder(n_feats: int, z_dim: int, encoder_layers: int, activation_function: str, dropout_p: float = 0.1, use_batchnorm: bool = True):
-    """Builds an encoder with a specified number of layers and activation functions."""
+    """Builds an encoder with a specified number of layers and activation functions.
+    
+    Args:
+    - n_feats: Number of input features
+    - z_dim: Dimension of the latent space
+    - encoder_layers: Number of layers in the encoder
+    - activation_function: Activation function to use in the encoder
+    - dropout_p: Dropout probability
+    - use_batchnorm: Whether to use batch normalization in the encoder
+
+    Returns:
+    - encoder: Encoder network
+    """
     layers = []
     for i in range(encoder_layers):
         in_features = n_feats if i == 0 else z_dim
@@ -36,6 +54,26 @@ def build_encoder(n_feats: int, z_dim: int, encoder_layers: int, activation_func
     return nn.Sequential(*layers)
 
 class linear_evaluation_mil(nn.Module):
+    """
+    Linear Evaluation MIL model. The model passes the instance embeddings through a linear layer and then
+    through a classifier, while not using any pooling operation or activation function. Therefore useful
+    for linear evaluation of the instance embeddings.
+    
+    Args:
+    - n_feats: Number of input features
+    - n_out: Number of output classes
+    - z_dim: Dimension of the latent space
+    - dropout_p: Dropout probability
+    - activation_function: Activation function to use in the encoder
+    - encoder_layers: Number of layers in the encoder
+
+    Methods:
+    - forward: Forward pass through the model
+    - initialize_weights: Initialize the weights of the model
+
+    Returns:
+    - scores: Predicted class scores for in the bag
+    """
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, 
                  activation_function=None, encoder_layers=1) -> None:
         super().__init__()
@@ -56,31 +94,26 @@ class linear_evaluation_mil(nn.Module):
         scores = self.head(pooled_embeddings)
         return scores
 
-class linear_mil(nn.Module):
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, 
-                 activation_function='ReLU', encoder_layers=1) -> None:
-        super().__init__()
-        self.encoder = build_encoder(n_feats, z_dim, encoder_layers, activation_function, dropout_p, True)
-        self.head = nn.Sequential(
-            nn.Flatten(),
-            nn.BatchNorm1d(z_dim),
-            nn.Dropout(dropout_p),
-            nn.Linear(z_dim, n_out)
-        )
-        self._initialize_weights()
-
-    def _initialize_weights(self):
-        initialize_weights(self)
-
-    def forward(self, bags):
-        batch_size, n_patches, n_feats = bags.shape
-        embeddings = self.encoder(bags.view(-1, n_feats))
-        embeddings = embeddings.view(batch_size, n_patches, -1)
-        pooled_embeddings = embeddings.mean(dim=1)
-        scores = self.head(pooled_embeddings)
-        return scores
-
 class mean_mil(nn.Module):
+    """
+    Mean-pooling MIL model. The model computes the mean pooling of the instance embeddings and passes the result
+    through a classifier.
+
+    Args:
+    - n_feats: Number of input features
+    - n_out: Number of output classes
+    - z_dim: Dimension of the latent space
+    - dropout_p: Dropout probability
+    - activation_function: Activation function to use in the encoder
+    - encoder_layers: Number of layers in the encoder
+
+    Methods:
+    - forward: Forward pass through the model
+    - initialize_weights: Initialize the weights of the model
+
+    Returns:
+    - scores: Predicted class scores for in the bag
+    """
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, 
                  activation_function='ReLU', encoder_layers=1) -> None:
         super().__init__()
@@ -105,6 +138,25 @@ class mean_mil(nn.Module):
         return scores
 
 class max_mil(nn.Module):
+    """
+    Max-pooling MIL model. The model computes the max pooling of the instance embeddings and passes the result
+    through a classifier.
+
+    Args:
+    - n_feats: Number of input features
+    - n_out: Number of output classes
+    - z_dim: Dimension of the latent space
+    - dropout_p: Dropout probability
+    - activation_function: Activation function to use in the encoder
+    - encoder_layers: Number of layers in the encoder
+
+    Methods:
+    - forward: Forward pass through the model
+    - initialize_weights: Initialize the weights of the model
+
+    Returns:
+    - scores: Predicted class scores for in the bag
+    """
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, 
                  activation_function='ReLU', encoder_layers=1) -> None:
         super().__init__()
@@ -129,6 +181,26 @@ class max_mil(nn.Module):
         return scores
 
 class lse_mil(nn.Module):
+    """
+    Log-sum-exp MIL model. The model computes the log-sum-exp pooling of the instance embeddings and passes the result
+    through a classifier.
+
+    Args:
+    - n_feats: Number of input features
+    - n_out: Number of output classes
+    - z_dim: Dimension of the latent space
+    - dropout_p: Dropout probability
+    - r: Scaling factor for the log-sum-exp pooling
+    - activation_function: Activation function to use in the encoder
+    - encoder_layers: Number of layers in the encoder
+
+    Methods:
+    - forward: Forward pass through the model
+    - initialize_weights: Initialize the weights of the model
+
+    Returns:
+    - scores: Predicted class scores for in the bag
+    """
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, 
                  r: float = 1.0, activation_function='ReLU', encoder_layers=1) -> None:
         super().__init__()
@@ -154,6 +226,26 @@ class lse_mil(nn.Module):
         return scores
 
 class lstm_mil(nn.Module):
+    """
+    LSTM MIL model. The model uses an LSTM to process the instance embeddings and passes the final hidden state
+    through a classifier. 
+
+    Args:
+    - n_feats: Number of input features
+    - n_out: Number of output classes
+    - z_dim: Dimension of the latent space
+    - lstm_dim: Dimension of the LSTM hidden state
+    - dropout_p: Dropout probability
+    - activation_function: Activation function to use in the encoder
+    - encoder_layers: Number of layers in the encoder
+
+    Methods:
+    - forward: Forward pass through the model
+    - initialize_weights: Initialize the weights of the model
+
+    Returns:
+    - scores: Predicted class scores for in the bag
+    """
     use_lens = True
 
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, lstm_dim: int = 128, 
@@ -184,6 +276,25 @@ class lstm_mil(nn.Module):
         return scores
 
 class deepset_mil(nn.Module):
+    """ Deep Sets MIL model. The model uses three fully connected layers to process the instance embeddings:
+    the encoder network, phi and rho. The phi network processes the instance embeddings, which are summed and then the rho network
+    classies the summed embeddings. 
+
+    Args:
+    - n_feats: Number of input features
+    - n_out: Number of output classes
+    - z_dim: Dimension of the latent space
+    - dropout_p: Dropout probability
+    - activation_function: Activation function to use in the encoder
+    - encoder_layers: Number of layers in the encoder
+
+    Methods:
+    - forward: Forward pass through the model
+    - initialize_weights: Initialize the weights of the model
+    
+    Returns:
+    - scores: Predicted class scores for in the bag
+    """
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, 
                  activation_function='ReLU', encoder_layers=1) -> None:
         super().__init__()
@@ -214,6 +325,25 @@ class deepset_mil(nn.Module):
         return scores
 
 class distributionpooling_mil(nn.Module):
+    """
+    Distribution Pooling MIL model. The model computes the mean and variance of the instance embeddings and
+    concatenates these statistics. The model then passes the concatenated embeddings through a classifier.
+
+    Args:
+    - n_feats: Number of input features
+    - n_out: Number of output classes
+    - z_dim: Dimension of the latent space
+    - dropout_p: Dropout probability
+    - activation_function: Activation function to use in the encoder
+    - encoder_layers: Number of layers in the encoder
+
+    Methods:
+    - forward: Forward pass through the model
+    - initialize_weights: Initialize the weights of the model
+
+    Returns:
+    - scores: Predicted class scores for in the bag
+    """
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, 
                  activation_function='ReLU', encoder_layers=1) -> None:
         super().__init__()
@@ -239,6 +369,29 @@ class distributionpooling_mil(nn.Module):
         return scores
 
 class dsmil(nn.Module):
+    """
+    Dual-stream MIL model. The model operates in two streams: instance-level and bag-level.
+    The instance-level stream evaluates critical instances determined by the instance classifier, which is used
+    to calculate the attention weights for each instance. The bag-level stream computes the bag embeddings
+    using the attention-weighted instance embeddings. The bag embeddings are processed by a convolutional layer
+    and passed through a classifier.
+
+    Args:
+    - n_feats: Number of input features
+    - n_out: Number of output classes
+    - z_dim: Dimension of the latent space
+    - dropout_p: Dropout probability
+    - activation_function: Activation function to use in the encoder
+    - encoder_layers: Number of layers in the encoder
+
+    Methods:
+    - forward: Forward pass through the model
+    - calculate_attention: Calculate the attention weights for each instance
+    - initialize_weights: Initialize the weights of the model
+
+    Returns:
+    - scores: Predicted class scores for in the bag
+    """
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, 
                  activation_function='ReLU', encoder_layers=1) -> None:
         super().__init__()
@@ -292,6 +445,26 @@ class dsmil(nn.Module):
         return attention_scores
 
 class varmil(nn.Module):
+    """
+    Variance MIL model. The model computes the variance and mean of the attention-weighted instance embeddings. 
+    The model then concatenates this mean and variance and passes the result through a classifier.
+
+    Args:
+    - n_feats: Number of input features
+    - n_out: Number of output classes
+    - z_dim: Dimension of the latent space
+    - dropout_p: Dropout probability
+    - activation_function: Activation function to use in the encoder
+    - encoder_layers: Number of layers in the encoder
+
+    Methods:
+    - forward: Forward pass through the model
+    - initialize_weights: Initialize the weights of the model
+    - calculate_attention: Calculate the attention weights for each instance
+
+    Returns:
+    - scores: Predicted class scores for in the bag
+    """
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, 
                  activation_function='ReLU', encoder_layers=1) -> None:
         super().__init__()
@@ -336,6 +509,29 @@ class varmil(nn.Module):
         return attention_scores
 
 class perceiver_mil(nn.Module):
+    """
+    Perceiver MIL model. The model uses a learnable latent array to compute attention weights between the input features
+    and the latent array. The model then applies transformer layers to the latent array and uses the CLS token for classification.
+
+    Args:
+    - n_feats: Number of input features
+    - n_out: Number of output classes
+    - z_dim: Dimension of the latent space
+    - latent_dim: Dimension of the latent array
+    - num_latents: Number of learnable latents
+    - num_layers: Number of transformer layers
+    - num_heads: Number of attention heads
+    - dropout_p: Dropout probability
+    - activation_function: Activation function to use in the encoder
+    - encoder_layers: Number of layers in the encoder
+
+    Methods:
+    - forward: Forward pass through the model
+    - initialize_weights: Initialize the weights of the model
+
+    Returns:
+    - output: Predicted class scores for in the bag
+    """
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, latent_dim: int = 128, 
                  num_latents: int = 16, num_layers: int = 6, num_heads: int = 8, 
                  dropout_p: float = 0.1, activation_function: str = 'ReLU', encoder_layers: int = 1):
@@ -383,6 +579,31 @@ class perceiver_mil(nn.Module):
         return output
 
 class cluster_mil(nn.Module):
+    """
+    Cluster MIL model. The model clusters the instance embeddings and computes the cluster centroids.
+    The model then computes the distance between each instance and the cluster centroids and uses the distances
+    to compute the instance weights. The model then weights the instance embeddings using soft cluster assignments
+    and calculates attention scores for each instance using the weighted embeddings. The model then computes the
+    cluster embeddings as a weighted sum of the instance embeddings and then calculates attention scores
+    for each cluster. The model then computes the final bag embedding as an attention-weighted sum of the cluster embeddings
+    and passes the result through a classifier.
+
+    Args:
+    - n_feats: Number of input features
+    - n_out: Number of output classes
+    - z_dim: Dimension of the latent space
+    - max_clusters: Maximum number of clusters
+    - dropout_p: Dropout probability
+    - activation_function: Activation function to use in the encoder
+    - encoder_layers: Number of layers in the encoder
+
+    Methods:
+    - forward: Forward pass through the model
+    - initialize_weights: Initialize the weights of the model
+
+    Returns:
+    - scores: Predicted class scores for in the bag. 
+    """
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, max_clusters: int = 10, 
                  dropout_p: float = 0.1, activation_function='ReLU', encoder_layers=1):
         super(cluster_mil, self).__init__()
@@ -391,17 +612,36 @@ class cluster_mil(nn.Module):
         # Learnable cluster centroids
         self.cluster_centroids = nn.Parameter(torch.randn(max_clusters, z_dim))
         self.max_clusters = max_clusters
+
+        self.instance_attention = Attention(z_dim)
+        self.cluster_attention = Attention(z_dim)
         
         # Final classifier head
         self.head = nn.Sequential(
             nn.BatchNorm1d(z_dim * max_clusters),
-            nn.Dropout(dropout_p),
+            nn.Dropout(dropout_p)
             nn.Linear(z_dim * max_clusters, n_out)
         )
         self._initialize_weights()
 
+
     def _initialize_weights(self):
         initialize_weights(self)
+
+    class Attention(nn.Module):
+        def __init__(self, in_dim):
+            super(cluster_mil.Attention, self).__init__()
+            self.attention = nn.Sequential(
+                nn.Linear(in_dim, in_dim),
+                nn.Tanh(),
+                nn.Linear(in_dim, 1)
+            )
+        
+        def forward(self, x):
+            # x: [n_instances, in_dim] or [n_clusters, in_dim]
+            weights = self.attention(x)  # [n_instances, 1] or [n_clusters, 1]
+            weights = F.softmax(weights, dim=0)  # Apply softmax over instances or clusters
+            return weights
 
     def forward(self, bags):
         batch_size, n_patches, n_feats = bags.shape
@@ -420,14 +660,17 @@ class cluster_mil(nn.Module):
             # Compute the embedding for each cluster as a weighted sum of patch embeddings
             cluster_embeddings = []
             for j in range(self.max_clusters):
-                cluster_embedding = torch.sum(soft_assignments[:, j].unsqueeze(-1) * embeddings, dim=0)
+                weighted_embeddings = soft_assignments[:, j].unsqueeze(-1) * embeddings  # [n_patches, z_dim]
+                attention_weights = self.instance_attention(weighted_embeddings)  # [n_patches, 1]
+                cluster_embedding = torch.sum(attention_weights * weighted_embeddings, dim=0)  # [z_dim]
                 cluster_embeddings.append(cluster_embedding.unsqueeze(0))
             
             # Concatenate the cluster embeddings into a single vector
             cluster_embeddings = torch.cat(cluster_embeddings, dim=0)  # [max_clusters, z_dim]
             
-            # Flatten the cluster embeddings to [z_dim * max_clusters]
-            pooled_embeddings.append(cluster_embeddings.view(-1))  # [z_dim * max_clusters]
+            cluster_attention = self.cluster_attention(cluster_embeddings)  # [max_clusters, 1]
+            cluster_sum = torch.sum(cluster_attention * cluster_embeddings, dim=0)  # [z_dim]
+            pooled_embeddings.append(cluster_sum.unsqueeze(0))
 
         # Stack all pooled embeddings and pass through the final head
         pooled_embeddings = torch.stack(pooled_embeddings, dim=0)  # [batch_size, z_dim * max_clusters]
@@ -435,6 +678,27 @@ class cluster_mil(nn.Module):
         return scores
 
 class gated_attention_mil(nn.Module):
+    """
+    Gated Attention MIL model. The model computes attention weights for each instance and aggregates the instance
+    embeddings using the attention weights in a gated manner. The model then passes the aggregated embeddings through a classifier.
+
+    Args:
+    - n_feats: Number of input features
+    - n_out: Number of output classes
+    - z_dim: Dimension of the latent space
+    - dropout_p: Dropout probability
+    - activation_function: Activation function to use in the encoder
+    - encoder_layers: Number of layers in the encoder
+
+    Methods:
+    - forward: Forward pass through the model
+    - calculate_attention: Calculate the attention weights for each instance
+    - initialize_weights: Initialize the weights of the model
+
+    Returns:
+    - scores: Predicted class scores for in the bag
+    """
+
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, 
                  activation_function='ReLU', encoder_layers=1) -> None:
         super().__init__()
@@ -481,6 +745,24 @@ class gated_attention_mil(nn.Module):
         return attention_weights
 
 class topk_mil(nn.Module):
+    """
+    Top-k MIL model. The model computes attention weights for each instance and selects the top-k instances
+    based on these weights. The model then computes the weighted sum of the top-k instances and passes the result
+    through a classifier. Useful for problems where the number of relevant instances can be estimated.
+
+    Args:
+    - n_feats: Number of input features
+    - n_out: Number of output classes
+    - z_dim: Dimension of the latent space
+
+    Methods:
+    - forward: Forward pass through the model
+    - calculate_attention: Calculate the attention weights for each instance
+    - initialize_weights: Initialize the weights of the model
+
+    Returns:
+    - scores: Predicted class scores for in the bag
+    """
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, k: int = 20, 
                  dropout_p: float = 0.1, activation_function='ReLU', encoder_layers=1):
         super().__init__()
@@ -530,7 +812,29 @@ class topk_mil(nn.Module):
         return scores
 
 class air_mil(nn.Module):
-    """Adaptive Instance Ranking MIL (AIR-MIL), which is a learnable top-k MIL model."""
+    """Adaptive Instance Ranking MIL (AIR-MIL), which is a learnable top-k MIL model. First, the model computes
+    attention weights for each instance and selects the top-k instances based on these weights. The model then
+    computes the weighted mean of the top-k instances and passes the result through a classifier. The model also
+    includes a learnable parameter k that determines the number of instances to select. Useful for problems
+    where the number of relevant intances is unknown.
+
+    Args:
+    - n_feats: Number of input features
+    - n_out: Number of output classes
+    - z_dim: Dimension of the latent space
+    - initial_k: Initial value of the learnable parameter k
+    - dropout_p: Dropout probability
+    - activation_function: Activation function to use in the encoder
+    - encoder_layers: Number of layers in the encoder
+
+    Methods:
+    - forward: Forward pass through the model
+    - calculate_attention: Calculate the attention weights for each instance
+    - initialize_weights: Initialize the weights of the model
+
+    Returns:
+    - scores: Predicted class scores for in the bag
+    """
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, initial_k: int = 20, 
                  dropout_p: float = 0.1, activation_function='ReLU', encoder_layers=1):
         super().__init__()
@@ -585,243 +889,29 @@ class air_mil(nn.Module):
             scores = F.softmax(scores, dim=1)
         return scores
 
-class cair_mil(nn.Module):
-    """Cross-correlation Adaptive Instance Ranking MIL (CAIR-MIL) with dynamic handling of single or multiple outputs."""
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, initial_k: int = 20, 
-                 dropout_p: float = 0.1, activation_function='ReLU', encoder_layers=1,
-                 nhead: int = 1, num_transformer_layers: int = 1, dim_feedforward: int = 512):
-        super().__init__()
-        self.n_out = n_out
-        self.encoder = build_encoder(n_feats, z_dim, encoder_layers, activation_function, dropout_p, True)
-        
-        # Transformer configuration for all instances
-        transformer_layer = TransformerEncoderLayer(d_model=z_dim, nhead=nhead, 
-                                                    dim_feedforward=dim_feedforward, dropout=dropout_p)
-        self.transformer = TransformerEncoder(transformer_layer, num_layers=num_transformer_layers)
-        
-        # Attention mechanism to select top-k instances after the Transformer
-        self.attention = nn.Sequential(
-            nn.Linear(z_dim, 1),
-        )
-        
-        # Attention pooling layer
-        self.attention_pooling = nn.Sequential(
-            nn.Linear(z_dim, 1),
-        )
-        
-        # Separate heads or a single head based on the number of outputs
-        if self.n_out > 1:
-            self.output_layers = nn.ModuleList([nn.Linear(z_dim, 1) for _ in range(n_out)])
-        else:
-            self.output_layer = nn.Linear(z_dim, n_out)
-        
-        # Learnable k
-        self.k_param = nn.Parameter(torch.tensor(float(initial_k)))
-        
-        self._initialize_weights()
 
-    def _initialize_weights(self):
-        initialize_weights(self)
-
-    def forward(self, bags, return_attention=False):
-        batch_size, n_patches, n_feats = bags.shape
-        embeddings = self.encoder(bags.view(-1, n_feats))
-        embeddings = embeddings.view(batch_size, n_patches, -1)
-        
-        # Pass all embeddings through the Transformer
-        transformer_output = self.transformer(embeddings.transpose(0, 1)).transpose(0, 1)  # [batch_size, n_patches, z_dim]
-        
-        # Calculate attention scores based on Transformer output
-        scores = self.attention(transformer_output).squeeze(-1)
-        k = torch.clamp(self.k_param, 1, n_patches).int()
-        
-        # Select top-k embeddings based on the attention scores
-        topk_scores, topk_indices = torch.topk(scores, k, dim=1)
-        topk_embeddings = torch.gather(transformer_output, 1, topk_indices.unsqueeze(-1).expand(-1, -1, transformer_output.size(-1)))
-        
-        # Apply softmax to top-k scores to get attention weights
-        topk_attention_weights = F.softmax(topk_scores, dim=1)
-        
-        # Apply attention pooling to the top-k embeddings
-        attention_scores = self.attention_pooling(topk_embeddings).squeeze(-1)  # [batch_size, k]
-        attention_weights = F.softmax(attention_scores, dim=1)  # [batch_size, k]
-        pooled_output = torch.sum(topk_embeddings * attention_weights.unsqueeze(-1), dim=1)  # [batch_size, z_dim]
-        
-        # Handle single or multiple outputs
-        if self.n_out > 1:
-            outputs = torch.stack([self.output_layers[i](pooled_output) for i in range(self.n_out)], dim=-1)
-        else:
-            outputs = self.output_layer(pooled_output)
-            if outputs.shape[1] == 1:  # Binary classification case
-                outputs = torch.cat([outputs, -outputs], dim=1)  # Convert to two logits
-        
-        if return_attention:
-            return outputs, topk_attention_weights, attention_weights
-        else:
-            return outputs
-
-
-class hierarchical_cluster_mil(nn.Module):
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, max_clusters: int = 10, dropout_p: float = 0.1, activation_function='ReLU',
-                 encoder_layers=1):
-        super().__init__()
-        self.encoder = build_encoder(n_feats, z_dim, encoder_layers, activation_function, dropout_p, True)
-        
-        # Learnable weights for clusters
-        self.cluster_weights = nn.Parameter(torch.randn(z_dim, max_clusters))
-        self.max_clusters = max_clusters
-        
-        self.region_attention = nn.Sequential(
-            nn.Linear(z_dim, z_dim),
-            nn.Tanh(),
-            nn.Linear(z_dim, 1)
-        )
-        self.region_head = nn.Sequential(
-            nn.BatchNorm1d(z_dim),
-            nn.Dropout(dropout_p),
-            nn.Linear(z_dim, z_dim)
-        )
-        self.slide_attention = nn.Sequential(
-            nn.Linear(z_dim, z_dim),
-            nn.Tanh(),
-            nn.Linear(z_dim, 1)
-        )
-        self.slide_head = nn.Sequential(
-            nn.Dropout(dropout_p),
-            nn.Linear(z_dim, n_out)
-        )
-        self._initialize_weights()
-
-    def _initialize_weights(self):
-        initialize_weights(self)
-
-    def forward(self, bags):
-        batch_size, n_patches, n_feats = bags.shape
-        all_region_embeddings = []
-
-        for i in range(batch_size):
-            embeddings = self.encoder(bags[i].view(-1, n_feats))
-            logits = embeddings @ self.cluster_weights.view(-1, 1).squeeze()  # [n_patches, max_clusters]
-            cluster_probs = F.softmax(logits, dim=1)  # [n_patches, max_clusters]
-            
-            region_embeddings = cluster_probs.t() @ embeddings  # [max_clusters, z_dim]
-            region_embeddings = self.region_head(region_embeddings)
-            all_region_embeddings.append(region_embeddings)
-
-        region_embeddings = torch.stack(all_region_embeddings, dim=0)  # [batch_size, max_clusters, z_dim]
-        slide_attention_weights = F.softmax(self.slide_attention(region_embeddings), dim=1)
-        slide_embedding = torch.sum(slide_attention_weights * region_embeddings, dim=1)
-        scores = self.slide_head(slide_embedding)
-        return scores
-
-class adaptive_gmm_mil(nn.Module):
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, max_components: int = 10, 
-                activation_function: str = "ReLU", dropout_p: float = 0.1, encoder_layers=1):
-        super(adaptive_gmm_mil, self).__init__()
-        self.encoder = build_encoder(n_feats, z_dim, encoder_layers, activation_function=activation_function, dropout_p=dropout_p, use_batchnorm=True)
-        
-        # Soft weights for each component
-        self.component_weights = nn.Parameter(torch.ones(max_components))
-        self.max_components = max_components
-        
-        # Final classifier head
-        self.head = nn.Sequential(
-            nn.BatchNorm1d(z_dim * max_components),
-            nn.Dropout(dropout_p),
-            nn.Linear(z_dim * max_components, n_out)
-        )
-        
-        # Attention mechanism for component embeddings
-        self.attention_layer = nn.Linear(z_dim, 1)
-
-        self._initialize_weights()
-
-    def _initialize_weights(self):
-        initialize_weights(self)
-
-    def forward(self, bags):
-        batch_size, n_patches, n_feats = bags.shape
-        all_bag_embeddings = []
-
-        for i in range(batch_size):
-            # Encode instances in the bag
-            embeddings = self.encoder(bags[i].view(-1, n_feats))  # [n_patches, z_dim]
-            
-            # Fit GMM on the instance embeddings
-            gmm = GaussianMixture(n_components=self.max_components, covariance_type='full', random_state=42)
-            gmm.fit(embeddings.detach().cpu().numpy())
-            
-            # Get soft assignments of instances to Gaussian components
-            posterior_probs = torch.tensor(gmm.predict_proba(embeddings.detach().cpu().numpy()), device=embeddings.device)
-            
-            # Learnable component weights
-            component_weights = F.softmax(self.component_weights, dim=0)  # [max_components]
-            
-            # Compute weighted sum of embeddings for each component
-            component_embeddings = []
-            for j in range(self.max_components):
-                weighted_sum = torch.sum(posterior_probs[:, j].unsqueeze(-1) * embeddings, dim=0)
-                component_embeddings.append(weighted_sum * component_weights[j])
-            
-            # Stack component embeddings into a tensor
-            component_embeddings = torch.cat(component_embeddings, dim=0)  # [max_components, z_dim]
-            
-            # Apply single-layer attention to the component embeddings
-            attention_scores = self.attention_layer(component_embeddings.float()).squeeze(-1)  # [max_components]
-            attention_weights = F.softmax(attention_scores, dim=0)  # [max_components]
-            bag_embedding = torch.sum(attention_weights.unsqueeze(-1) * component_embeddings, dim=0)  # [z_dim]
-            
-            all_bag_embeddings.append(bag_embedding)
-        
-        # Stack all bag embeddings and pass through the final classifier head
-        all_bag_embeddings = torch.stack(all_bag_embeddings, dim=0)
-        scores = self.head(all_bag_embeddings)
-        return scores
-
-
-class dpp_mil(nn.Module):
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1,
-                 activation_function='ReLU', encoder_layers=1):
-        super(dpp_mil, self).__init__()
-        self.encoder = build_encoder(n_feats, z_dim, encoder_layers, activation_function, dropout_p, True)
-        self.head = nn.Linear(z_dim, n_out)
-        self._initialize_weights()
-
-    def _initialize_weights(self):
-        initialize_weights(self)
-
-    def forward(self, bags):
-        batch_size, n_patches, n_feats = bags.shape
-        embeddings = self.encoder(bags.view(-1, n_feats))
-        embeddings = embeddings.view(batch_size, n_patches, -1)
-
-        # Compute the kernel matrix
-        kernel_matrix = torch.matmul(embeddings, embeddings.transpose(1, 2))
-        
-        # Add a small value to the diagonal for numerical stability
-        kernel_matrix += torch.eye(kernel_matrix.size(1)).to(embeddings.device) * 1e-5
-        
-        # Compute determinant along the batch dimension
-        kernel_det = kernel_matrix.det()  # Shape: (batch_size,)
-        
-        # Get top indices across patches, keeping the batch size intact
-        _, top_indices = torch.topk(kernel_det, k=1, dim=1)  # Shape: (batch_size, 1)
-        
-        # Make sure top_indices is compatible for gathering
-        top_indices = top_indices.unsqueeze(-1).expand(batch_size, 1, embeddings.size(-1))
-        
-        # Gather selected embeddings while preserving batch size
-        selected_embeddings = torch.gather(embeddings, 1, top_indices)
-
-        # Average the selected embeddings across the patch dimension
-        pooled_embeddings = selected_embeddings.mean(dim=1)  # Shape: (batch_size, z_dim)
-        
-        # Compute final scores
-        scores = self.head(pooled_embeddings)  # Shape: (batch_size, n_out)
-        
-        return scores
 
 class il_mil(nn.Module):
+    """
+    Instance-level MIL model. The model classifies each instance and aggregates the instance predictions
+    using the mean operation. Useful for cases where a small number of relevant instances are present in each bag.
+
+    Args:
+    - n_feats: Number of input features
+    - n_out: Number of output classes
+    - z_dim: Dimension of the latent space
+    - dropout_p: Dropout probability
+    - activation_function: Activation function to use in the encoder
+    - encoder_layers: Number of layers in the encoder
+
+    Methods:
+    - forward: Forward pass through the model
+    - initialize_weights: Initialize the weights of the model
+
+    Returns:
+    - bag_scores: Predicted class scores for in the bag
+    """
+
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, 
                  activation_function='ReLU', encoder_layers=1):
         super().__init__()
@@ -844,106 +934,26 @@ class il_mil(nn.Module):
         bag_scores = instance_scores.mean(dim=1)
         return bag_scores
 
-class capsule_mil(nn.Module):
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, num_capsules=10, capsule_dim=16, 
-                 routing_iters=3, dropout_p: float = 0.1, activation_function='ReLU', encoder_layers=1):
-        super(capsule_mil, self).__init__()
-        self.encoder = build_encoder(n_feats, z_dim, encoder_layers, activation_function, dropout_p, True)
-        self.capsule_layer = self.CapsuleLayer(num_capsules, n_out, z_dim, capsule_dim, routing_iters)
-        self.classifier = nn.Linear(capsule_dim, n_out)
-        self._initialize_weights()
-
-    def forward(self, bags):
-        batch_size, n_patches, n_feats = bags.shape
-        embeddings = self.encoder(bags.view(-1, n_feats))
-        embeddings = embeddings.view(batch_size, n_patches, -1).permute(0, 2, 1)
-        capsules = self.capsule_layer(embeddings)
-        bag_scores = self.classifier(capsules).mean(dim=-1)  # Adjust to match the required dimension
-        return bag_scores
-
-    def _initialize_weights(self):
-        initialize_weights(self)
-
-    class CapsuleLayer(nn.Module):
-        def __init__(self, num_capsules, num_routes, in_channels, out_channels, routing_iters=3):
-            super().__init__()
-            self.num_routes = num_routes
-            self.num_capsules = num_capsules
-            self.routing_iters = routing_iters
-            self.capsules = nn.ModuleList([
-                nn.Conv1d(in_channels, out_channels, kernel_size=1) for _ in range(num_capsules)
-            ])
-
-        def forward(self, x):
-            u = [capsule(x) for capsule in self.capsules]
-            u = torch.stack(u, dim=2)
-            u = u.transpose(1, 3)  # shape now (batch_size, num_routes, num_capsules, out_channels)
-            b = torch.zeros(u.size(0), u.size(1), self.num_routes, 1, device=u.device)
-
-            for i in range(self.routing_iters):
-                c = F.softmax(b, dim=2)
-                c = c.permute(0, 2, 1).unsqueeze(-1)  # Permute to match u's shape
-                s = (c * u).sum(dim=2, keepdim=True)
-                v = self.squash(s)
-                if i < self.routing_iters - 1:
-                    b = b + (u * v).sum(dim=-1, keepdim=True)
-
-            return v.squeeze(-1)
-
-        @staticmethod
-        def squash(s, dim=-1):
-            s_squared_norm = (s ** 2).sum(dim=dim, keepdim=True)
-            scale = s_squared_norm / (1 + s_squared_norm)
-            return scale * s / torch.sqrt(s_squared_norm + 1e-8)
-
-class prototype_attention_mil(nn.Module):
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, n_prototypes: int = 5, dropout_p: float = 0.1,
-                 activation_function='ReLU', encoder_layers=1):
-        super(prototype_attention_mil, self).__init__()
-        self.n_out = n_out
-        self.n_prototypes = n_prototypes
-        
-        self.encoder = build_encoder(n_feats, z_dim, encoder_layers, activation_function, dropout_p, True)
-        self.prototype_base = nn.Parameter(torch.randn(n_out, n_prototypes, z_dim))
-        self.prototype_attention = nn.Sequential(
-            nn.Linear(z_dim, z_dim),
-            nn.ReLU(),
-            nn.Linear(z_dim, n_prototypes)
-        )
-        self.attention = nn.Linear(z_dim, 1)
-        self.classifier = nn.Linear(z_dim, n_out)
-
-    def forward(self, bags):
-        batch_size, n_patches, n_feats = bags.shape
-        embeddings = self.encoder(bags.view(-1, n_feats))
-        embeddings = embeddings.view(batch_size, n_patches, -1)
-
-        dynamic_prototypes = []
-        for i in range(self.n_out):
-            proto_attention_weights = F.softmax(self.prototype_attention(embeddings.mean(dim=1)), dim=-1)  
-            proto_base = self.prototype_base[i]  # (n_prototypes, z_dim)
-
-            # Ensure proto_attention_weights and proto_base have compatible dimensions
-            assert proto_attention_weights.shape[-1] == self.n_prototypes, f"Mismatch: {proto_attention_weights.shape[-1]} vs {self.n_prototypes}"
-            assert proto_base.shape[0] == self.n_prototypes, f"Mismatch: {proto_base.shape[0]} vs {self.n_prototypes}"
-
-            dynamic_proto = torch.einsum('bp...,pd->bd...', proto_attention_weights, proto_base)  # Result: (batch_size, z_dim)
-
-            dynamic_prototypes.append(dynamic_proto)
-
-        # Stack along a new dimension for consistent size
-        dynamic_prototypes = torch.stack(dynamic_prototypes, dim=1)  # Shape: (batch_size, n_out, z_dim)
-
-        proto_attention_scores = torch.einsum('bnd,bcd->bnc', embeddings, dynamic_prototypes.unsqueeze(0))  # Shape: (batch_size, n_out, n_prototypes)
-        proto_attention_scores = proto_attention_scores.max(dim=1)[0]  
-        proto_attention_scores = F.softmax(proto_attention_scores, dim=-1)
-
-        bag_embeddings = torch.einsum('bn,bnc->bc', proto_attention_scores, dynamic_prototypes)  # Shape: (batch_size, z_dim)
-
-        bag_scores = self.classifier(bag_embeddings)  # Shape: (batch_size, n_out)
-        return bag_scores
-
 class weighted_mean_mil(nn.Module):
+    """
+    Weighted mean MIL model. The variance of the instance embeddings is used to compute instance weights.
+    The instance embeddings are then aggregated using the computed weights. Useful for noisy data.
+
+    Args:
+    - n_feats: Number of input features
+    - n_out: Number of output classes
+    - z_dim: Dimension of the latent space
+    - dropout_p: Dropout probability
+    - activation_function: Activation function to use in the encoder
+    - encoder_layers: Number of layers in the encoder
+
+    Methods:
+    - forward: Forward pass through the model
+    - initialize_weights: Initialize the weights of the model
+
+    Returns:
+    - output: Predicted class scores for in the bag
+    """
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, activation_function='ReLU',
     encoder_layers=1):
         super(weighted_mean_mil, self).__init__()
@@ -969,7 +979,32 @@ class weighted_mean_mil(nn.Module):
         output = self.head(robust_mean)
         return output
 
+
 class clam_mil(nn.Module):
+    """
+    Clusering-constrained Attention MIL (CLAM-MIL) model. The model uses a learnable attention mechanism to
+    aggregate instance embeddings into slide-level representations. The model also includes a clustering module
+    to predict instance-level cluster assignments. For each output class the model has a separate attention
+    mechanism and classifier. 
+
+    Args:
+    - n_feats: Number of input features
+    - n_out: Number of output classes
+    - z_dim: Dimension of the latent space
+    - dropout_p: Dropout probability
+    - activation_function: Activation function to use in the encoder
+    - encoder_layers: Number of layers in the encoder
+
+    Methods:
+    - forward: Forward pass through the model
+    - cluster_patches: Cluster patches into clusters
+    - calculate_attention: Calculate the attention weights for each instance
+    - initialize_weights: Initialize the weights of the model
+
+    Returns:
+    - scores: Predicted class scores for in the bag
+    - attention_weights: Attention weights for each instance (optional)
+    """
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, activation_function='ReLU',
     encoder_layers=1):
         super(clam_mil, self).__init__()
@@ -1048,6 +1083,27 @@ class clam_mil(nn.Module):
 
 
 class clam_mil_mb(nn.Module):
+    """
+    CLAM-MIL model with multiple branches, each with its own attention mechanism and classifier.
+
+    Args:
+    - n_feats: Number of input features
+    - n_out: Number of output classes
+    - z_dim: Dimension of the latent space
+    - dropout_p: Dropout probability
+    - n_branches: Number of branches
+    - activation_function: Activation function to use in the encoder
+    - encoder_layers: Number of layers in the encoder
+
+    Methods:
+    - forward: Forward pass through the model
+    - calculate_attention: Calculate the attention weights for each instance
+    - initialize_weights: Initialize the weights of the model
+
+    Returns:
+    - scores: Predicted class scores for instances in the bag
+    """
+
     def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, n_branches: int = 3, activation_function='ReLU',
     encoder_layers=1):
         super(clam_mil_mb, self).__init__()
@@ -1072,7 +1128,7 @@ class clam_mil_mb(nn.Module):
             nn.ModuleList([nn.Linear(z_dim, 1) for _ in range(n_out)]) for _ in range(n_branches)
         ])
         self.classifiers = nn.ModuleList([
-            nn.ModuleList([nn.Linear(z_dim, 1) for _ in range(n_out)]) for _ in range(n.branches)
+            nn.ModuleList([nn.Linear(z_dim, 1) for _ in range(n_out)]) for _ in range(n_branches)
         ])
         self.instance_cluster = nn.ModuleList([
             nn.ModuleList([nn.Linear(z_dim, 2) for _ in range(n_out)]) for _ in range(n.branches)
@@ -1153,6 +1209,16 @@ class clam_mil_mb(nn.Module):
 
 
 def initialize_weights(module):
+    """
+    Initialize the weights of the model using Xavier initialization for linear layers and constant initialization
+    for batch normalization layers.
+
+    Args:
+    - module: The model to initialize
+
+    Returns:
+    - None
+    """
     for m in module.modules():
         if isinstance(m, nn.Linear):
             nn.init.xavier_normal_(m.weight)
@@ -1161,3 +1227,222 @@ def initialize_weights(module):
         elif isinstance(m, nn.BatchNorm1d):
             nn.init.constant_(m.weight, 1)
             nn.init.constant_(m.bias, 0)
+
+
+class gmm_mil(nn.Module):
+    """
+    Gaussian Mixture Model MIL model, where each bag is represented as a pooled embedding from a GMM.
+
+    We fit a GMM to the patch embeddings, and then create a pooled embedding by concatenating the means
+    and covariances of the GMM components.
+
+    Methods:
+    - forward: Forward pass through the model
+    - initialize_weights: Initialize the weights of the model
+
+    Args:
+    - n_feats: Number of input features (e.g., patch dimensionality)
+    - n_out: Number of output classes
+    - z_dim: Dimensionality of the patch embeddings
+    - num_components: Number of components in the GMM
+    - dropout_p: Dropout probability
+    - activation_function: Activation function to use in the encoder
+    - encoder_layers: Number of layers in the encoder
+
+    Returns:
+    - scores: Predicted class scores for each bag in the batch.
+    """
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, num_components: int = 10, 
+                 dropout_p: float = 0.1, activation_function='ReLU', encoder_layers=1):
+        super(gmm_mil, self).__init__()
+        self.encoder = build_encoder(n_feats, z_dim, encoder_layers, activation_function, dropout_p, False) # No batch norm since we iterate over the batches
+        self.gmm = GaussianMixture(n_components=num_components, covariance_type='full')
+        self.head = nn.Sequential(
+            nn.BatchNorm1d(z_dim * num_components),
+            nn.Dropout(dropout_p),
+            nn.Linear(z_dim * num_components, n_out)
+        )
+        self.num_components = num_components
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        initialize_weights(self)
+
+    def forward(self, bags):
+        batch_size, n_patches, n_feats = bags.shape
+        pooled_embeddings = []
+
+        for i in range(batch_size):
+            # Encode the patches
+            embeddings = self.encoder(bags[i].view(-1, n_feats))  # [n_patches, z_dim]
+
+            # Fit GMM to the embeddings
+            self.gmm.fit(embeddings.detach().cpu().numpy())
+            gmm_means = torch.tensor(self.gmm.means_, device=embeddings.device)  # [num_components, z_dim]
+            gmm_covariances = torch.tensor(self.gmm.covariances_, device=embeddings.device)  # [num_components, z_dim, z_dim]
+            
+            # Flatten means and covariances to create a pooled embedding
+            pooled_embedding = torch.cat([gmm_means.view(-1), gmm_covariances.view(-1)], dim=0)  # [z_dim * num_components * 2]
+            pooled_embeddings.append(pooled_embedding.unsqueeze(0))
+
+        # Stack all pooled embeddings and pass through the final head
+        pooled_embeddings = torch.stack(pooled_embeddings, dim=0)  # [batch_size, z_dim * num_components * 2]
+        scores = self.head(pooled_embeddings)
+        return scores
+
+class prototype_mil(nn.Module):
+    """
+    Prototype-based MIL model, where each bag is represented as a weighted sum of prototype embeddings.
+
+    We define a set of learnable prototypes, and compute the prototype assignments for each patch in the bag.
+    The bag embedding is then computed as a weighted sum of the patch embeddings, where the weights are the
+    prototype assignments.
+
+    Methods:
+    - forward: Forward pass through the model
+    - initialize_weights: Initialize the weights of the model
+
+    Args:
+    - n_feats: Number of input features (e.g., patch dimensionality)
+    - n_out: Number of output classes
+    - z_dim: Dimensionality of the patch embeddings
+    - num_prototypes: Number of learnable prototypes
+    - dropout_p: Dropout probability
+    - activation_function: Activation function to use in the encoder
+    - encoder_layers: Number of layers in the encoder
+
+    Returns:
+    - scores: Predicted class scores for each bag in the batch.
+    """
+    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, num_prototypes: int = 10, 
+                 dropout_p: float = 0.1, activation_function='ReLU', encoder_layers=1):
+        super(prototype_mil, self).__init__()
+        self.encoder = build_encoder(n_feats, z_dim, encoder_layers, activation_function, dropout_p, False) # No batch norm since we iterate over the batches
+        
+        # Learnable prototypes
+        self.prototypes = nn.Parameter(torch.randn(num_prototypes, z_dim))
+        self.num_prototypes = num_prototypes
+
+        self.head = nn.Sequential(
+            nn.BatchNorm1d(z_dim * num_prototypes),
+            nn.Dropout(dropout_p),
+            nn.Linear(z_dim * num_prototypes, n_out)
+        )
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        initialize_weights(self)
+
+    def forward(self, bags):
+        batch_size, n_patches, n_feats = bags.shape
+        pooled_embeddings = []
+
+        for i in range(batch_size):
+            # Encode the patches
+            embeddings = self.encoder(bags[i].view(-1, n_feats))  # [n_patches, z_dim]
+
+            # Compute distances to the prototypes
+            distances = torch.cdist(embeddings, self.prototypes)  # [n_patches, num_prototypes]
+
+            # Compute soft prototype assignments
+            soft_assignments = F.softmax(-distances, dim=1)  # [n_patches, num_prototypes]
+
+            # Compute the embedding for each prototype as a weighted sum of patch embeddings
+            prototype_embeddings = []
+            for j in range(self.num_prototypes):
+                prototype_embedding = torch.sum(soft_assignments[:, j].unsqueeze(-1) * embeddings, dim=0)
+                prototype_embeddings.append(prototype_embedding.unsqueeze(0))
+
+            # Concatenate the prototype embeddings into a single vector
+            prototype_embeddings = torch.cat(prototype_embeddings, dim=0)  # [num_prototypes, z_dim]
+            pooled_embedding = prototype_embeddings.view(-1)  # [z_dim * num_prototypes]
+            pooled_embeddings.append(pooled_embedding.unsqueeze(0))
+
+        # Stack all pooled embeddings and pass through the final head
+        pooled_embeddings = torch.stack(pooled_embeddings, dim=0)  # [batch_size, z_dim * num_prototypes]
+        scores = self.head(pooled_embeddings)
+        return scores
+
+class capsule_mil(nn.Module):
+    """
+    Capsule-based MIL model, inspired by the Capsule Network architecture: https://arxiv.org/abs/1710.09829
+
+    The model consists of two main components:
+    - Primary Capsule Layer: A set of convolutional capsules that extract features from the input patches 
+    - Dynamic Routing Layer: A dynamic routing mechanism that iteratively refines the capsule outputs
+
+    The final bag-level prediction is made by a linear classifier on the output of the digit capsules.
+
+    Methods:
+    - squash: Applies the squashing function to the input tensor
+    - forward: Forward pass through
+
+    Args:
+    - n_feats: Number of input features (e.g., patch dimensionality)
+    - n_out: Number of output classes
+    - n_primary_capsules: Number of primary capsules
+    - primary_out_dim: Output dimensionality of the primary capsules
+
+    - n_digit_capsules: Number of digit capsules
+    - digit_out_dim: Output dimensionality of the digit capsules
+    - routing_iterations: Number of routing iterations in the dynamic routing
+
+    Returns:
+    - scores: Predicted class scores for each bag in the batch
+    """
+
+    def __init__(self, n_feats: int, n_out: int, n_primary_capsules: int = 8, primary_out_dim: int = 32, 
+                 n_digit_capsules: int = 16, digit_out_dim: int = 16, routing_iterations: int = 3):
+        super(capsule_mil, self).__init__()
+        
+        # Primary Capsule Layer
+        self.n_primary_capsules = n_primary_capsules
+        self.primary_capsules = nn.ModuleList([
+            nn.Conv1d(n_feats, primary_out_dim, kernel_size=3, stride=1, padding=1)
+            for _ in range(n_primary_capsules)
+        ])
+        
+        # Dynamic Routing Layer
+        self.n_digit_capsules = n_digit_capsules
+        self.routing_iterations = routing_iterations
+        self.W = nn.Parameter(torch.randn(n_digit_capsules, primary_out_dim * n_primary_capsules, digit_out_dim))
+        
+        # Final Classifier
+        self.classifier = nn.Linear(digit_out_dim * n_digit_capsules, n_out)
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+
+    def forward(self, bags):
+        batch_size, n_patches, n_feats = bags.shape
+        
+        # Primary Capsule Layer
+        u = [capsule(bags.view(batch_size * n_patches, n_feats, 1)).squeeze(-1) for capsule in self.primary_capsules]
+        u = torch.stack(u, dim=-1)  # Shape: (batch_size * n_patches, primary_out_dim, n_primary_capsules)
+        u = u.view(batch_size, n_patches, -1)  # Reshape to (batch_size, n_patches, primary_out_dim * n_primary_capsules)
+        u = self.squash(u)  # Apply the squashing function
+
+        # Dynamic Routing Layer
+        b = torch.zeros(batch_size, n_patches, self.n_digit_capsules, device=bags.device)  # Routing logits
+        for i in range(self.routing_iterations):
+            c = F.softmax(b, dim=2)  # Routing weights
+            s = (c.unsqueeze(-1) * u.unsqueeze(2)).matmul(self.W)  # Weighted sum
+            v = self.squash(s.sum(dim=1))  # Apply squashing function
+            if i < self.routing_iterations - 1:
+                b = b + (u.unsqueeze(2) * v.unsqueeze(1)).sum(dim=-1)  # Update routing logits
+
+        # Final Classifier
+        v = v.view(batch_size, -1)  # Flatten the capsule output
+        scores = self.classifier(v)  # Bag-level prediction
+        
+        return scores
+
+    @staticmethod
+    def squash(s):
+        s_norm = torch.norm(s, dim=-1, keepdim=True)
+        return (s_norm ** 2 / (1 + s_norm ** 2)) * (s / (s_norm + 1e-8))

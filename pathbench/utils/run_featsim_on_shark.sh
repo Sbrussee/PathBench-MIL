@@ -3,7 +3,7 @@
 
 #SBATCH -J FEAT_SIM
 #SBATCH --mem=50G
-#SBATCH --partition=all,highmem
+#SBATCH --partition=PATHgpu
 #SBATCH --time=100:00:00
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=1

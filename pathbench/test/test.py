@@ -25,6 +25,10 @@ def test():
     experiment = Experiment(root+'opt_test_conf.yaml')
     experiment.run()
     logging.info("Optimization test passed")
+    #Test ensemble modeling
+    experiment = Experiment(root+'ensemble_test_conf.yaml')
+    experiment.run()
+    logging.info("Ensemble modeling test passed")
 
 if __name__ == "__main__":
     test()

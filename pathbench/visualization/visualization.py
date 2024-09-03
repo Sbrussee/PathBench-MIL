@@ -3,6 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 import slideflow as sf
+from PIL import Image, ImageDraw, ImageFont
 from sklearn.metrics import auc
 from lifelines.utils import concordance_index
 from sklearn.calibration import calibration_curve
@@ -14,8 +15,7 @@ import logging
 import sys
 
 def visualize_activations(config : dict, dataset : str,
-                          tfrecord_dir : str, bag_dir : str, target : str, save_string : str,
-                          project: sf.Project):
+                          tfrecord_dir : str, bag_dir : str, target : str, save_string : str):
     """
     Visualize the activations based on the configuration
 
@@ -26,7 +26,6 @@ def visualize_activations(config : dict, dataset : str,
         bag_dir: Directory with bags
         target: The target variable
         save_string: The save string
-        Project: The slideflow project object
     
     Returns:
         None
@@ -42,19 +41,6 @@ def visualize_activations(config : dict, dataset : str,
     if 'umap' in config['experiment']['visualization'] or 'mosaic' in config['experiment']['visualization']:
         logging.info("Visualizing activations...")
         labels, unique_labels = dataset.labels(target, format='name')
-        for index, label in enumerate(unique_labels):
-            try:
-                #TOFIX: DOES NOT WORK NOW
-                slide_map.label_by_preds(index=index)
-                slide_map.save_plot(
-                    filename=f"experiments/{config['experiment']['project_name']}/visualizations/patch_level_umap_pred_{save_string}_{index}_{dataset}",
-                    title=f"Feature UMAP, by prediction of class {index}"
-                )
-
-                plt.close() 
-            except:
-                print(f"Could not visualize UMAP for class {index}")
-                pass
             
         slide_map.label_by_slide(labels)
         #Make a new directory inside visualizations
@@ -77,7 +63,8 @@ def visualize_activations(config : dict, dataset : str,
         slide_map.label_by_slide(labels)
         slide_map.save_plot(
             filename=f"experiments/{config['experiment']['project_name']}/visualizations/slide_level_umap_label_{save_string}_{dataset}",
-            title="Slide-level UMAP, by label"
+            title="Slide-level UMAP, by label",
+            subsample=2000
         )
         plt.close()
     if 'mosaic' in config['experiment']['visualization']:
@@ -244,27 +231,7 @@ def plot_survival_auc_across_folds(results: pd.DataFrame, save_string: str, data
         plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/survival_roc_auc_{save_string}_{dataset}_overall.png")
         plt.close()
 
-"""
-def ensure_monotonic(recall : list, precision : list):
-    
-    Ensure that the recall is monotonically increasing and the precision is non-increasing
 
-    Args:
-        recall: The recall
-        precision: The precision
-
-    Returns:
-        The recall and precision, ensuring the conditions are met
-    
-    # Ensure that recall is monotonically increasing and precision is non-increasing
-    for i in range(1, len(recall)):
-        if recall[i] < recall[i - 1]:
-            recall[i] = recall[i - 1]
-    for i in range(1, len(precision)):
-        if precision[i] > precision[i - 1]:
-            precision[i] = precision[i - 1]
-    return recall, precision
-"""
 def plot_precision_recall_across_splits(pr_per_split: list, save_string: str, dataset: str, config: dict):
     """
     Plot the precision-recall curve across splits based on the results
@@ -577,40 +544,101 @@ def plot_calibration_across_splits(results: pd.DataFrame, save_string: str, data
     plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/calibration_{save_string}_{dataset}.png")
     plt.close()
 
-#TODO: Implement function that outputs the top 5 most- and least attented tiles
-"""
-def get_top5_annotation_tiles_per_class(attention_map, bag_index, tile_directory, slide_name, diagnosis):
-    #Get the top 5 attention values
-    top5_attention_values = np.argsort(attention_map)[::-1][:5]
-    print(f"Top 5 attention indices: {top5_attention_values}")
-    top5_least_attended = np.argsort(attention_map)[:5]
 
-    #Get the corresponding tile coordinates from bag_index
-    top5_tile_coordinates = bag_index[top5_attention_values]
-    print(f"Top 5 tile coordinates: {top5_tile_coordinates}")
-    top5_least_attended_coordinates = bag_index[top5_least_attended]
+def plot_top5_attended_tiles_per_class(slide_name : str, model_directory : str, tfr_directory : str, output_dir : str,
+                                       annotation_df : pd.DataFrame, target : str, dataset : str, split : str, save_string : str):
+    """
+    Plot the top 5 most attended tiles and the top 5 least attended tiles for a given slide
 
-    #Get the corresponding tile paths
-    top5_tiles = [f"{tile_directory}/{slide_name}-{coord[0]}-{coord[1]}.png" for coord in top5_tile_coordinates]
-    top5_least_attended_tiles = [f"{tile_directory}/{slide_name}-{coord[0]}-{coord[1]}.png" for coord in top5_least_attended_coordinates]
-    print(f"Top 5 tile paths: {top5_tiles}")
+    Args:
+        slide_name: The slide name to get the top 5 attended tiles for
+        model_directory: The model directory
+        tfr_directory: The TFRecord directory
+        output_dir: The output directory
+        annotation_df: The annotation DataFrame
+        target: The target variable
+        dataset: The dataset string (val,test,train)
+        split: The current cv-split
+        save_string: The save string
+    
+    Returns:
+        None
+    """
+    # Find the corresponding .npz and .tfrecord files
+    index_path = os.path.join(tfr_directory, f"{slide_name}.index.npz")
+    tfr_path = os.path.join(tfr_directory, f"{slide_name}.tfrecord")
 
-    #Construct top 5 tiles directory
-    os.makedirs(f"top5_tiles", exist_ok=True)
+    # Validate the existence of the files
+    if not os.path.exists(index_path):
+        raise FileNotFoundError(f"Index file not found: {index_path}")
+    if not os.path.exists(tfr_path):
+        raise FileNotFoundError(f"TFRecord file not found: {tfr_path}")
 
-    #Plot the top 5 tiles using matplotlib
-    import matplotlib.pyplot as plt
-    import cv2
+    # Retrieve the label for the slide from the annotation DataFrame
+    label_row = annotation_df.loc[annotation_df['slide'] == slide_name]
+    if label_row.empty:
+        raise ValueError(f"No label found for slide: {slide_name} in the annotation DataFrame")
+    
+    label = label_row[target].values[0]
+
+    # Load the attention map
+    attention_path = os.path.join(model_directory, f"00000-clam_sb/attention/{slide_name}_att.npz")
+    attention = np.load(attention_path)['arr_0']
+
+    print(f"Processing slide: {slide_name}")
+    print(f"Attention map shape: {attention.shape}")
+
+    # Load the TFRecord and its index
+    tfr = sf.TFRecord(tfr_path)
+    
+    # Load the index file, which contains the tile coordinates
+    bag_index = np.load(index_path)['arr_0']
+
+    # Get the top 5 attention values and their indices
+    top5_attention_indices = np.argsort(attention)[::-1][:5]
+    top5_least_attended_indices = np.argsort(attention)[:5]
+
+    # Get the corresponding tile coordinates from the index file
+    top5_tile_coordinates = bag_index[top5_attention_indices]
+    top5_least_attended_coordinates = bag_index[top5_least_attended_indices]
+
+    # Ensure the output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Plot the top 5 most attended tiles with attention scores
     fig, axs = plt.subplots(1, 5, figsize=(20, 5))
-    for i, tile in enumerate(top5_tiles):
-        img = Image.open(tile)
-        if img.mode != 'RGB':
-            img = img.convert('RGB')
+    for i, coord in enumerate(top5_tile_coordinates):
+        slide, img_bytes = tfr.get_record_by_xy(coord[0], coord[1])
+        img = sf.io.decode_image(img_bytes)
+        img = Image.fromarray(img)
+
+        # Draw attention score on the image
+        draw = ImageDraw.Draw(img)
+        font = ImageFont.load_default()
+        draw.text((10, 10), f"Score: {attention[top5_attention_indices[i]]:.4f}", fill="red", font=font)
+
         axs[i].imshow(img)
         axs[i].axis('off')
-    #Set global title above the subplots
-    plt.suptitle(f"Top 5 most attended tiles ({diagnosis} {slide_name})", fontsize=21)
+    plt.suptitle(f"Top 5 most attended tiles ({dataset} {label} {slide_name})", fontsize=21)
     plt.tight_layout()
-    plt.savefig(f"top5_tiles/{diagnosis}_{slide_name}_top5_tiles.png")
+    plt.savefig(f"{output_dir}/{dataset}_{split}_{label}_{slide_name}_{save_string}_top5_tiles.png")
     plt.close()
-"""
+
+    # Plot the top 5 least attended tiles with attention scores
+    fig, axs = plt.subplots(1, 5, figsize=(20, 5))
+    for i, coord in enumerate(top5_least_attended_coordinates):
+        slide, img_bytes = tfr.get_record_by_xy(coord[0], coord[1])
+        img = sf.io.decode_image(img_bytes)
+        img = Image.fromarray(img)
+
+        # Draw attention score on the image
+        draw = ImageDraw.Draw(img)
+        font = ImageFont.load_default()
+        draw.text((10, 10), f"Score: {attention[top5_least_attended_indices[i]]:.4f}", fill="red", font=font)
+
+        axs[i].imshow(img)
+        axs[i].axis('off')
+    plt.suptitle(f"Top 5 least attended tiles ({{dataset} {label} {slide_name})", fontsize=21)
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/{dataset}_{split}_{label}_{slide_name}_{save_string}_least_attended_tiles.png")
+    plt.close()
