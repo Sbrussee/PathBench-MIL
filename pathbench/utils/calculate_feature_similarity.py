@@ -6,17 +6,38 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.metrics.pairwise import cosine_similarity
 from scipy.stats import kendalltau, spearmanr
 import torch
+import glob
 import os
 import random
 from itertools import combinations
+from sklearn.preprocessing import RobustScaler
 
 def create_directory(path):
-    """Create directory if it does not exist."""
+    """Create directory if it does not exist.
+    
+    Args:
+        path (str): Path to directory.
+        
+    Returns:
+        None
+    """
     if not os.path.exists(path):
         os.makedirs(path)
 
 def load_embeddings(bag_directory, tile_size, mag, normalization, feature_methods, slide):
-    """Load embeddings."""
+    """Load feature extractor embeddings from the specified directory for a given slide.
+    
+    Args:
+        bag_directory (str): Directory containing the embeddings.
+        tile_size (int): Tile size used for the embeddings.
+        mag (str): Magnification level.
+        normalization (str): Normalization method.
+        feature_methods (list): List of feature extraction methods.
+        slide (str): Slide name.
+        
+    Returns:
+        embedding_dict: Dictionary containing the embeddings for each feature extraction method.
+    """
     embedding_dict = {}
     for feature_method in feature_methods:
         bag = torch.load(f"{bag_directory}/{tile_size}_{mag}_{normalization}_{feature_method}/{slide}.pt")
@@ -24,10 +45,23 @@ def load_embeddings(bag_directory, tile_size, mag, normalization, feature_method
     return embedding_dict
 
 def calculate_neighbor_rankings(embedding_dict, feature_methods, k, method='knn'):
-    """Calculate k-NN rankings for each embedding."""
+    """Calculate distance-based neigbor rankings for each embedding
+    
+    Args:
+        embedding_dict (dict): Dictionary containing the embeddings for each feature extraction method.
+        feature_methods (list): List of feature extraction methods.
+        k (int): Number of neighbors to consider.
+        method (str): Method to use for neighbor selection. Options: 'knn', 'cosine', 'pearson'.
+
+    Returns:
+        rankings_dict: Dictionary containing the distace rankings for each feature extraction method.
+    """
     rankings_dict = {}
     for feature_method in feature_methods:
         embedding = embedding_dict[feature_method]
+        num_samples = len(embedding)
+        k = min(k, num_samples)  # Ensure k is not greater than the number of samples
+
         if method == 'knn':
             nbrs = NearestNeighbors(n_neighbors=k, algorithm='ball_tree').fit(embedding)
             distances, indices = nbrs.kneighbors(embedding)
@@ -43,7 +77,17 @@ def calculate_neighbor_rankings(embedding_dict, feature_methods, k, method='knn'
     return rankings_dict
 
 def calculate_shared_neighbors(rankings_dict, feature_methods, k):
-    """Calculate shared neighbors between rankings of feature extractors."""
+    """Calculate shared neighbors between rankings of feature extractors.
+    
+    Args:
+        rankings_dict (dict): Dictionary containing the rankings for each feature extraction method.
+        feature_methods (list): List of feature extraction methods.
+        k (int): Number of neighbors to consider.
+
+    Returns:
+        similarity_scores: Dictionary containing the similarity scores between pairs of feature
+        extractors based on shared neighbors.
+    """
     combinations = [(feature_methods[i], feature_methods[j]) for i in range(len(feature_methods)) for j in range(i+1, len(feature_methods))]
     similarity_scores = {}
     for combination in combinations:
@@ -57,7 +101,16 @@ def calculate_shared_neighbors(rankings_dict, feature_methods, k):
     return similarity_scores
 
 def construct_similarity_matrix(distance_scores, feature_methods, shared_neighbors=False):
-    """Construct similarity matrix from distance scores or shared neighbor scores."""
+    """Construct similarity matrix from distance scores or shared neighbor scores.
+    
+    Args:
+        distance_scores (dict): Dictionary containing the distance or shared neighbor scores between pairs of feature extractors.
+        feature_methods (list): List of feature extraction methods.
+        shared_neighbors (bool): Whether tthe distance represents shared neighbors or not.
+
+    Returns:
+        similarity_matrix: 2D numpy array containing the similarity scores between pairs of feature extractors.
+    """
     similarity_matrix = np.zeros((len(feature_methods), len(feature_methods)))
     for i in range(len(feature_methods)):
         for j in range(i+1, len(feature_methods)):
@@ -72,7 +125,17 @@ def construct_similarity_matrix(distance_scores, feature_methods, shared_neighbo
     return similarity_matrix
 
 def plot_similarity_matrix(similarity_matrix, feature_methods, slide, title):
-    """Plot and save the similarity matrix."""
+    """Plot and save the similarity matrix.
+    
+    Args:
+        similarity_matrix (np.array): 2D numpy array containing the similarity scores between pairs of feature extractors.
+        feature_methods (list): List of feature extraction methods.
+        slide (str): Slide name.
+        title (str): Title of the plot.
+
+    Returns:
+        None
+    """
     plt.figure(figsize=(10, 10))
     plt.imshow(similarity_matrix, cmap='viridis', vmin=0, vmax=1)
     plt.xticks(range(len(feature_methods)), feature_methods, rotation=45)
@@ -86,14 +149,42 @@ def plot_similarity_matrix(similarity_matrix, feature_methods, slide, title):
     plt.tight_layout()
     plt.close()
 
-def create_2d_map(similarity_matrix, feature_methods, slide, title, method='mds', n_components=2):
-    """Create a 2D map from the similarity matrix using MDS."""
+def create_2d_map(similarity_matrix, feature_methods, slide, title, method='mds', n_components=2, log_transform=True, clip_value=None):
+    """Create a 2D map from the similarity matrix using MDS.
+    
+    Args:
+        similarity_matrix (np.array): 2D numpy array containing the similarity scores between pairs of feature extractors.
+        feature_methods (list): List of feature extraction methods.
+        slide (str): Slide name.
+        title (str): Title of the plot.
+        method (str): Dimensionality reduction method. Options: 'mds'.
+        n_components (int): Number of components for the dimensionality reduction.
+        log_transform (bool): Whether to apply log transformation to the dissimilarity matrix.
+        clip_value (float): Value to clip the dissimilarity matrix.
+
+    Returns:
+        None
+    """
+    dissimilarity_matrix = 1 - similarity_matrix  # Convert similarity matrix to dissimilarity matrix
+
+    # Apply log transformation to reduce the impact of large dissimilarities
+    if log_transform:
+        dissimilarity_matrix = np.log1p(dissimilarity_matrix)
+
+    # Clip the dissimilarity matrix to reduce the impact of extreme outliers
+    if clip_value is not None:
+        dissimilarity_matrix = np.clip(dissimilarity_matrix, None, clip_value)
+
+    # Apply robust scaling to reduce the influence of outliers
+    scaler = RobustScaler()
+    dissimilarity_matrix = scaler.fit_transform(dissimilarity_matrix)
+
     if method == 'mds':
         reducer = MDS(n_components=n_components, metric=False, n_init=10, max_iter=1000, dissimilarity="precomputed", random_state=42, eps=1e-9)
     else:
         raise ValueError("Invalid method. Use 'mds'.")
 
-    coords = reducer.fit_transform(1 - similarity_matrix)  # Use 1 - similarity_matrix to create dissimilarity matrix
+    coords = reducer.fit_transform(dissimilarity_matrix)  # Use dissimilarity matrix here
     plt.figure(figsize=(10, 10))
     plt.scatter(coords[:, 0], coords[:, 1])
     for i, feature_method in enumerate(feature_methods):
@@ -103,7 +194,22 @@ def create_2d_map(similarity_matrix, feature_methods, slide, title, method='mds'
     plt.close()
 
 def calculate_similarity(slide, bag_directory, feature_methods, mag, tile_size, normalization, k_values, neighbor_methods, ranking_methods):
-    """Calculate similarity for various k values and neighbor selection methods."""
+    """Calculate similarity for various k values and neighbor selection methods.
+    
+    Args:
+        slide (str): Slide name.
+        bag_directory (str): Directory containing the embeddings.
+        feature_methods (list): List of feature extraction methods.
+        mag (str): Magnification level.
+        tile_size (int): Tile size used for the embeddings.
+        normalization (str): Normalization method.
+        k_values (list): List of k values.
+        neighbor_methods (list): List of neighbor selection methods.
+        ranking_methods (list): List of ranking methods.
+        
+    Returns:
+        similarity_matrices: Dictionary containing the similarity matrices for each neighbor selection method and ranking method.
+    """
     create_directory(f"similarity_results")
 
     embedding_dict = load_embeddings(bag_directory, tile_size, mag, normalization, feature_methods, slide)
@@ -124,7 +230,18 @@ def calculate_similarity(slide, bag_directory, feature_methods, mag, tile_size, 
     return similarity_matrices
 
 def calculate_overall_similarity(similarity_matrices, feature_methods, k_values, neighbor_methods, ranking_methods):
-    """Calculate overall similarity across all slides."""
+    """Calculate overall similarity across all slides.
+    
+    Args:
+        similarity_matrices: Dictionary containing the similarity matrices for each neighbor selection method and ranking method.
+        feature_methods (list): List of feature extraction methods.
+        k_values (list): List of k values.
+        neighbor_methods (list): List of neighbor selection methods.
+        ranking_methods (list): List of ranking methods.
+
+    Returns:
+        overall_similarity_matrices: Dictionary containing the overall similarity matrices for each neighbor selection method and ranking method.
+    """
     overall_similarity_matrices = {neighbor_method: {ranking_method: {k: np.zeros((len(feature_methods), len(feature_methods))) for k in k_values} for ranking_method in ranking_methods} for neighbor_method in neighbor_methods}
     for neighbor_method in neighbor_methods:
         for ranking_method in ranking_methods:
@@ -142,10 +259,21 @@ def calculate_overall_similarity(similarity_matrices, feature_methods, k_values,
     return overall_similarity_matrices
 
 def plot_k_similarity_change(similarity_matrices, feature_methods, neighbor_method, ranking_method):
-    """Plot how similarity changes with different k values for all pairs of feature extractors and neighbor selection method."""
+    """Plot how similarity changes with different k values for all pairs of feature extractors and neighbor selection method.
+    
+    Args:
+        similarity_matrices: Dictionary containing the similarity matrices for each neighbor selection method and ranking method.
+        feature_methods (list): List of feature extraction methods.
+        neighbor_method (str): Neighbor selection method.
+        ranking_method (str): Ranking method.
+        
+    Returns:
+        None
+    """
     k_values = sorted(similarity_matrices[neighbor_method][ranking_method].keys())
     for (feature_method_1, feature_method_2) in combinations(range(len(feature_methods)), 2):
-        similarities = [similarity_matrices[neighbor_method][ranking_method][k][feature_method_1, feature_method_2] for k in k_values]
+        # Access the 2D list with separate indices
+        similarities = [similarity_matrices[neighbor_method][ranking_method][k][feature_method_1][feature_method_2] for k in k_values]
         plt.figure(figsize=(10, 6))
         plt.plot(k_values, similarities, marker='o', label=f'{feature_methods[feature_method_1]} vs {feature_methods[feature_method_2]}')
         plt.xlabel("k")
@@ -164,7 +292,7 @@ def main(N=None):
     normalization = "macenko"
     # Set the methods to compare, including new methods
     feature_methods = ["CTransPath", 'resnet50_imagenet', 'gigapath', 'kaiko_b8', 'kaiko_b16', 'kaiko_s8', 'kaiko_s16',
-                       'kaiko_l14', 'h_optimus_0', 'phikon', 'dino', 'virchow', 'virchow2', 'hibou_b', 'hibou_l']
+                       'kaiko_l14', 'h_optimus_0', 'phikon', 'uni', 'dino', 'virchow', 'virchow2', 'hibou_b', 'hibou_l']
     # Get some test slides from the training MF set
     slides = pd.read_csv("/exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/MF_annotations_corrected.csv")['slide'].unique()
     
@@ -189,6 +317,8 @@ def main(N=None):
         except Exception as e:
             print(f"Error processing slide {slide}: {e}")
     overall_similarity_matrices = calculate_overall_similarity(similarity_matrices, feature_methods, k_values, neighbor_methods, ranking_methods)
+    plot_k_similarity_change(overall_similarity_matrices, feature_methods, 'knn', 'shared_neighbors')
+    plot_k_similarity_change(overall_similarity_matrices, feature_methods, 'cosine', 'shared_neighbors')
 
 if __name__ == "__main__":
     # Example usage: To use all slides, call `main()` without arguments. 

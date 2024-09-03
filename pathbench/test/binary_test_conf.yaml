@@ -5,7 +5,7 @@ experiment:
   split_technique: k-fold
   k: 3
   val_fraction: 0.1
-  best_epoch_based_on: roc_auc
+  best_epoch_based_on: roc_auc_score
   epochs: 25 # Number of epochs for training
   batch_size: 32 # Batch size for training
   bag_size: 512 # Bag size for MIL models
@@ -19,6 +19,16 @@ experiment:
   mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
   custom_metrics: [RocAuc] # Custom metrics to be used, needs to be defined in metrics.py or as a fastai-metric: https://docs.fast.ai/metrics.html
 
+  qc: # List of quality control methods to be used
+    - GaussianV2
+    - Otsu-CLAHE
+
+  qc_filters: #Tile-level filters for discarding tiles
+    grayspace_threshold : 0.05 #Pixels below this value (ranged 0-1) are considered gray.
+    grayspace_fraction: 0.6 # Image tiles with grayspace above this fraction are discarded.
+    whitespace_threshold: 230 #Pixel intensities (0-255) above this value are considered white.
+    whitespace_fraction: 1.0 # Image tiles with whitespace above this fraction are discarded.
+
   evaluation:
     - balanced_accuracy
     - auc
@@ -27,8 +37,6 @@ experiment:
     - confusion_matrix
     - roc_curve
     - precision_recall_curve
-    - umap
-    - mosaic
 
 datasets:
   - name: TCGA_LUSC

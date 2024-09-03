@@ -90,12 +90,18 @@ class Experiment():
         elif self.config['experiment']['mode'] == 'optimization':
             logging.info("Running optimization mode...")
             self.optimize_parameters()
+        elif self.config['experiment']['mode'] == 'ensemble':
+            logging.info("Running ensemble mode...")
+            self.ensemble()
         else:
             raise ValueError("Invalid mode. Mode must be either 'benchmark' or 'optimization'")
 
     def load_datasets(self):
         """
-        Load datasets into the project
+        Load datasets into the project. the datasets are specified in the configuration file.
+        We assume that the first dataset is the main dataset and the rest are additional datasets.
+        As such, we create a project based on the first dataset and add the rest of the datasets
+        as sources to the project.
         """
         #Create an experiment folder
         os.makedirs('experiments', exist_ok=True)
@@ -111,7 +117,10 @@ class Experiment():
             annotations=self.config['experiment']['annotation_file'])
             logging.info(f"Project {self.project_name} loaded")
             logging.info(f"Annotations in project: {self.project.annotations}")
-            logging.info(f"Slides in project: {self.project.slides}")
+            for index, source in enumerate(self.project.sources):
+                logging.info(f"Source {index}: {source}")
+                logging.info(f"Slides in source: {self.config['datasets'][index]['slide_path']}")
+
         else:
             logging.info(f"Creating project {self.project_name}")
             os.makedirs(f"experiments", exist_ok=True)
@@ -124,7 +133,6 @@ class Experiment():
             
             logging.info(f"Project {self.project_name} created")
             logging.info(f"Annotations in project: {self.project.annotations}")
-            logging.info(f"Slides in project: {self.project.slides}")
 
         #Add additional datasets to the project
         if len(self.config['datasets']) > 1:
@@ -136,9 +144,16 @@ class Experiment():
                     tiles=source['tile_path']
                 )
                 logging.info(f"Added source {source['name']} to project {self.project_name}")
+                logging.info(f"Slides in source: {source['slide_path']}")
+        
     def benchmark(self):
         #Iterate over all possible combinations of hyperparameters
         benchmark(self.config, self.project)
 
     def optimize_parameters(self):
+        #Optimize the MIL pipeline
         optimize_parameters(self.config, self.project)
+
+    def ensemble(self):
+        #Build a model ensemble
+        ensemble(self.config, self.project)
