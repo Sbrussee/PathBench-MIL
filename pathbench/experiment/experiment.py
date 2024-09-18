@@ -2,8 +2,7 @@ import yaml
 import slideflow as sf
 import os
 import torch
-from ..benchmarking.benchmark import benchmark
-from ..benchmarking.benchmark import optimize_parameters
+from ..benchmarking.benchmark import benchmark, optimize_parameters, ensemble
 import random
 import shutil
 import logging
@@ -156,4 +155,4 @@ class Experiment():
 
     def ensemble(self):
         #Build a model ensemble
-        ensemble(self.config, self.project)
+        ensemble(self.project, self.config)

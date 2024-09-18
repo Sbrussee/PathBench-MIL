@@ -619,7 +619,7 @@ class cluster_mil(nn.Module):
         # Final classifier head
         self.head = nn.Sequential(
             nn.BatchNorm1d(z_dim * max_clusters),
-            nn.Dropout(dropout_p)
+            nn.Dropout(dropout_p),
             nn.Linear(z_dim * max_clusters, n_out)
         )
         self._initialize_weights()
@@ -1047,7 +1047,10 @@ class clam_mil(nn.Module):
             score = self.classifiers[i](slide_level_representations[:, i, :])
             scores.append(score)
         scores = torch.cat(scores, dim=1)
-        attention_weights = torch.cat(attention_weights_list, dim=1)
+
+        # Stack the attention weights and then take the mean along the first dimension (across branches)
+        attention_weights = torch.stack(attention_weights_list, dim=0)  # Shape: (n_out, batch_size, n_patches, 1)
+        attention_weights = torch.mean(attention_weights, dim=0)  # Shape: (batch_size, n_patches, 1)
 
         if return_attention:
             return scores, attention_weights
@@ -1076,7 +1079,7 @@ class clam_mil(nn.Module):
             attention_scores = self.attention_branches[i](attention_U_output * attention_V_output).softmax(dim=1)
             attention_weights_list.append(attention_scores)
 
-        attention_weights = torch.cat(attention_weights_list, dim=1)
+        attention_weights = torch.mean(torch.stack(attention_weights_list), dim=0)
         if apply_softmax:
             attention_weights = F.softmax(attention_weights, dim=1)
         return attention_weights
