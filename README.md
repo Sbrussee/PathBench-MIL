@@ -32,7 +32,7 @@ PathBench's documentation is available [here](https://pathbench.readthedocs.io/e
 1. **Clone the Repository:**
 
     ```bash
-    git clone https://github.com/sbrussee/PathBench.git
+    git clone --recurse_submodules https://github.com/sbrussee/PathBench.git
     cd PathBench
     ```
 
@@ -58,22 +58,7 @@ PathBench's documentation is available [here](https://pathbench.readthedocs.io/e
         ```bash
         pathbench_env\Scripts\activate
         ```
-
-4. **Install `pathbench` Package:**
-
-    After activating the virtual environment, install the `pathbench` package.
-
-    ```bash
-    pip install -e .
-    ```
-
-    Or, if you do not need to modify the code:
-
-    ```bash
-    pip install .
-    ```
-
-5. **Install `slideflow_fork` Package:**
+4. **Install `slideflow` Package:**
 
     Navigate to the `slideflow_fork` directory and install it:
 
@@ -87,6 +72,21 @@ PathBench's documentation is available [here](https://pathbench.readthedocs.io/e
     ```bash
     pip install .
     ```
+    
+5. **Install `pathbench-mil` Package:**
+
+    After activating the virtual environment, install the `pathbench-mil` package.
+
+    ```bash
+    pip install -e .
+    ```
+
+    Or, if you do not need to modify the code:
+
+    ```bash
+    pip install .
+    ```
+
 
 # PathBench Configuration Example
 To use PathBench, you need to provide a configuration file in YAML format. Below is an example configuration file:
@@ -107,11 +107,10 @@ experiment:
   aggregation_level: slide # Aggregation level, can be slide or patient
   with_continue: True # Continue training from a previous checkpoint, if available
   task: classification # Task, can be classification, regression or survival
-  visualization: # Visualization options, options: CLASSIFICATION: confusion_matrix, precision_recall_curve, roc_curve, umap, mosaic SURVIVAL: survival_roc, concordance_index, calibration REGRESSION: predicted_vs_actual, residuals, qq
+  visualization: # Visualization options, options: CLASSIFICATION: confusion_matrix, precision_recall_curve, roc_curve, top_tiles URVIVAL: survival_roc, concordance_index, calibration REGRESSION: predicted_vs_actual, residuals, qq
     - learning_curve
     - confusion_matrix
     - roc_curve
-    - umap
   mode: optimization # Mode to use, either benchmark or optimization
 
   custom_metrics: [RocAuc]: List of evaluation metrics to measure in the validation set during model training. Needs to be either specified in metrics.py or a fastai metric: https://docs.fast.ai/metrics.html
@@ -150,14 +149,18 @@ datasets: # List of datasets to use, each dataset should have a name, slide_path
 benchmark_parameters: # Parameters for the benchmarking, can be used to compare different methods
   tile_px: # Tile size in pixels
     - 256
+
   tile_um: # Tile size in micrometers
     - 20x
+
   normalization: # Normalization method, can be macenko, reinhard, ruifrok or cyclegan
     - macenko
     - reinhard
+
   feature_extraction: # Feature extraction methods
     - resnet50_imagenet
     - hibou_b
+
   mil: # Multiple instance learning aggregation methods
     - Attention_MIL
     - dsmil
@@ -184,10 +187,12 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 # - PLIP
 # - HistoSSL
 # - uni
+# - conch
 # - dino
 # - mocov2
 # - swav
 # - phikon
+# - phikon_v2
 # - gigapath
 # - barlow_twins
 # - hibou_b
@@ -218,6 +223,8 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 # - distributionpooling_mil
 # - dsmil
 # - varmil
+# - perceiver_mil
+# - air_mil
 
 #Available Loss functions
   # - Classification:
@@ -239,8 +246,6 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
   # - feature_permutation
   # - patch_mixing
   # - cutmix
-
-
 
 weights_dir : ./pretrained_weights # Path to the model weights, and where newly retrieved model weights will be saved
 hf_key: YOUR_HUGGINGFACE_TOKEN # Token for Hugging Face model hub to access gated models, if you do not have one, just set to None
