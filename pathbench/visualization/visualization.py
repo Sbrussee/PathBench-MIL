@@ -3,6 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 import slideflow as sf
+import torch
 from PIL import Image, ImageDraw, ImageFont
 from sklearn.metrics import auc
 from lifelines.utils import concordance_index
@@ -545,14 +546,14 @@ def plot_calibration_across_splits(results: pd.DataFrame, save_string: str, data
     plt.close()
 
 
-def plot_top5_attended_tiles_per_class(slide_name : str, model_directory : str, tfr_directory : str, output_dir : str,
+def plot_top5_attended_tiles_per_class(slide_name : str, attention_file : str, tfr_directory : str, output_dir : str,
                                        annotation_df : pd.DataFrame, target : str, dataset : str, split : str, save_string : str):
     """
     Plot the top 5 most attended tiles and the top 5 least attended tiles for a given slide
 
     Args:
         slide_name: The slide name to get the top 5 attended tiles for
-        model_directory: The model directory
+        attention_file: The attention file containing the attention map
         tfr_directory: The TFRecord directory
         output_dir: The output directory
         annotation_df: The annotation DataFrame
@@ -566,7 +567,7 @@ def plot_top5_attended_tiles_per_class(slide_name : str, model_directory : str, 
     """
     # Find the corresponding .npz and .tfrecord files
     index_path = os.path.join(tfr_directory, f"{slide_name}.index.npz")
-    tfr_path = os.path.join(tfr_directory, f"{slide_name}.tfrecord")
+    tfr_path = os.path.join(tfr_directory, f"{slide_name}.tfrecords")
 
     # Validate the existence of the files
     if not os.path.exists(index_path):
@@ -582,25 +583,24 @@ def plot_top5_attended_tiles_per_class(slide_name : str, model_directory : str, 
     label = label_row[target].values[0]
 
     # Load the attention map
-    attention_path = os.path.join(model_directory, f"00000-clam_sb/attention/{slide_name}_att.npz")
-    attention = np.load(attention_path)['arr_0']
-
-    print(f"Processing slide: {slide_name}")
-    print(f"Attention map shape: {attention.shape}")
+    attention = attention_file['arr_0']
 
     # Load the TFRecord and its index
     tfr = sf.TFRecord(tfr_path)
     
     # Load the index file, which contains the tile coordinates
-    bag_index = np.load(index_path)['arr_0']
+    bag_index = np.load(index_path)
+    tile_coordinates = bag_index['locations']  # This contains the (x, y) coordinates of the tiles
+
+    logging.info("Bag index shape: %s", tile_coordinates.shape)
 
     # Get the top 5 attention values and their indices
     top5_attention_indices = np.argsort(attention)[::-1][:5]
     top5_least_attended_indices = np.argsort(attention)[:5]
 
     # Get the corresponding tile coordinates from the index file
-    top5_tile_coordinates = bag_index[top5_attention_indices]
-    top5_least_attended_coordinates = bag_index[top5_least_attended_indices]
+    top5_tile_coordinates = tile_coordinates[top5_attention_indices]
+    top5_least_attended_coordinates = tile_coordinates[top5_least_attended_indices]
 
     # Ensure the output directory exists
     os.makedirs(output_dir, exist_ok=True)
@@ -608,15 +608,21 @@ def plot_top5_attended_tiles_per_class(slide_name : str, model_directory : str, 
     # Plot the top 5 most attended tiles with attention scores
     fig, axs = plt.subplots(1, 5, figsize=(20, 5))
     for i, coord in enumerate(top5_tile_coordinates):
-        slide, img_bytes = tfr.get_record_by_xy(coord[0], coord[1])
-        img = sf.io.decode_image(img_bytes)
-        img = Image.fromarray(img)
+        slide, img = tfr.get_record_by_xy(coord[0], coord[1], decode=True)
 
-        # Draw attention score on the image
+        # Convert from Tensor to NumPy array if necessary
+        if isinstance(img, torch.Tensor):
+            img = img.cpu().numpy()  # No permutation needed, assuming the shape is already [256, 256, 3]
+
+        # Convert to image (RGB assumed)
+        img = Image.fromarray(img.astype(np.uint8))  # Convert directly to image
+
+        # Add attention score text to image
         draw = ImageDraw.Draw(img)
         font = ImageFont.load_default()
         draw.text((10, 10), f"Score: {attention[top5_attention_indices[i]]:.4f}", fill="red", font=font)
 
+        # Plot the image
         axs[i].imshow(img)
         axs[i].axis('off')
     plt.suptitle(f"Top 5 most attended tiles ({dataset} {label} {slide_name})", fontsize=21)
@@ -627,18 +633,27 @@ def plot_top5_attended_tiles_per_class(slide_name : str, model_directory : str, 
     # Plot the top 5 least attended tiles with attention scores
     fig, axs = plt.subplots(1, 5, figsize=(20, 5))
     for i, coord in enumerate(top5_least_attended_coordinates):
-        slide, img_bytes = tfr.get_record_by_xy(coord[0], coord[1])
-        img = sf.io.decode_image(img_bytes)
-        img = Image.fromarray(img)
+        slide, img = tfr.get_record_by_xy(coord[0], coord[1], decode=True)
 
-        # Draw attention score on the image
+        # Log image shape
+        logging.info("Image shape: %s", img.shape)
+
+        # Convert from Tensor to NumPy array if necessary
+        if isinstance(img, torch.Tensor):
+            img = img.cpu().numpy()  # No permutation needed, assuming the shape is already [256, 256, 3]
+
+        # Convert to image (RGB assumed)
+        img = Image.fromarray(img.astype(np.uint8))  # Convert directly to image
+
+        # Add attention score text to image
         draw = ImageDraw.Draw(img)
         font = ImageFont.load_default()
         draw.text((10, 10), f"Score: {attention[top5_least_attended_indices[i]]:.4f}", fill="red", font=font)
 
+        # Plot the image
         axs[i].imshow(img)
         axs[i].axis('off')
-    plt.suptitle(f"Top 5 least attended tiles ({{dataset} {label} {slide_name})", fontsize=21)
+    plt.suptitle(f"Top 5 least attended tiles ({dataset} {label} {slide_name})", fontsize=21)
     plt.tight_layout()
     plt.savefig(f"{output_dir}/{dataset}_{split}_{label}_{slide_name}_{save_string}_least_attended_tiles.png")
     plt.close()

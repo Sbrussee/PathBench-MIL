@@ -1574,6 +1574,40 @@ class transpath_mocov3(TorchFeatureExtractor):
             'class': 'transpath_mocov3',
             'kwargs': {}
         }
+        
+@register_torch
+class conch(TorchFeatureExtractor):
+    from conch.open_clip_custom import create_model_from_pretrained
+    
+    def __init__(self, tile_px=256):
+        super().__init__()
+        model, preprocess = create_model_from_pretrained("conch_ViT-B-16", "hf_hub:MahmoodLab/conch")
+        model.to('cuda')
+        self.num_features = 512
+
+        class ConchEmbedder(nn.Module):
+            def __init__(self, model):
+                super(ConchEmbedder, self).__init__()
+                self.model = model
+
+            def forward(self, x):
+                x = self.model.encode_image(x, proj_contrast=False, normalize=False)
+                return x
+        
+        self.model = ConchEmbedder(model)
+        self.model.to('cuda')
+
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize(224),
+                # Transform to float tensor
+                transforms.ConvertImageDtype(torch.float32),
+                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+            ]
+        )
+        self.model.eval()
+        # Slideflow standardization
+        self.preprocess_kwargs = {'standardize': False}
 
 @register_torch
 class exaone_path(TorchFeatureExtractor):
@@ -1884,6 +1918,71 @@ class exaone_path(TorchFeatureExtractor):
     def dump_config(self):
         return {
             'class': 'exaone_path',
+            'kwargs': {}
+        }
+
+
+@register_torch
+class phikon_v2(TorchFeatureExtractor):
+    """
+    V2 of the Phikon feature extractor, with Vision Transformer backbone
+
+    Parameters
+    ----------
+    tile_px : int
+        The size of the tile
+    
+    Attributes
+    ----------
+    model : VisionTransformer
+        The Vision Transformer model
+    transform : torchvision.transforms.Compose
+        The transformation pipeline
+    preprocess_kwargs : dict
+        The preprocessing arguments
+    
+    Methods
+    -------
+    dump_config()
+        Dump the configuration of the feature extractor
+    """
+
+    tag = 'phikon_v2'
+    def __init__(self, tile_px=256):
+        super().__init__()
+        model = AutoModel.from_pretrained("owkin/phikon-v2")
+        self.num_features = 1024
+
+        # Internal class for the modified model
+        class PhikonEmbedder(nn.Module):
+            def __init__(self, base_model, num_features):
+                super(PhikonEmbedder, self).__init__()
+                self.base_model = base_model
+                self.num_features = num_features
+
+            def forward(self, x):
+                # Get features from the base model
+                outputs = self.base_model(x)
+                features = outputs.last_hidden_state[:, 0, :]  # Shape: [batch_size, hidden_size]
+                return features
+
+        self.model = PhikonEmbedder(model, self.num_features)
+        self.model.to('cuda')
+        self.model.eval()
+
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize(224),
+                transforms.ConvertImageDtype(torch.float32),
+                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+            ]
+        )
+        # Slideflow standardization
+        self.preprocess_kwargs = {'standardize': False}
+
+    def dump_config(self):
+        return {
+            'class': 'phikon_v2',
             'kwargs': {}
         }
 
