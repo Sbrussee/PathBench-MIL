@@ -2,7 +2,7 @@
  <img src="thumbnail_PathBench-logo-horizontaal.png" alt="PathBench" width="800" height="200">
 </p>
 
-# PathBench-MIL: A comprehensive, flexible Benchmarking/AutoML package for multiple instance learning in pathology.
+# PathBench-MIL: A comprehensive, flexible Benchmarking/AutoML framework for multiple instance learning in pathology.
 
 PATHBENCH IS CURRENTLY UNDER DEVELOPMENT, SOME FEATURES MAY NOT WORK AS INTENDED
 
@@ -719,7 +719,7 @@ class ConcordanceIndex(Metric):
 For more fundamental changes, and adding new normalization methods, one needs to change the underlying slideflow code. PathBench uses a [forked version](https://github.com/Sbrussee/slideflow_fork) of the slideflow code, which is added as a submodule in PathBench's repository.
 
 ## Developing PathBench
-PathBench is currently in its early development stages, but we welcome collaboration on the development of PathBench. Please use pull requests to add new features or open issues if you encounter bugs or would like to see certain features.
+PathBench is currently in its early development stages, but we welcome collaboration on the development of PathBench. Please use pull requests to add new features or open issues if you encounter bugs or would like to see certain features. When encountering bugs, please provide your pathbench configuration along with information on your python environment and OS, this aids in solving the problem in a correct and timely manner.
 
 <p align="center">
   <img src="PathBench-logo-gecentreerd.png" alt="PathBench Logo" width="550" height="400">
