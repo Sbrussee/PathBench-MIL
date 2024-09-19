@@ -37,6 +37,7 @@ experiment:
     - confusion_matrix
     - roc_curve
     - precision_recall_curve
+    - top_tiles
 
 datasets:
   - name: TCGA_LUSC
