@@ -24,6 +24,7 @@ def create_directory(path):
     if not os.path.exists(path):
         os.makedirs(path)
 
+
 def load_embeddings(bag_directory, tile_size, mag, normalization, feature_methods, slide):
     """Load feature extractor embeddings from the specified directory for a given slide.
     
@@ -44,12 +45,12 @@ def load_embeddings(bag_directory, tile_size, mag, normalization, feature_method
         embedding_dict[feature_method] = bag
     return embedding_dict
 
-def calculate_neighbor_rankings(embedding_dict, feature_methods, k, method='knn'):
+def calculate_neighbor_rankings(embedding_dict, combinations, k, method='knn'):
     """Calculate distance-based neigbor rankings for each embedding
     
     Args:
         embedding_dict (dict): Dictionary containing the embeddings for each feature extraction method.
-        feature_methods (list): List of feature extraction methods.
+        feature_methods (list): List of all possible combinations of feature extractors, normalization methods, tile sizes and magnification levels.
         k (int): Number of neighbors to consider.
         method (str): Method to use for neighbor selection. Options: 'knn', 'cosine', 'pearson'.
 
@@ -57,11 +58,13 @@ def calculate_neighbor_rankings(embedding_dict, feature_methods, k, method='knn'
         rankings_dict: Dictionary containing the distace rankings for each feature extraction method.
     """
     rankings_dict = {}
-    for feature_method in feature_methods:
-        embedding = embedding_dict[feature_method]
+    # Loop through each combination
+    for combination in combinations:
+        embedding = embedding_dict[combination]  # Get embedding for the specific combination
         num_samples = len(embedding)
         k = min(k, num_samples)  # Ensure k is not greater than the number of samples
 
+        # Handle neighbor selection methods
         if method == 'knn':
             nbrs = NearestNeighbors(n_neighbors=k, algorithm='ball_tree').fit(embedding)
             distances, indices = nbrs.kneighbors(embedding)
@@ -73,7 +76,10 @@ def calculate_neighbor_rankings(embedding_dict, feature_methods, k, method='knn'
             indices = np.argsort(-pearson_sim_matrix, axis=1)[:, 1:k+1]
         else:
             raise ValueError("Invalid method. Use 'knn', 'cosine', or 'pearson'.")
-        rankings_dict[feature_method] = indices
+        
+        # Store rankings for this combination
+        rankings_dict[combination] = indices
+    
     return rankings_dict
 
 def calculate_shared_neighbors(rankings_dict, feature_methods, k):
@@ -88,16 +94,26 @@ def calculate_shared_neighbors(rankings_dict, feature_methods, k):
         similarity_scores: Dictionary containing the similarity scores between pairs of feature
         extractors based on shared neighbors.
     """
+    # Generate combinations of feature methods
     combinations = [(feature_methods[i], feature_methods[j]) for i in range(len(feature_methods)) for j in range(i+1, len(feature_methods))]
+    
     similarity_scores = {}
+    
     for combination in combinations:
         ranks1 = rankings_dict[combination[0]]
         ranks2 = rankings_dict[combination[1]]
+
+        # Ensure we only compare up to the minimum number of tiles
+        min_length = min(len(ranks1), len(ranks2))
+
         shared_count = 0
-        for i in range(len(ranks1)):
+        for i in range(min_length):
             shared_neighbors = set(ranks1[i]).intersection(set(ranks2[i]))
             shared_count += len(shared_neighbors)
-        similarity_scores[combination] = shared_count / (len(ranks1) * k)
+
+        # Normalize by the minimum number of tiles and k
+        similarity_scores[combination] = shared_count / (min_length * k)
+    
     return similarity_scores
 
 def construct_similarity_matrix(distance_scores, feature_methods, shared_neighbors=False):
@@ -124,28 +140,32 @@ def construct_similarity_matrix(distance_scores, feature_methods, shared_neighbo
     np.fill_diagonal(similarity_matrix, 1)  # Similarity with itself is 1
     return similarity_matrix
 
-def plot_similarity_matrix(similarity_matrix, feature_methods, slide, title):
+def plot_similarity_matrix(similarity_matrix, combinations, save_path="", slide=None, title=''):
     """Plot and save the similarity matrix.
     
     Args:
         similarity_matrix (np.array): 2D numpy array containing the similarity scores between pairs of feature extractors.
-        feature_methods (list): List of feature extraction methods.
-        slide (str): Slide name.
+        combinations (list): List of bag parameter combinations
+        save_path (str): Path to save the plot.
+        slide (str): Slide name, when only one slide is used.
         title (str): Title of the plot.
 
     Returns:
         None
     """
+    if slide is None:
+        slide = "all"
+        
     plt.figure(figsize=(10, 10))
     plt.imshow(similarity_matrix, cmap='viridis', vmin=0, vmax=1)
-    plt.xticks(range(len(feature_methods)), feature_methods, rotation=45)
-    plt.yticks(range(len(feature_methods)), feature_methods)
+    plt.xticks(range(len(combinations)), combinations, rotation=45)
+    plt.yticks(range(len(combinations)), combinations)
     plt.colorbar()
-    for i in range(len(feature_methods)):
-        for j in range(len(feature_methods)):
+    for i in range(len(combinations)):
+        for j in range(len(combinations)):
             plt.text(j, i, f"{similarity_matrix[i, j]:.2f}", ha="center", va="center", color="white")
     plt.title(title)
-    plt.savefig(f"similarity_results/{title}_similarity_matrix_{slide}.png")
+    plt.savefig(f"{save_path}/similarity_matrix_{slide}.png")
     plt.tight_layout()
     plt.close()
 
