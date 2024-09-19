@@ -353,7 +353,7 @@ To run pathbench once installed using default setting, one can simply run
 ./run_pathbench.sh
 ```
 
-Note that this script can set your huggingface token for gated models and the configuration file as well as the name of the virtual environment can be changed:
+Note that this script sets the configuration file as well as the name of the virtual environment, which can be changed:
 ```bash
 #If virtual environment does not exist, construct one using pip
 if [ ! -d "pathbench_env" ]; then
