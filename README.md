@@ -298,7 +298,7 @@ datasets:  # List of datasets to be used
 # Annotations
 The annotation file should be a CSV file with the following columns:
 
-- slide: The name/identifier of the slide, without the file extension (e.g. .svs, .tiff).
+- slide: The name/identifier of the slide, **without the file extension (e.g. .svs, .tiff)**.
 - patient: The name/identifier of the patient to which the slide corresponds.
 - dataset: The name of the dataset to which the slide belongs.
 For classification tasks, the annotation file should also contain a column with the target labels. This column should be named category. For regression tasks, the annotation file should contain a column with the target values. This column should be named value. For survival tasks, the annotation file should contain columns with the survival time and event status. These columns should be named time and event, respectively.
