@@ -1,16 +1,16 @@
 experiment:
   project_name: TCGA_LUSC
   annotation_file: /exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/pathbench/test/dataset2_survival.csv
-  balancing: None
-  split_technique: k-fold
+  balancing: category
+  split_technique: fixed
   k: 3
   val_fraction: 0.1
-  best_epoch_based_on: val_loss # Metric to be used for selecting the best epoch, can be val_loss or any metric in evaluation
+  best_epoch_based_on: concordance_index # Metric to be used for selecting the best epoch, can be val_loss or any metric in evaluation
   epochs: 25 # Number of epochs for training
   batch_size: 32 # Batch size for training
   bag_size: 512 # Bag size for MIL models
   encoder_layers: 1 # Number of layers in the MIL encoder
-  z_dim: 256 # Dimension of the latent space in the MIL encoder
+  z_dim: 64 # Dimension of the latent space in the MIL encoder
   dropout_p: 0.1 # Dropout probability for the MIL model
   num_workers: 0 # Number of workers for data loading, 0 for no parallelization.
   with_continue: True # If True, the model will continue training from the last checkpoint.
@@ -59,27 +59,31 @@ benchmark_parameters:
   tile_px:
     - 256
   tile_um:
-    - 150
+    - 250
   normalization:
     - macenko
-    - reinhard
+    #- reinhard
   feature_extraction:
     #- resnet50_imagenet
     - CTransPath
     #- RetCCL
     - PLIP
     #- uni
+    - phikon_v2
+
   mil:
-    #- CLAM_SB
+    - clam_sb
     - dsmil
-    #- varmil
+    - varmil
     - attention_mil
 
   loss: # Loss functions, as specified in losses.py
-    - CrossEntropyLoss
+    - CoxPHLoss
+    - RankingLoss
+    - DeepHitLoss
 
-  augmentation: # MIL-friendly augmentations, as specified in augmentations.py
-    - patch_mixing
+  #augmentation: # MIL-friendly augmentations, as specified in augmentations.py
+  #  - patch_mixing
 
   activation_function: # activation function for the MIL encoder, supports any pytorch.nn activation function.
     - ReLU

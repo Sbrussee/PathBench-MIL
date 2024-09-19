@@ -7,7 +7,7 @@ experiment:
   val_fraction: 0.1
   best_epoch_based_on: roc_auc_score
   epochs: 25 # Number of epochs for training
-  batch_size: 32 # Batch size for training
+  batch_size: 64 # Batch size for training
   bag_size: 512 # Bag size for MIL models
   encoder_layers: 1 # Number of layers in the MIL encoder
   z_dim: 256 # Dimension of the latent space in the MIL encoder
@@ -17,7 +17,7 @@ experiment:
   aggregation_level: slide # Aggregation level can be 'slide' or 'patient'
   task: classification # Task can be 'classification', 'regression' or 'survival'
   mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
-  custom_metrics: [RocAuc] # Custom metrics to be used, needs to be defined in metrics.py or as a fastai-metric: https://docs.fast.ai/metrics.html
+  custom_metrics: [RocAuc]
 
   qc: # List of quality control methods to be used
     - GaussianV2
@@ -31,7 +31,6 @@ experiment:
 
   evaluation:
     - balanced_accuracy
-    - auc
 
   visualization:
     - confusion_matrix
@@ -51,10 +50,10 @@ benchmark_parameters:
     - 256
     - 512
   tile_um:
-    - 150
+    - 250
   normalization:
-    #- macenko
-    - reinhard
+    - macenko
+    #- reinhard
   feature_extraction:
     - resnet50_imagenet
     - CTransPath
