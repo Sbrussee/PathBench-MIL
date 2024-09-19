@@ -51,9 +51,12 @@ class CoxPHLoss(nn.Module):
         durations = targets[:, 0]
         events = targets[:, 1]
         
+        #log a few examples of durations and events
+        logging.info(f"Duration: {durations[:10]}")
+        logging.info(f"Events: {events[:10]}")
         # Check for zero events and handle accordingly
         if torch.sum(events) == 0:
-            logging.warning("No events in batch, returning near zero loss")
+            #logging.warning("No events in batch, returning near zero loss")
             return torch.tensor(1e-6, dtype=preds.dtype, device=preds.device)
         
         # Calculate log_h from preds
