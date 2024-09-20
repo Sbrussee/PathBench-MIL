@@ -24,7 +24,7 @@ PathBench's documentation is available [here](https://pathbench.readthedocs.io/e
 
 ## Prerequisites
 
-- Python 3.8
+- Python >= 3.9
 - Git
 
 ## Steps to Install PathBench and SlideFlow Fork
@@ -98,12 +98,15 @@ experiment:
   balancing: category # Training set balancing strategy, can be None, category, slide, patient or tile.
   num_workers: 0 # Number of workers for data loading, 0 for no parallelization.
   split_technique: k-fold # Splitting technique, can be k-fold or fixed
-  epochs: 5 # Number of training epochs
+  epochs: 5 # Number of training epoch
+  best_epoch_based_on: val_loss # Metric to be used for selecting the best training epoch (e.g. val_loss, roc_auc_score, mae, concordance_index)
   batch_size: 32 # Batch size
   bag_size : 512 # Bag size for MIL
+  encoder_layers: 1 # Number of encoder layers to use in the MIL aggregator
+  z_dim: 256 # Latent space dimensionality in the MIL aggregator
+  dropout_p: 0.1 # Dropout probabilitiy in the MIL aggregator
   k: 2 # Number of folds, if split-technique is k-fold
-  val_fraction: 0.1 # Fraction of the training set used for validation
-  best_epoch_based_on: val_loss # Metric to be used for selecting the best epoch, can be val_loss or any metric in evaluation
+  val_fraction: 0.1 # Fraction of training data to use for validation
   aggregation_level: slide # Aggregation level, can be slide or patient
   with_continue: True # Continue training from a previous checkpoint, if available
   task: classification # Task, can be classification, regression or survival
@@ -173,6 +176,9 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 
   activation_function: # activation function for the MIL encoder, supports any pytorch.nn activation function.
     - ReLU
+
+  optimizer: # Optimization algorithm to use for model training (Can be any FastAI optimizer)
+    - Adam
 
 # Available normalization methods:
 # - macenko
@@ -249,6 +255,7 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 
 weights_dir : ./pretrained_weights # Path to the model weights, and where newly retrieved model weights will be saved
 hf_key: YOUR_HUGGINGFACE_TOKEN # Token for Hugging Face model hub to access gated models, if you do not have one, just set to None
+
 ```
 
 # Setting up a Project
@@ -385,6 +392,7 @@ python3 main.py $CONFIG_FILE
     - Loss functions
     - MIL-friendly (feature-space) augmentations
     - Activation functions
+    - Optimization methods
 - Interpretable visualizations of benchmark output
 - Plotly-based benchmark visualization tool
 - Efficient Tile processing and QC pipeline inherited by Slideflow
