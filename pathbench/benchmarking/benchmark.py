@@ -615,6 +615,10 @@ def benchmark(config, project):
             all_data = project.dataset(tile_px=combination_dict['tile_px'],
                                     tile_um=combination_dict['tile_um'],
                                     )
+
+            if len(all_data.slides()) == 0:
+                raise ValueError("No slides found in dataset, please check the dataset paths in the configuration file")
+
             logging.info(f"Datasets: {all_data}")
             logging.info("Extracting tiles...")
 
@@ -695,9 +699,7 @@ def benchmark(config, project):
             for train, val in splits:
                 logging.info(f"Split {index} started...")
                 cleanup_multiprocessing_semaphores()
-                # Balance the train and val datasets
-                train = balance_dataset(train, task, config)
-                val = balance_dataset(val, task, config)
+
                 # Train the MIL model
                 val_result = project.train_mil(
                     config=mil_conf,
@@ -1166,12 +1168,23 @@ def optimize_parameters(config : dict, project : sf.Project):
         all_data.extract_tiles(enable_downsample=False,
                                save_tiles=False, qc="both")
                             
-        train_set = all_data.filter(filters={'dataset' : 'train'})
+        #Select which datasets should be used for training and testing
+        datasets = config['datasets']
 
-        #Balance the training dataset
+        # Filter datasets for training
+        train_datasets = [d for d in datasets if d['used_for'] == 'training']
+
+        # Filter datasets for testing
+        test_datasets = [d for d in datasets if d['used_for'] == 'testing']
+
+        # Assume all_data contains all available datasets
+        train_set = all_data.filter(filters={'dataset': [d['name'] for d in train_datasets]})
+
+        # Balance the training dataset
         train_set = balance_dataset(train_set, task, config)
 
-        test_set = all_data.filter(filters={'dataset' : 'validate'})
+        # Filter test set
+        test_set = all_data.filter(filters={'dataset': [d['name'] for d in test_datasets]})
 
         logging.info("Splitting datasets...")
         splits = split_datasets(config, project, splits_file, target, project_directory, train_set)
@@ -1856,11 +1869,25 @@ def ensemble(project, config):
     all_data = project.dataset(tile_px=tile_px, tile_um=tile_um)
     logging.info("Dataset loaded.")
     
-    # Split the dataset into training and validation sets
-    train = all_data.filter(filters={'dataset': 'train'})
-    train = balance_dataset(train, config['experiment']['task'], config)
-    test_set = all_data.filter(filters={'dataset': 'validate'})
-    
+
+    #Select which datasets should be used for training and testing
+    datasets = config['datasets']
+
+    # Filter datasets for training
+    train_datasets = [d for d in datasets if d['used_for'] == 'training']
+
+    # Filter datasets for testing
+    test_datasets = [d for d in datasets if d['used_for'] == 'testing']
+
+    # Assume all_data contains all available datasets
+    train_set = all_data.filter(filters={'dataset': [d['name'] for d in train_datasets]})
+
+    # Balance the training dataset
+    train_set = balance_dataset(train_set, task, config)
+
+    # Filter test set
+    test_set = all_data.filter(filters={'dataset': [d['name'] for d in test_datasets]})
+
     # Split into training and validation sets
     logging.info("Splitting datasets...")
     splits = split_datasets(config, project, determine_splits_file(config, f"experiments/{config['experiment']['project_name']}"), target, f"experiments/{config['experiment']['project_name']}", train)
