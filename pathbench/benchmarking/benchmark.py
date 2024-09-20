@@ -645,13 +645,24 @@ def benchmark(config, project):
                                     num_threads = config['experiment']['num_workers'])
             cleanup_multiprocessing_semaphores()
 
-            train_set = all_data.filter(filters={'dataset' : 'train'})
+            #Select which datasets should be used for training and testing
+            datasets = config['datasets']
 
-            #Balance the training dataset
+            # Filter datasets for training
+            train_datasets = [d for d in datasets if d['used_for'] == 'training']
+
+            # Filter datasets for testing
+            test_datasets = [d for d in datasets if d['used_for'] == 'testing']
+
+            # Assume all_data contains all available datasets
+            train_set = all_data.filter(filters={'dataset': [d['name'] for d in train_datasets]})
+
+            # Balance the training dataset
             train_set = balance_dataset(train_set, task, config)
 
-            test_set = all_data.filter(filters={'dataset' : 'validate'})
-            
+            # Filter test set
+            test_set = all_data.filter(filters={'dataset': [d['name'] for d in test_datasets]})
+
             logging.info(f"Train set #slides: {len(train_set.slides())}")
             logging.info(f"Test set #slides: {len(test_set.slides())}")
 
