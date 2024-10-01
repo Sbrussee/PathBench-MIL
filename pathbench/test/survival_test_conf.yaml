@@ -13,7 +13,6 @@ experiment:
   z_dim: 64 # Dimension of the latent space in the MIL encoder
   dropout_p: 0.1 # Dropout probability for the MIL model
   num_workers: 0 # Number of workers for data loading, 0 for no parallelization.
-  with_continue: True # If True, the model will continue training from the last checkpoint.
   aggregation_level: patient # Aggregation level can be 'slide' or 'patient'
   task: survival # Task can be 'classification', 'regression' or 'survival'
   mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
@@ -49,17 +48,23 @@ experiment:
     whitespace_fraction: 1.0 # Image tiles with whitespace above this fraction are discarded.
 
 datasets:
-  - name: TCGA_LUSC
+  - name: train
     slide_path: /exports/path-cutane-lymfomen-hpc/siemen/tcga/TCGA-LUSC
     tfrecord_path: TCGA_LUSC/tfrecords
     tile_path: TCGA_LUSC/tiles
     used_for: training
 
+  - name: test
+    slide_path: /exports/path-cutane-lymfomen-hpc/siemen/tcga/TCGA-LUSC
+    tfrecord_path: TCGA_LUSC/tfrecords
+    tile_path: TCGA_LUSC/tiles
+    used_for: testing
+
 benchmark_parameters:
   tile_px:
     - 256
   tile_um:
-    - 250
+    - 128
   normalization:
     - macenko
     #- reinhard
@@ -70,6 +75,7 @@ benchmark_parameters:
     - PLIP
     #- uni
     - phikon_v2
+    - h_optimus_0
 
   mil:
     - clam_sb
@@ -91,5 +97,5 @@ benchmark_parameters:
   optimizer: # Optimizers, can be any fastai optimizer (Default: Adam)
     - Adam
 
-weights_dir: pretrained_weights
+weights_dir: ../pretrained_weights
 #hf_token: None

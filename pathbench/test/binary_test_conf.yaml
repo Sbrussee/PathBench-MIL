@@ -13,7 +13,6 @@ experiment:
   z_dim: 256 # Dimension of the latent space in the MIL encoder
   dropout_p: 0.1 # Dropout probability for the MIL model
   num_workers: 0 # Number of workers for data loading, 0 for no parallelization.
-  with_continue: True # If True, the model will continue training from the last checkpoint.
   aggregation_level: slide # Aggregation level can be 'slide' or 'patient'
   task: classification # Task can be 'classification', 'regression' or 'survival'
   mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
@@ -40,17 +39,23 @@ experiment:
     - top_tiles
 
 datasets:
-  - name: TCGA_LUSC
+  - name: train
     slide_path: /exports/path-cutane-lymfomen-hpc/siemen/tcga/TCGA-LUSC
     tfrecord_path: TCGA_LUSC/tfrecords
     tile_path: TCGA_LUSC/tiles
     used_for: training
 
+  - name: test
+    slide_path: /exports/path-cutane-lymfomen-hpc/siemen/tcga/TCGA-LUSC
+    tfrecord_path: TCGA_LUSC/tfrecords
+    tile_path: TCGA_LUSC/tiles
+    used_for: testing
+
 benchmark_parameters:
   tile_px:
     - 256
   tile_um:
-    - 150
+    - 128
   normalization:
     - macenko
     #- reinhard
@@ -59,7 +64,8 @@ benchmark_parameters:
     - CTransPath
     #- RetCCL
     #- PLIP
-    #- uni
+    - phikon_v2
+    - h_optimus_0
   mil:
     - clam_mil
     - dsmil
@@ -67,5 +73,5 @@ benchmark_parameters:
     #- attention_mil
 
 
-weights_dir: /exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/pretrained_weights
+weights_dir: ../pretrained_weights
 #hf_token: None

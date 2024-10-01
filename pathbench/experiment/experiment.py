@@ -2,7 +2,7 @@ import yaml
 import slideflow as sf
 import os
 import torch
-from ..benchmarking.benchmark import benchmark, optimize_parameters, ensemble
+from ..benchmarking.benchmark import benchmark, optimize_parameters
 import random
 import shutil
 import logging
@@ -89,9 +89,6 @@ class Experiment():
         elif self.config['experiment']['mode'] == 'optimization':
             logging.info("Running optimization mode...")
             self.optimize_parameters()
-        elif self.config['experiment']['mode'] == 'ensemble':
-            logging.info("Running ensemble mode...")
-            self.ensemble()
         else:
             raise ValueError("Invalid mode. Mode must be either 'benchmark' or 'optimization'")
 
@@ -139,8 +136,8 @@ class Experiment():
                 self.project.add_source(
                     name=source['name'],
                     slides=source['slide_path'],
-                    tfrecords=source['tfrecord_path'],
-                    tiles=source['tile_path']
+                    tfrecords=f'experiments/{source["tfrecord_path"]}',
+                    tiles=f'experiments/{source["tile_path"]}',
                 )
                 logging.info(f"Added source {source['name']} to project {self.project_name}")
                 logging.info(f"Slides in source: {source['slide_path']}")
@@ -152,7 +149,3 @@ class Experiment():
     def optimize_parameters(self):
         #Optimize the MIL pipeline
         optimize_parameters(self.config, self.project)
-
-    def ensemble(self):
-        #Build a model ensemble
-        ensemble(self.project, self.config)

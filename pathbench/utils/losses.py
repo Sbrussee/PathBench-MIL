@@ -4,66 +4,127 @@ from torch import Tensor
 import torch.nn as nn
 import logging
 
-def cox_ph_loss_sorted(log_h: Tensor, events: Tensor, eps: float = 1e-7) -> Tensor:
-    """Requires the input to be sorted by descending duration time.
-    We calculate the negative log of $(\frac{h_i}{\sum_{j \in R_i} h_j})^d$,
-    where h = exp(log_h) are the hazards and R is the risk set, and d is event.
-    
-    We just compute a cumulative sum, and not the true Risk sets. This is a
-    limitation, but simple and fast.
-    """
+def cox_ph_loss_sorted(log_h: Tensor, events: Tensor, event_weight=1.0, censored_weight=1.0, eps: float = 1e-7) -> Tensor:
+    """CoxPH loss requires sorted inputs by descending duration time."""
     if events.dtype is torch.bool:
         events = events.float()
     events = events.view(-1)
     log_h = log_h.view(-1)
     gamma = log_h.max()
+    
+    # Calculate cumulative hazard
     log_cumsum_h = log_h.sub(gamma).exp().cumsum(0).add(eps).log().add(gamma)
-    loss = -log_h.sub(log_cumsum_h).mul(events).sum().div(events.sum().add(eps))
+    
+    # Apply weights based on event or censoring
+    weights = torch.where(events == 1, event_weight, censored_weight)
+    
+    # Compute weighted loss (use weights for events and censored samples)
+    loss = -log_h.sub(log_cumsum_h).mul(events).mul(weights).sum().div(events.sum().add(eps))
+    
     return loss
 
-def cox_ph_loss(log_h: Tensor, durations: Tensor, events: Tensor, eps: float = 1e-7) -> Tensor:
-    """Loss for CoxPH model. If data is sorted by descending duration, see `cox_ph_loss_sorted`.
-    We calculate the negative log of $(\frac{h_i}{\sum_{j \in R_i} h_j})^d$,
-    where h = exp(log_h) are the hazards and R is the risk set, and d is event.
-    
-    We just compute a cumulative sum, and not the true Risk sets. This is a
-    limitation, but simple and fast.
-    """
+def cox_ph_loss(log_h: Tensor, durations: Tensor, events: Tensor, event_weight=1.0, censored_weight=1.0, eps: float = 1e-7) -> Tensor:
+    """CoxPH loss that uses sorted inputs by descending duration."""
     idx = durations.sort(descending=True)[1]
     events = events[idx]
     log_h = log_h[idx]
-    return cox_ph_loss_sorted(log_h, events, eps)
+    return cox_ph_loss_sorted(log_h, events, event_weight=event_weight, censored_weight=censored_weight, eps=eps)
 
 class CoxPHLoss(nn.Module):
-    """Loss function for CoxPH model."""
-    def __init__(self):
+    """CoxPH loss class with event and censored weights."""
+    def __init__(self, event_weight=1.0, censored_weight=1.0):
         super().__init__()
+        self.event_weight = event_weight
+        self.censored_weight = censored_weight
 
     def forward(self, preds, targets):
         """
         Args:
             preds (torch.Tensor): Predictions from the model.
-            targets (torch.Tensor): Target values.
+            targets (torch.Tensor): Target values containing durations and event indicators.
         
         Returns:
-            torch.Tensor: Loss value.
+            torch.Tensor: Weighted loss value.
         """
         durations = targets[:, 0]
         events = targets[:, 1]
         
-        #log a few examples of durations and events
-        logging.info(f"Duration: {durations[:10]}")
-        logging.info(f"Events: {events[:10]}")
         # Check for zero events and handle accordingly
         if torch.sum(events) == 0:
-            #logging.warning("No events in batch, returning near zero loss")
             return torch.tensor(1e-6, dtype=preds.dtype, device=preds.device)
         
         # Calculate log_h from preds
-        loss = cox_ph_loss(preds, durations, events).float()
+        loss = cox_ph_loss(preds, durations, events, self.event_weight, self.censored_weight).float()
         return loss
 
+class RankingLoss(nn.Module):
+    """Pairwise ranking loss for survival analysis with weights for events and censored data."""
+    def __init__(self, margin=1.0, event_weight=1.0, censored_weight=1.0):
+        super().__init__()
+        self.margin = margin
+        self.event_weight = event_weight
+        self.censored_weight = censored_weight
 
+    def forward(self, preds, targets):
+        durations = targets[:, 0]
+        events = targets[:, 1]
+        
+        loss = 0.0
+        num_pairs = 0
+
+        # Compare all pairs of individuals
+        for i in range(len(durations)):
+            for j in range(len(durations)):
+                if durations[i] < durations[j] and events[i] == 1:
+                    # Apply event_weight and censored_weight
+                    weight = self.event_weight if events[i] == 1 else self.censored_weight
+                    # Margin ranking loss
+                    loss += weight * torch.relu(self.margin - (preds[i] - preds[j]))
+                    num_pairs += 1
+
+        if num_pairs > 0:
+            loss /= num_pairs
+
+        return loss
+
+class DeepHitLoss(nn.Module):
+    """DeepHit loss combining likelihood and ranking loss with weights."""
+    def __init__(self, alpha=0.5, event_weight=1.0, censored_weight=1.0):
+        super().__init__()
+        self.alpha = alpha  # Weight between likelihood and ranking loss
+        self.event_weight = event_weight
+        self.censored_weight = censored_weight
+
+    def forward(self, preds, targets):
+        durations = targets[:, 0]
+        events = targets[:, 1]
+        num_time_intervals = preds.shape[1]
+        
+        # Scale durations to the number of time intervals
+        duration_indices = (durations / durations.max() * (num_time_intervals - 1)).long()
+
+        # Likelihood loss (for the event times)
+        idx = torch.arange(preds.size(0))
+        likelihood_loss = -torch.log(preds[idx, duration_indices] + 1e-8) * events
+
+        # Apply event and censoring weights
+        weights = torch.where(events == 1, self.event_weight, self.censored_weight)
+        likelihood_loss = likelihood_loss.mul(weights)
+
+        # Ranking loss: pairwise comparisons between individuals
+        rank_loss = 0.0
+        count = 0
+        for i in range(preds.size(0)):
+            for j in range(preds.size(0)):
+                if durations[i] < durations[j] and events[i] == 1:
+                    rank_loss += torch.relu(preds[j, duration_indices[i]] - preds[i, duration_indices[i]]) * self.event_weight
+                    count += 1
+
+        rank_loss = rank_loss / count if count > 0 else 0.0
+
+        # Combine likelihood and ranking losses
+        return torch.mean(self.alpha * likelihood_loss + (1 - self.alpha) * rank_loss)
+        
 class CrossEntropyLoss(nn.Module):
     def __init__(self, weight: Optional[Tensor] = None):
         """
