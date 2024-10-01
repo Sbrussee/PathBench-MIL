@@ -22,7 +22,6 @@ Training related settings:
 - `aggregation_level`: The aggregation level can be 'slide' or 'patient'. This specifies at which levels bags are aggregated, effectively creating slide-level or patient-level predictions.
 
 General settings:
-- `with_continue`: If True, the model will continue training, skipping already finished parameter combinations.
 - `task`: The task can be 'classification', 'regression' or 'survival'.
 - `mode`: The mode can be either 'benchmark' or 'optimization'.
 

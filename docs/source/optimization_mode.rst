@@ -18,14 +18,11 @@ To configure optimization mode, you need to create a configuration file in YAML 
       k: 2
       val_fraction: 0.1
       aggregation_level: slide
-      with_continue: True
       task: classification
       visualization:
         - learning_curve
         - confusion_matrix
         - roc_curve
-        - umap
-        - mosaic
       mode: optimization
 
     optimization:
