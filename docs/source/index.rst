@@ -37,7 +37,6 @@ Contents:
    benchmarking_mode
    optimization_mode
    visualization_application
-   ensemble_model_creation
    extending_pathbench
    feature_extractors
    mil_aggregators

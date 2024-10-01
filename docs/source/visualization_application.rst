@@ -12,4 +12,4 @@ Example usage:
 
 .. code-block:: bash
 
-    python pathbench/visualization/visualization_app.py path_to_results
+    python pathbench/visualization/visualization_app.py /path/to/results
