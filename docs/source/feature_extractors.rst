@@ -42,6 +42,9 @@ PathBench supports a wide range of different feature extractors, including SOTA 
    * - Phikon
      - Automatic
      - `Link <https://huggingface.co/owkin/phikon>`_
+   * - Phikon-V2
+      - Automatic
+      - `Link <https://huggingface.co/owkin/phikon-v2>`_
    * - PathoDuet-HE
      - Manual
      - `Link <https://github.com/openmedlab/PathoDuet>`_ `Weights <https://drive.google.com/drive/folders/1aQHGabQzopSy9oxstmM9cPeF7QziIUxM>`_
@@ -51,12 +54,21 @@ PathBench supports a wide range of different feature extractors, including SOTA 
    * - Virchow
      - Gated
      - `Link <https://huggingface.co/paige-ai/Virchow>`_
+   * - Virchow2
+     - Gated
+      - `Link <https://huggingface.co/paige-ai/Virchow2>`_
    * - Hibou-B
      - Automatic
      - `Link <https://huggingface.co/histai/hibou-b>`_
+   * - Hibou-L
+     - Gated
+     - `Link <https://huggingface.co/histai/hibou-L>`_
    * - UNI
      - Gated
      - `Link <https://huggingface.co/MahmoodLab/UNI>`_
+   * - CONCH
+     - gated
+     - `Link <https://huggingface.co/MahmoodLab/CONCH>`_
    * - Prov-GigaPath
      - Gated
      - `Link <https://huggingface.co/prov-gigapath/prov-gigapath>`_

@@ -10,20 +10,25 @@ To configure benchmarking mode, you need to create a configuration file in YAML 
     experiment:
       project_name: Example_Project
       annotation_file: /path/to/your/annotation_file.csv
-      balancing: category
-      split_technique: k-fold
-      epochs: 5
-      batch_size: 32
-      bag_size: 512
-      k: 2
-      val_fraction: 0.1
-      aggregation_level: slide
-      task: classification
-      visualization:
+      balancing: category # Training set balancing strategy, can be None, category, slide, patient or tile.
+      num_workers: 0 # Number of workers for data loading, 0 for no parallelization.
+      split_technique: k-fold # Splitting technique, can be k-fold or fixed
+      epochs: 5 # Number of training epoch
+      best_epoch_based_on: val_loss # Metric to be used for selecting the best training epoch (e.g. val_loss, roc_auc_score, mae, concordance_index)
+      batch_size: 32 # Batch size
+      bag_size : 512 # Bag size for MIL
+      encoder_layers: 1 # Number of encoder layers to use in the MIL aggregator
+      z_dim: 256 # Latent space dimensionality in the MIL aggregator
+      dropout_p: 0.1 # Dropout probabilitiy in the MIL aggregator
+      k: 2 # Number of folds, if split-technique is k-fold
+      val_fraction: 0.1 # Fraction of training data to use for validation
+      aggregation_level: slide # Aggregation level, can be slide or patient
+      task: classification # Task, can be classification, regression or survival
+
+      visualization: 
         - learning_curve
         - confusion_matrix
         - roc_curve
-      mode: benchmark
 
     benchmark:
       parameters:
