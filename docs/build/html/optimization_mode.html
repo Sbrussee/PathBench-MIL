@@ -51,7 +51,6 @@
 <li class="toctree-l1"><a class="reference internal" href="benchmarking_mode.html">Benchmarking Mode</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Optimization Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="visualization_application.html">Visualization Application</a></li>
-<li class="toctree-l1"><a class="reference internal" href="ensemble_model_creation.html">Ensemble Model Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="extending_pathbench.html">Extending PathBench</a></li>
 <li class="toctree-l1"><a class="reference internal" href="feature_extractors.html">Feature Extractors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="mil_aggregators.html">MIL Aggregators</a></li>
@@ -89,29 +88,38 @@
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">experiment</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">project_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Example_Project</span>
 <span class="w">  </span><span class="nt">annotation_file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/your/annotation_file.csv</span>
-<span class="w">  </span><span class="nt">balancing</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">category</span>
-<span class="w">  </span><span class="nt">split_technique</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">k-fold</span>
-<span class="w">  </span><span class="nt">epochs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span>
-<span class="w">  </span><span class="nt">batch_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32</span>
-<span class="w">  </span><span class="nt">bag_size </span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">512</span>
-<span class="w">  </span><span class="nt">k</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
-<span class="w">  </span><span class="nt">val_fraction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
-<span class="w">  </span><span class="nt">aggregation_level</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">slide</span>
-<span class="w">  </span><span class="nt">with_continue</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">True</span>
-<span class="w">  </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">classification</span>
-<span class="w">  </span><span class="nt">visualization</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">balancing</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">category</span><span class="w"> </span><span class="c1"># Training set balancing strategy, can be None, category, slide, patient or tile.</span>
+<span class="w">  </span><span class="nt">num_workers</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span><span class="w"> </span><span class="c1"># Number of workers for data loading, 0 for no parallelization.</span>
+<span class="w">  </span><span class="nt">split_technique</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">k-fold</span><span class="w"> </span><span class="c1"># Splitting technique, can be k-fold or fixed</span>
+<span class="w">  </span><span class="nt">epochs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span><span class="w"> </span><span class="c1"># Number of training epoch</span>
+<span class="w">  </span><span class="nt">best_epoch_based_on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">val_loss</span><span class="w"> </span><span class="c1"># Metric to be used for selecting the best training epoch (e.g. val_loss, roc_auc_score, mae, concordance_index)</span>
+<span class="w">  </span><span class="nt">batch_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32</span><span class="w"> </span><span class="c1"># Batch size</span>
+<span class="w">  </span><span class="nt">bag_size </span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">512</span><span class="w"> </span><span class="c1"># Bag size for MIL</span>
+<span class="w">  </span><span class="nt">encoder_layers</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span><span class="w"> </span><span class="c1"># Number of encoder layers to use in the MIL aggregator</span>
+<span class="w">  </span><span class="nt">z_dim</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">256</span><span class="w"> </span><span class="c1"># Latent space dimensionality in the MIL aggregator</span>
+<span class="w">  </span><span class="nt">dropout_p</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span><span class="w"> </span><span class="c1"># Dropout probabilitiy in the MIL aggregator</span>
+<span class="w">  </span><span class="nt">k</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span><span class="w"> </span><span class="c1"># Number of folds, if split-technique is k-fold</span>
+<span class="w">  </span><span class="nt">val_fraction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span><span class="w"> </span><span class="c1"># Fraction of training data to use for validation</span>
+<span class="w">  </span><span class="nt">aggregation_level</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">slide</span><span class="w"> </span><span class="c1"># Aggregation level, can be slide or patient</span>
+<span class="w">  </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">classification</span><span class="w"> </span><span class="c1"># Task, can be classification, regression or survival</span>
+
+<span class="w">  </span><span class="nt">visualization</span><span class="p">:</span><span class="w"> </span><span class="c1"># Visualization options, options: CLASSIFICATION: confusion_matrix, precision_recall_curve, roc_curve, top_tiles SURVIVAL: survival_roc, concordance_index, calibration REGRESSION: predicted_vs_actual, residuals, qq</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">learning_curve</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">confusion_matrix</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">roc_curve</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">umap</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mosaic</span>
-<span class="w">  </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">optimization</span>
+
+<span class="w">  </span><span class="nt">evaluation</span><span class="p">:</span><span class="w"> </span><span class="c1"># Evaluation metrics to use. options: CLASSIFICATION: balanced_accuracy, mean_f1, mean_uncertainty, auc, mean_average_precision, mean_average_recall. REGRESSION: mean_absolute_error, mean_squared_error, r2_score. SURVIVAL: c_index, brier_score.</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">balanced_accuracy</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auc</span>
+<span class="w">  </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">optimization</span><span class="w"> </span><span class="c1"># Mode to use, either benchmark or optimization</span>
 
 <span class="nt">optimization</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">objective_metric</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">balanced_accuracy</span>
-<span class="w">  </span><span class="nt">sampler</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TPESampler</span>
-<span class="w">  </span><span class="nt">trials</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
-<span class="w">  </span><span class="nt">pruner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">HyperbandPruner</span>
+<span class="w">  </span><span class="nt">objective_metric</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">balanced_accuracy</span><span class="w"> </span><span class="c1"># Objective metric to optimize, should also be specified in &#39;evaluation&#39;</span>
+<span class="w">  </span><span class="nt">objective_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">max</span><span class="w"> </span><span class="c1"># Optimization mode, can be &#39;max&#39; or &#39;min&#39;</span>
+<span class="w">  </span><span class="nt">objective_dataset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">test</span><span class="w"> </span><span class="c1"># Dataset to be used for the objective metric, can be &#39;val&#39; or &#39;test&#39;</span>
+<span class="w">  </span><span class="nt">sampler</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TPESampler</span><span class="w"> </span><span class="c1"># Algorithm to use for optimization e.g. grid_search, TPE, Bayesian</span>
+<span class="w">  </span><span class="nt">trials</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span><span class="w"> </span><span class="c1"># Number of optimization trials</span>
+<span class="w">  </span><span class="nt">pruner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">HyperbandPruner</span><span class="w"> </span><span class="c1"># Pruner for optimization, can be Hyperband, Median etc. Remove this line if you do not want to use a pruner.</span>
 
 <span class="nt">datasets</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dataset_1</span>
@@ -125,6 +133,37 @@
 <span class="w">    </span><span class="nt">tfrecord_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/your/dataset_2/tfrecords</span>
 <span class="w">    </span><span class="nt">tile_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/your/dataset_2/tiles</span>
 <span class="w">    </span><span class="nt">used_for</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">testing</span>
+
+<span class="nt">benchmark_parameters</span><span class="p">:</span><span class="w"> </span><span class="c1"># The Benchmark parameters will be used as search space for the optimization</span>
+<span class="w">  </span><span class="nt">tile_px</span><span class="p">:</span><span class="w"> </span><span class="c1"># Tile size in pixels</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">256</span>
+
+<span class="w">  </span><span class="nt">tile_um</span><span class="p">:</span><span class="w"> </span><span class="c1"># Tile size (magnification str (e.g 20x, 40x) or microns integer (150, 250))</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20x</span>
+
+<span class="w">  </span><span class="nt">normalization</span><span class="p">:</span><span class="w"> </span><span class="c1"># Normalization method, can be macenko, reinhard, ruifrok or cyclegan</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">macenko</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">reinhard</span>
+
+<span class="w">  </span><span class="nt">feature_extraction</span><span class="p">:</span><span class="w"> </span><span class="c1"># Feature extraction methods</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">resnet50_imagenet</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hibou_b</span>
+
+<span class="w">  </span><span class="nt">mil</span><span class="p">:</span><span class="w"> </span><span class="c1"># Multiple instance learning aggregation methods</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Attention_MIL</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dsmil</span>
+
+<span class="w">  </span><span class="nt">loss</span><span class="p">:</span><span class="w"> </span><span class="c1"># Loss functions, as specified in losses.py</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CrossEntropyLoss</span>
+
+<span class="w">  </span><span class="nt">augmentation</span><span class="p">:</span><span class="w"> </span><span class="c1"># MIL-friendly augmentations, as specified in augmentations.py</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">patch_mixing</span>
+
+<span class="w">  </span><span class="nt">activation_function</span><span class="p">:</span><span class="w"> </span><span class="c1"># activation function for the MIL encoder, supports any pytorch.nn activation function.</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ReLU</span>
+
+<span class="w">  </span><span class="nt">optimizer</span><span class="p">:</span><span class="w"> </span><span class="c1"># Optimization algorithm to use for model training (Can be any FastAI optimizer)</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Adam</span>
 </pre></div>
 </div>
 <p>When in the appropriate virtual environment:</p>

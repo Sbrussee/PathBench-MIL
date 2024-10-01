@@ -48,7 +48,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../benchmarking_mode.html">Benchmarking Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../optimization_mode.html">Optimization Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../visualization_application.html">Visualization Application</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../ensemble_model_creation.html">Ensemble Model Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../extending_pathbench.html">Extending PathBench</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../feature_extractors.html">Feature Extractors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../mil_aggregators.html">MIL Aggregators</a></li>
@@ -85,6 +84,11 @@
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">resource</span>
+<span class="kn">import</span> <span class="nn">gc</span>
+<span class="kn">import</span> <span class="nn">multiprocessing</span>
+<span class="kn">import</span> <span class="nn">weakref</span>
+<span class="kn">import</span> <span class="nn">psutil</span>
+<span class="kn">import</span> <span class="nn">torch</span>
 
 <div class="viewcode-block" id="calculate_entropy">
 <a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.utils.calculate_entropy">[docs]</a>
@@ -227,14 +231,18 @@
     <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Incorrect predictions saved to </span><span class="si">{</span><span class="n">incorrect_save_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
 
 
-<span class="c1"># Increase the file descriptor limit temporarily for the session</span>
-<div class="viewcode-block" id="increase_file_limit">
-<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.utils.increase_file_limit">[docs]</a>
-<span class="k">def</span> <span class="nf">increase_file_limit</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">4096</span><span class="p">):</span>
-    <span class="n">soft_limit</span><span class="p">,</span> <span class="n">hard_limit</span> <span class="o">=</span> <span class="n">resource</span><span class="o">.</span><span class="n">getrlimit</span><span class="p">(</span><span class="n">resource</span><span class="o">.</span><span class="n">RLIMIT_NOFILE</span><span class="p">)</span>
-    <span class="n">new_limit</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">limit</span><span class="p">,</span> <span class="n">hard_limit</span><span class="p">)</span>
-    <span class="n">resource</span><span class="o">.</span><span class="n">setrlimit</span><span class="p">(</span><span class="n">resource</span><span class="o">.</span><span class="n">RLIMIT_NOFILE</span><span class="p">,</span> <span class="p">(</span><span class="n">new_limit</span><span class="p">,</span> <span class="n">hard_limit</span><span class="p">))</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;File descriptor limit increased to: </span><span class="si">{</span><span class="n">new_limit</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="free_up_gpu_memory">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.utils.free_up_gpu_memory">[docs]</a>
+<span class="k">def</span> <span class="nf">free_up_gpu_memory</span><span class="p">():</span>
+    <span class="c1"># Free up cached memory in PyTorch</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">empty_cache</span><span class="p">()</span>
+    
+    <span class="c1"># Set the environment variable to reduce memory fragmentation</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;PYTORCH_CUDA_ALLOC_CONF&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;expandable_segments:True&#39;</span>
+    
+    <span class="c1"># Optional: Print confirmation that the memory has been freed and the setting applied</span>
+    <span class="n">logging</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;GPU memory has been cleared and expandable_segments has been enabled.&quot;</span><span class="p">)</span></div>
 
 </pre></div>
 

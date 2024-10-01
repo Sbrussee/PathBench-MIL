@@ -50,7 +50,6 @@
 <li class="toctree-l1"><a class="reference internal" href="benchmarking_mode.html">Benchmarking Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="optimization_mode.html">Optimization Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="visualization_application.html">Visualization Application</a></li>
-<li class="toctree-l1"><a class="reference internal" href="ensemble_model_creation.html">Ensemble Model Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="extending_pathbench.html">Extending PathBench</a></li>
 <li class="toctree-l1"><a class="reference internal" href="feature_extractors.html">Feature Extractors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="mil_aggregators.html">MIL Aggregators</a></li>
@@ -69,6 +68,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#pathbench.visualization.visualization.plot_residuals_across_folds"><code class="docutils literal notranslate"><span class="pre">plot_residuals_across_folds()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#pathbench.visualization.visualization.plot_roc_curve_across_splits"><code class="docutils literal notranslate"><span class="pre">plot_roc_curve_across_splits()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#pathbench.visualization.visualization.plot_survival_auc_across_folds"><code class="docutils literal notranslate"><span class="pre">plot_survival_auc_across_folds()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pathbench.visualization.visualization.plot_top5_attended_tiles_per_class"><code class="docutils literal notranslate"><span class="pre">plot_top5_attended_tiles_per_class()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#pathbench.visualization.visualization.visualize_activations"><code class="docutils literal notranslate"><span class="pre">visualize_activations()</span></code></a></li>
 </ul>
 </li>
@@ -273,8 +273,32 @@
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="pathbench.visualization.visualization.plot_top5_attended_tiles_per_class">
+<span class="sig-prename descclassname"><span class="pre">pathbench.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">plot_top5_attended_tiles_per_class</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">slide_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">attention_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tfr_directory</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">split</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_string</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/visualization/visualization.html#plot_top5_attended_tiles_per_class"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.visualization.visualization.plot_top5_attended_tiles_per_class" title="Link to this definition"></a></dt>
+<dd><p>Plot the top 5 most attended tiles and the top 5 least attended tiles for a given slide</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>slide_name</strong> – The slide name to get the top 5 attended tiles for</p></li>
+<li><p><strong>attention_file</strong> – The attention file containing the attention map</p></li>
+<li><p><strong>tfr_directory</strong> – The TFRecord directory</p></li>
+<li><p><strong>output_dir</strong> – The output directory</p></li>
+<li><p><strong>annotation_df</strong> – The annotation DataFrame</p></li>
+<li><p><strong>target</strong> – The target variable</p></li>
+<li><p><strong>dataset</strong> – The dataset string (val,test,train)</p></li>
+<li><p><strong>split</strong> – The current cv-split</p></li>
+<li><p><strong>save_string</strong> – The save string</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="pathbench.visualization.visualization.visualize_activations">
-<span class="sig-prename descclassname"><span class="pre">pathbench.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">visualize_activations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tfrecord_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bag_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_string</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Project</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/visualization/visualization.html#visualize_activations"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.visualization.visualization.visualize_activations" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">pathbench.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">visualize_activations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tfrecord_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bag_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_string</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/visualization/visualization.html#visualize_activations"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.visualization.visualization.visualize_activations" title="Link to this definition"></a></dt>
 <dd><p>Visualize the activations based on the configuration</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -285,7 +309,6 @@
 <li><p><strong>bag_dir</strong> – Directory with bags</p></li>
 <li><p><strong>target</strong> – The target variable</p></li>
 <li><p><strong>save_string</strong> – The save string</p></li>
-<li><p><strong>Project</strong> – The slideflow project object</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>

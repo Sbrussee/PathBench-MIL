@@ -48,7 +48,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../benchmarking_mode.html">Benchmarking Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../optimization_mode.html">Optimization Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../visualization_application.html">Visualization Application</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../ensemble_model_creation.html">Ensemble Model Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../extending_pathbench.html">Extending PathBench</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../feature_extractors.html">Feature Extractors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../mil_aggregators.html">MIL Aggregators</a></li>
@@ -80,7 +79,7 @@
            <div itemprop="articleBody">
              
   <h1>Source code for pathbench.utils.losses</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Tuple</span>
+<span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Optional</span>
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">Tensor</span>
 <span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
@@ -88,48 +87,46 @@
 
 <div class="viewcode-block" id="cox_ph_loss_sorted">
 <a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.cox_ph_loss_sorted">[docs]</a>
-<span class="k">def</span> <span class="nf">cox_ph_loss_sorted</span><span class="p">(</span><span class="n">log_h</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">events</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">eps</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-7</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Requires the input to be sorted by descending duration time.</span>
-<span class="sd">    We calculate the negative log of $(\frac{h_i}{\sum_{j \in R_i} h_j})^d$,</span>
-<span class="sd">    where h = exp(log_h) are the hazards and R is the risk set, and d is event.</span>
-<span class="sd">    </span>
-<span class="sd">    We just compute a cumulative sum, and not the true Risk sets. This is a</span>
-<span class="sd">    limitation, but simple and fast.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="k">def</span> <span class="nf">cox_ph_loss_sorted</span><span class="p">(</span><span class="n">log_h</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">events</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">event_weight</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">censored_weight</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">eps</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-7</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;CoxPH loss requires sorted inputs by descending duration time.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">events</span><span class="o">.</span><span class="n">dtype</span> <span class="ow">is</span> <span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">:</span>
         <span class="n">events</span> <span class="o">=</span> <span class="n">events</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
     <span class="n">events</span> <span class="o">=</span> <span class="n">events</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
     <span class="n">log_h</span> <span class="o">=</span> <span class="n">log_h</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
     <span class="n">gamma</span> <span class="o">=</span> <span class="n">log_h</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+    
+    <span class="c1"># Calculate cumulative hazard</span>
     <span class="n">log_cumsum_h</span> <span class="o">=</span> <span class="n">log_h</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="n">gamma</span><span class="p">)</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">eps</span><span class="p">)</span><span class="o">.</span><span class="n">log</span><span class="p">()</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">gamma</span><span class="p">)</span>
-    <span class="n">loss</span> <span class="o">=</span> <span class="o">-</span><span class="n">log_h</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="n">log_cumsum_h</span><span class="p">)</span><span class="o">.</span><span class="n">mul</span><span class="p">(</span><span class="n">events</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">div</span><span class="p">(</span><span class="n">events</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">eps</span><span class="p">))</span>
+    
+    <span class="c1"># Apply weights based on event or censoring</span>
+    <span class="n">weights</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">events</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="n">event_weight</span><span class="p">,</span> <span class="n">censored_weight</span><span class="p">)</span>
+    
+    <span class="c1"># Compute weighted loss (use weights for events and censored samples)</span>
+    <span class="n">loss</span> <span class="o">=</span> <span class="o">-</span><span class="n">log_h</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="n">log_cumsum_h</span><span class="p">)</span><span class="o">.</span><span class="n">mul</span><span class="p">(</span><span class="n">events</span><span class="p">)</span><span class="o">.</span><span class="n">mul</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">div</span><span class="p">(</span><span class="n">events</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">eps</span><span class="p">))</span>
+    
     <span class="k">return</span> <span class="n">loss</span></div>
 
 
 <div class="viewcode-block" id="cox_ph_loss">
 <a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.cox_ph_loss">[docs]</a>
-<span class="k">def</span> <span class="nf">cox_ph_loss</span><span class="p">(</span><span class="n">log_h</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">durations</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">events</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">eps</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-7</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Loss for CoxPH model. If data is sorted by descending duration, see `cox_ph_loss_sorted`.</span>
-<span class="sd">    We calculate the negative log of $(\frac{h_i}{\sum_{j \in R_i} h_j})^d$,</span>
-<span class="sd">    where h = exp(log_h) are the hazards and R is the risk set, and d is event.</span>
-<span class="sd">    </span>
-<span class="sd">    We just compute a cumulative sum, and not the true Risk sets. This is a</span>
-<span class="sd">    limitation, but simple and fast.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="k">def</span> <span class="nf">cox_ph_loss</span><span class="p">(</span><span class="n">log_h</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">durations</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">events</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">event_weight</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">censored_weight</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">eps</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-7</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;CoxPH loss that uses sorted inputs by descending duration.&quot;&quot;&quot;</span>
     <span class="n">idx</span> <span class="o">=</span> <span class="n">durations</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">descending</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span>
     <span class="n">events</span> <span class="o">=</span> <span class="n">events</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
     <span class="n">log_h</span> <span class="o">=</span> <span class="n">log_h</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
-    <span class="k">return</span> <span class="n">cox_ph_loss_sorted</span><span class="p">(</span><span class="n">log_h</span><span class="p">,</span> <span class="n">events</span><span class="p">,</span> <span class="n">eps</span><span class="p">)</span></div>
+    <span class="k">return</span> <span class="n">cox_ph_loss_sorted</span><span class="p">(</span><span class="n">log_h</span><span class="p">,</span> <span class="n">events</span><span class="p">,</span> <span class="n">event_weight</span><span class="o">=</span><span class="n">event_weight</span><span class="p">,</span> <span class="n">censored_weight</span><span class="o">=</span><span class="n">censored_weight</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="n">eps</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="CoxPHLoss">
 <a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.CoxPHLoss">[docs]</a>
 <span class="k">class</span> <span class="nc">CoxPHLoss</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Loss function for CoxPH model.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;CoxPH loss class with event and censored weights.&quot;&quot;&quot;</span>
 <div class="viewcode-block" id="CoxPHLoss.__init__">
 <a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.CoxPHLoss.__init__">[docs]</a>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span></div>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event_weight</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">censored_weight</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">event_weight</span> <span class="o">=</span> <span class="n">event_weight</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">censored_weight</span> <span class="o">=</span> <span class="n">censored_weight</span></div>
 
 
 <div class="viewcode-block" id="CoxPHLoss.forward">
@@ -138,20 +135,381 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Args:</span>
 <span class="sd">            preds (torch.Tensor): Predictions from the model.</span>
-<span class="sd">            targets (torch.Tensor): Target values.</span>
+<span class="sd">            targets (torch.Tensor): Target values containing durations and event indicators.</span>
 <span class="sd">        </span>
 <span class="sd">        Returns:</span>
-<span class="sd">            torch.Tensor: Loss value.</span>
+<span class="sd">            torch.Tensor: Weighted loss value.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">durations</span> <span class="o">=</span> <span class="n">targets</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span>
         <span class="n">events</span> <span class="o">=</span> <span class="n">targets</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span>
         
         <span class="c1"># Check for zero events and handle accordingly</span>
         <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">events</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">logging</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;No events in batch, returning near zero loss&quot;</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">1e-6</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">preds</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">preds</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
         
-        <span class="n">loss</span> <span class="o">=</span> <span class="n">cox_ph_loss</span><span class="p">(</span><span class="n">preds</span><span class="p">,</span> <span class="n">durations</span><span class="p">,</span> <span class="n">events</span><span class="p">)</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
+        <span class="c1"># Calculate log_h from preds</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="n">cox_ph_loss</span><span class="p">(</span><span class="n">preds</span><span class="p">,</span> <span class="n">durations</span><span class="p">,</span> <span class="n">events</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">event_weight</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">censored_weight</span><span class="p">)</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">loss</span></div>
+</div>
+
+
+<div class="viewcode-block" id="RankingLoss">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.RankingLoss">[docs]</a>
+<span class="k">class</span> <span class="nc">RankingLoss</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Pairwise ranking loss for survival analysis with weights for events and censored data.&quot;&quot;&quot;</span>
+<div class="viewcode-block" id="RankingLoss.__init__">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.RankingLoss.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">margin</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">event_weight</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">censored_weight</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">margin</span> <span class="o">=</span> <span class="n">margin</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">event_weight</span> <span class="o">=</span> <span class="n">event_weight</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">censored_weight</span> <span class="o">=</span> <span class="n">censored_weight</span></div>
+
+
+<div class="viewcode-block" id="RankingLoss.forward">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.RankingLoss.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">preds</span><span class="p">,</span> <span class="n">targets</span><span class="p">):</span>
+        <span class="n">durations</span> <span class="o">=</span> <span class="n">targets</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span>
+        <span class="n">events</span> <span class="o">=</span> <span class="n">targets</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span>
+        
+        <span class="n">loss</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="n">num_pairs</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="c1"># Compare all pairs of individuals</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">durations</span><span class="p">)):</span>
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">durations</span><span class="p">)):</span>
+                <span class="k">if</span> <span class="n">durations</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">durations</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="ow">and</span> <span class="n">events</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="c1"># Apply event_weight and censored_weight</span>
+                    <span class="n">weight</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">event_weight</span> <span class="k">if</span> <span class="n">events</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">censored_weight</span>
+                    <span class="c1"># Margin ranking loss</span>
+                    <span class="n">loss</span> <span class="o">+=</span> <span class="n">weight</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">margin</span> <span class="o">-</span> <span class="p">(</span><span class="n">preds</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">-</span> <span class="n">preds</span><span class="p">[</span><span class="n">j</span><span class="p">]))</span>
+                    <span class="n">num_pairs</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="k">if</span> <span class="n">num_pairs</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">loss</span> <span class="o">/=</span> <span class="n">num_pairs</span>
+
+        <span class="k">return</span> <span class="n">loss</span></div>
+</div>
+
+
+<div class="viewcode-block" id="DeepHitLoss">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.DeepHitLoss">[docs]</a>
+<span class="k">class</span> <span class="nc">DeepHitLoss</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;DeepHit loss combining likelihood and ranking loss with weights.&quot;&quot;&quot;</span>
+<div class="viewcode-block" id="DeepHitLoss.__init__">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.DeepHitLoss.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">event_weight</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">censored_weight</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="n">alpha</span>  <span class="c1"># Weight between likelihood and ranking loss</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">event_weight</span> <span class="o">=</span> <span class="n">event_weight</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">censored_weight</span> <span class="o">=</span> <span class="n">censored_weight</span></div>
+
+
+<div class="viewcode-block" id="DeepHitLoss.forward">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.DeepHitLoss.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">preds</span><span class="p">,</span> <span class="n">targets</span><span class="p">):</span>
+        <span class="n">durations</span> <span class="o">=</span> <span class="n">targets</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span>
+        <span class="n">events</span> <span class="o">=</span> <span class="n">targets</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="n">num_time_intervals</span> <span class="o">=</span> <span class="n">preds</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        
+        <span class="c1"># Scale durations to the number of time intervals</span>
+        <span class="n">duration_indices</span> <span class="o">=</span> <span class="p">(</span><span class="n">durations</span> <span class="o">/</span> <span class="n">durations</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">*</span> <span class="p">(</span><span class="n">num_time_intervals</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+
+        <span class="c1"># Likelihood loss (for the event times)</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">preds</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+        <span class="n">likelihood_loss</span> <span class="o">=</span> <span class="o">-</span><span class="n">torch</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">preds</span><span class="p">[</span><span class="n">idx</span><span class="p">,</span> <span class="n">duration_indices</span><span class="p">]</span> <span class="o">+</span> <span class="mf">1e-8</span><span class="p">)</span> <span class="o">*</span> <span class="n">events</span>
+
+        <span class="c1"># Apply event and censoring weights</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">events</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">event_weight</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">censored_weight</span><span class="p">)</span>
+        <span class="n">likelihood_loss</span> <span class="o">=</span> <span class="n">likelihood_loss</span><span class="o">.</span><span class="n">mul</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+
+        <span class="c1"># Ranking loss: pairwise comparisons between individuals</span>
+        <span class="n">rank_loss</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">preds</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)):</span>
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">preds</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)):</span>
+                <span class="k">if</span> <span class="n">durations</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">durations</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="ow">and</span> <span class="n">events</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">rank_loss</span> <span class="o">+=</span> <span class="n">torch</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="n">preds</span><span class="p">[</span><span class="n">j</span><span class="p">,</span> <span class="n">duration_indices</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span> <span class="o">-</span> <span class="n">preds</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">duration_indices</span><span class="p">[</span><span class="n">i</span><span class="p">]])</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">event_weight</span>
+                    <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="n">rank_loss</span> <span class="o">=</span> <span class="n">rank_loss</span> <span class="o">/</span> <span class="n">count</span> <span class="k">if</span> <span class="n">count</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mf">0.0</span>
+
+        <span class="c1"># Combine likelihood and ranking losses</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">*</span> <span class="n">likelihood_loss</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">)</span> <span class="o">*</span> <span class="n">rank_loss</span><span class="p">)</span></div>
+</div>
+
+        
+<div class="viewcode-block" id="CrossEntropyLoss">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.CrossEntropyLoss">[docs]</a>
+<span class="k">class</span> <span class="nc">CrossEntropyLoss</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<div class="viewcode-block" id="CrossEntropyLoss.__init__">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.CrossEntropyLoss.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weight</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Cross-entropy loss. This is the standard loss function for multi-class classification problems.</span>
+<span class="sd">        Args:</span>
+<span class="sd">            weight (Tensor, optional): A manual rescaling weight given to each class. If given, has to be a Tensor of size `C`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">require_attention</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">criterion</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">CrossEntropyLoss</span><span class="p">(</span><span class="n">weight</span><span class="o">=</span><span class="n">weight</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="CrossEntropyLoss.forward">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.CrossEntropyLoss.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">preds</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">targets</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">criterion</span><span class="p">(</span><span class="n">preds</span><span class="o">.</span><span class="n">float</span><span class="p">(),</span> <span class="n">targets</span><span class="o">.</span><span class="n">float</span><span class="p">())</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="FocalLoss">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.FocalLoss">[docs]</a>
+<span class="k">class</span> <span class="nc">FocalLoss</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<div class="viewcode-block" id="FocalLoss.__init__">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.FocalLoss.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2.0</span><span class="p">,</span> <span class="n">reduction</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;mean&#39;</span><span class="p">,</span> <span class="n">weight</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Focal loss for imbalanced classification problems. Focal loss is designed to address class imbalance by</span>
+<span class="sd">        down-weighting the loss assigned to well-classified examples. </span>
+<span class="sd">        Args:</span>
+<span class="sd">            alpha (float): Scaling factor for positive examples.</span>
+<span class="sd">            gamma (float): Focusing parameter.</span>
+<span class="sd">            reduction (str): Specifies the reduction to apply to the output: &#39;none&#39; | &#39;mean&#39; | &#39;sum&#39;.</span>
+<span class="sd">            weight (Tensor, optional): A manual rescaling weight given to each class. If given, has to be a Tensor of size `C`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">require_attention</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="n">alpha</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gamma</span> <span class="o">=</span> <span class="n">gamma</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reduction</span> <span class="o">=</span> <span class="n">reduction</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight</span> <span class="o">=</span> <span class="n">weight</span></div>
+
+
+<div class="viewcode-block" id="FocalLoss.forward">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.FocalLoss.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">preds</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">targets</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">targets</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">targets</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">targets</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        
+        <span class="n">ce_loss</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">CrossEntropyLoss</span><span class="p">(</span><span class="n">weight</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="p">,</span> <span class="n">reduction</span><span class="o">=</span><span class="s1">&#39;none&#39;</span><span class="p">)(</span><span class="n">preds</span><span class="p">,</span> <span class="n">targets</span><span class="p">)</span>
+        <span class="n">pt</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">ce_loss</span><span class="p">)</span>
+        <span class="n">focal_loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">pt</span><span class="p">)</span> <span class="o">**</span> <span class="bp">self</span><span class="o">.</span><span class="n">gamma</span> <span class="o">*</span> <span class="n">ce_loss</span>
+        
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reduction</span> <span class="o">==</span> <span class="s1">&#39;mean&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">focal_loss</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">reduction</span> <span class="o">==</span> <span class="s1">&#39;sum&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">focal_loss</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">focal_loss</span></div>
+</div>
+
+
+<div class="viewcode-block" id="LabelSmoothingCrossEntropyLoss">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.LabelSmoothingCrossEntropyLoss">[docs]</a>
+<span class="k">class</span> <span class="nc">LabelSmoothingCrossEntropyLoss</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<div class="viewcode-block" id="LabelSmoothingCrossEntropyLoss.__init__">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.LabelSmoothingCrossEntropyLoss.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">smoothing</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span> <span class="n">weight</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Cross-entropy loss with label smoothing. Label smoothing is a regularization technique that</span>
+<span class="sd">        encourages the model to be less confident about its predictions.</span>
+<span class="sd">        Args:</span>
+<span class="sd">            smoothing (float): Amount of label smoothing to apply.</span>
+<span class="sd">            weight (Tensor, optional): A manual rescaling weight given to each class. If given, has to be a Tensor of size `C`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">require_attention</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">smoothing</span> <span class="o">=</span> <span class="n">smoothing</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">confidence</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">smoothing</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight</span> <span class="o">=</span> <span class="n">weight</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">criterion</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">KLDivLoss</span><span class="p">(</span><span class="n">reduction</span><span class="o">=</span><span class="s1">&#39;batchmean&#39;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="LabelSmoothingCrossEntropyLoss.forward">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.LabelSmoothingCrossEntropyLoss.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">preds</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">targets</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="n">preds</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">==</span> <span class="n">targets</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="n">log_preds</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">log_softmax</span><span class="p">(</span><span class="n">preds</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">n_classes</span> <span class="o">=</span> <span class="n">preds</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="c1"># If targets are one-hot encoded, convert them to class indices</span>
+            <span class="k">if</span> <span class="n">targets</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">targets</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">targets</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+            <span class="c1"># Ensure targets are of type int64 for the scatter_ operation</span>
+            <span class="n">targets</span> <span class="o">=</span> <span class="n">targets</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+
+            <span class="c1"># Create a tensor for the true distribution</span>
+            <span class="n">true_dist</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">log_preds</span><span class="p">)</span>
+            <span class="n">true_dist</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">smoothing</span> <span class="o">/</span> <span class="p">(</span><span class="n">n_classes</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
+
+            <span class="c1"># Scatter the confidence into the true distribution</span>
+            <span class="n">true_dist</span><span class="o">.</span><span class="n">scatter_</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">targets</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">confidence</span><span class="p">)</span>
+
+        <span class="c1"># Apply class weights if provided</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">true_dist</span> <span class="o">*=</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="p">[</span><span class="n">targets</span><span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">criterion</span><span class="p">(</span><span class="n">log_preds</span><span class="p">,</span> <span class="n">true_dist</span><span class="p">)</span></div>
+</div>
+
+
+<div class="viewcode-block" id="CrossEntropyWithEntropyMinimizationLoss">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.CrossEntropyWithEntropyMinimizationLoss">[docs]</a>
+<span class="k">class</span> <span class="nc">CrossEntropyWithEntropyMinimizationLoss</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<div class="viewcode-block" id="CrossEntropyWithEntropyMinimizationLoss.__init__">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.CrossEntropyWithEntropyMinimizationLoss.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weight_entropy</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">weight</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Cross-entropy loss with entropy minimization regularization.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            weight_entropy (float): Weight of the entropy minimization loss.</span>
+<span class="sd">            weight (Tensor, optional): A manual rescaling weight given to each class. If given, has to be a Tensor of size `C`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">require_attention</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cross_entropy_loss</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">CrossEntropyLoss</span><span class="p">(</span><span class="n">weight</span><span class="o">=</span><span class="n">weight</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_entropy</span> <span class="o">=</span> <span class="n">weight_entropy</span></div>
+
+
+<div class="viewcode-block" id="CrossEntropyWithEntropyMinimizationLoss.forward">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.CrossEntropyWithEntropyMinimizationLoss.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">preds</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">targets</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+        <span class="c1"># Calculate cross-entropy loss</span>
+        <span class="n">cross_entropy_loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cross_entropy_loss</span><span class="p">(</span><span class="n">preds</span><span class="p">,</span> <span class="n">targets</span><span class="p">)</span>
+
+        <span class="c1"># Convert logits to probabilities using softmax</span>
+        <span class="k">if</span> <span class="n">preds</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">preds</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>  <span class="c1"># Multi-class case</span>
+            <span class="n">probs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="n">preds</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>  <span class="c1"># Binary case</span>
+            <span class="n">probs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sigmoid</span><span class="p">(</span><span class="n">preds</span><span class="p">)</span>
+
+        <span class="c1"># Calculate entropy minimization loss</span>
+        <span class="n">entropy</span> <span class="o">=</span> <span class="o">-</span><span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">probs</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">probs</span> <span class="o">+</span> <span class="mf">1e-9</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">entropy_minimization_loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_entropy</span> <span class="o">*</span> <span class="n">entropy</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+
+        <span class="c1"># Combine the two losses</span>
+        <span class="n">total_loss</span> <span class="o">=</span> <span class="n">cross_entropy_loss</span> <span class="o">+</span> <span class="n">entropy_minimization_loss</span>
+
+        <span class="k">return</span> <span class="n">total_loss</span></div>
+</div>
+
+
+<div class="viewcode-block" id="AttentionEntropyMinimizedCrossEntropyLoss">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.AttentionEntropyMinimizedCrossEntropyLoss">[docs]</a>
+<span class="k">class</span> <span class="nc">AttentionEntropyMinimizedCrossEntropyLoss</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<div class="viewcode-block" id="AttentionEntropyMinimizedCrossEntropyLoss.__init__">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.AttentionEntropyMinimizedCrossEntropyLoss.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entropy_lambda</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">weight</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Entropy minimization loss for attention mechanisms.</span>
+<span class="sd">        Args:</span>
+<span class="sd">            entropy_lambda (float): Regularization strength for the entropy minimization.</span>
+<span class="sd">            weight (Tensor, optional): A manual rescaling weight given to each class. If given, has to be a Tensor of size `C`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">require_attention</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">entropy_lambda</span> <span class="o">=</span> <span class="n">entropy_lambda</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cross_entropy</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">CrossEntropyLoss</span><span class="p">(</span><span class="n">weight</span><span class="o">=</span><span class="n">weight</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="AttentionEntropyMinimizedCrossEntropyLoss.forward">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.AttentionEntropyMinimizedCrossEntropyLoss.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">preds</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">targets</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">attention_weights</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+        <span class="c1"># Standard cross-entropy loss</span>
+        <span class="n">ce_loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">(</span><span class="n">preds</span><span class="p">,</span> <span class="n">targets</span><span class="p">)</span>
+
+        <span class="c1"># Check if attention weights are normalized</span>
+        <span class="k">if</span> <span class="n">attention_weights</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">attention_weights</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="n">attention_weights</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Entropy minimization term</span>
+        <span class="n">entropy</span> <span class="o">=</span> <span class="o">-</span><span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">attention_weights</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">attention_weights</span> <span class="o">+</span> <span class="mf">1e-9</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">entropy_min_reg</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">entropy</span><span class="p">)</span>
+        
+        <span class="c1"># Total loss</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="n">ce_loss</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">entropy_lambda</span> <span class="o">*</span> <span class="n">entropy_min_reg</span>
+        <span class="k">return</span> <span class="n">loss</span></div>
+</div>
+
+
+<div class="viewcode-block" id="DiversityRegularizedCrossEntropyLoss">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.DiversityRegularizedCrossEntropyLoss">[docs]</a>
+<span class="k">class</span> <span class="nc">DiversityRegularizedCrossEntropyLoss</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<div class="viewcode-block" id="DiversityRegularizedCrossEntropyLoss.__init__">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.DiversityRegularizedCrossEntropyLoss.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">diversity_lambda</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">weight</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Diversity regularization loss for attention mechanisms. This loss encourages the attention weights to be diverse.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            diversity_lambda (float): Regularization strength for the diversity regularization.</span>
+<span class="sd">            weight (Tensor, optional): A manual rescaling weight given to each class. If given, has to be a Tensor of size `C`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">require_attention</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">diversity_lambda</span> <span class="o">=</span> <span class="n">diversity_lambda</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cross_entropy</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">CrossEntropyLoss</span><span class="p">(</span><span class="n">weight</span><span class="o">=</span><span class="n">weight</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="DiversityRegularizedCrossEntropyLoss.forward">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.DiversityRegularizedCrossEntropyLoss.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">preds</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">targets</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">attention_weights</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+        <span class="c1"># Standard cross-entropy loss</span>
+        <span class="n">ce_loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">(</span><span class="n">preds</span><span class="p">,</span> <span class="n">targets</span><span class="p">)</span>
+
+        <span class="c1"># Check if attention weights are normalized</span>
+        <span class="k">if</span> <span class="n">attention_weights</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">attention_weights</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="n">attention_weights</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Diversity regularization term</span>
+        <span class="n">variance</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">var</span><span class="p">(</span><span class="n">attention_weights</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">unbiased</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">diversity_reg</span> <span class="o">=</span> <span class="o">-</span><span class="n">torch</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">variance</span><span class="p">)</span>
+        
+        <span class="c1"># Total loss</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="n">ce_loss</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">diversity_lambda</span> <span class="o">*</span> <span class="n">diversity_reg</span>
+        <span class="k">return</span> <span class="n">loss</span></div>
+</div>
+
+
+<div class="viewcode-block" id="SparseAttentionCrossEntropyLoss">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.SparseAttentionCrossEntropyLoss">[docs]</a>
+<span class="k">class</span> <span class="nc">SparseAttentionCrossEntropyLoss</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<div class="viewcode-block" id="SparseAttentionCrossEntropyLoss.__init__">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.SparseAttentionCrossEntropyLoss.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attention_lambda</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">weight</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Sparse attention regularization loss for attention mechanisms. This loss encourages the attention weights to be sparse.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            attention_lambda (float): Regularization strength for the attention sparsity.</span>
+<span class="sd">            weight (Tensor, optional): A manual rescaling weight given to each class. If given, has to be a Tensor of size `C`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">require_attention</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attention_lambda</span> <span class="o">=</span> <span class="n">attention_lambda</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cross_entropy</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">CrossEntropyLoss</span><span class="p">(</span><span class="n">weight</span><span class="o">=</span><span class="n">weight</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SparseAttentionCrossEntropyLoss.forward">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.losses.SparseAttentionCrossEntropyLoss.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">preds</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">targets</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">attention_weights</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+        <span class="c1"># Standard cross-entropy loss</span>
+        <span class="n">ce_loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">(</span><span class="n">preds</span><span class="p">,</span> <span class="n">targets</span><span class="p">)</span>
+
+        <span class="c1"># Check if attention weights are normalized</span>
+        <span class="k">if</span> <span class="n">attention_weights</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">attention_weights</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="n">attention_weights</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Sparse attention regularization term</span>
+        <span class="n">sparse_reg</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">attention_weights</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span>
+        
+        <span class="c1"># Total loss</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="n">ce_loss</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">attention_lambda</span> <span class="o">*</span> <span class="n">sparse_reg</span>
         <span class="k">return</span> <span class="n">loss</span></div>
 </div>
 

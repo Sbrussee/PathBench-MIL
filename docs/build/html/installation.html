@@ -55,7 +55,6 @@
 <li class="toctree-l1"><a class="reference internal" href="benchmarking_mode.html">Benchmarking Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="optimization_mode.html">Optimization Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="visualization_application.html">Visualization Application</a></li>
-<li class="toctree-l1"><a class="reference internal" href="ensemble_model_creation.html">Ensemble Model Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="extending_pathbench.html">Extending PathBench</a></li>
 <li class="toctree-l1"><a class="reference internal" href="feature_extractors.html">Feature Extractors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="mil_aggregators.html">MIL Aggregators</a></li>
@@ -100,8 +99,8 @@
 <ol class="arabic simple">
 <li><p><strong>Clone the Repository:</strong></p></li>
 </ol>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/sbrussee/PathBench.git
-<span class="nb">cd</span><span class="w"> </span>PathBench
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>--recursive_submodules<span class="w"> </span>https://github.com/sbrussee/PathBench-MIL.git
+<span class="nb">cd</span><span class="w"> </span>PathBench-MIL
 </pre></div>
 </div>
 <ol class="arabic" start="2">
@@ -135,10 +134,26 @@ This<span class="w"> </span>script<span class="w"> </span>will:
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pathbench_env<span class="se">\S</span>cripts<span class="se">\a</span>ctivate
 </pre></div>
 </div>
-<ol class="arabic" start="4">
+<ol class="arabic" start="5">
+<li><p><strong>Install `slideflow_fork` Package:</strong></p>
+<blockquote>
+<div><p>Navigate to the <cite>slideflow_fork</cite> directory and install it:</p>
+</div></blockquote>
+</li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>../slideflow_fork
+pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
+
+Or,<span class="w"> </span><span class="k">if</span><span class="w"> </span>you<span class="w"> </span><span class="k">do</span><span class="w"> </span>not<span class="w"> </span>need<span class="w"> </span>to<span class="w"> </span>modify<span class="w"> </span>the<span class="w"> </span>code:
+</pre></div>
+</div>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>.
+</pre></div>
+</div>
+<ol class="arabic" start="5">
 <li><p><strong>Install `pathbench` Package:</strong></p>
 <blockquote>
-<div><p>After activating the virtual environment, install the <cite>pathbench</cite> package.</p>
+<div><p>After installing slideflow, install the <cite>pathbench</cite> package.</p>
 </div></blockquote>
 </li>
 </ol>

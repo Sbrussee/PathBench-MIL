@@ -7,44 +7,65 @@ PathBench inherets the project functionality from SlideFlow. PathBench allows cr
 In the configuration, project-specific settings can be specified in the `experiment` section.
 The `experiment` section also saves several other important settings:
 
-Project related settings:
-- `project_name`: The name of the project.
-- `annotation_file`: The path to the annotation file.
+Project-related settings
+------------------------
 
-Training related settings:
-- `balancing`: The balancing technique to be used. This can be 'tile', 'slide', 'patient' or 'category'. Balancing is used to construct training batches with a balanced distribution of classes/patients/slides/tiles.
-- `split_technique`: The split technique to be used. This can be 'k-fold' or 'fixed'.
-- `k`: The number of folds for k-fold cross-validation.
-- `val_fraction`: The fraction of the training data to be used for validation.
-- `epochs`: The number of epochs for training.
-- `batch_size`: The batch size for training.
-- `bag_size`: The bag size for MIL models.
-- `aggregation_level`: The aggregation level can be 'slide' or 'patient'. This specifies at which levels bags are aggregated, effectively creating slide-level or patient-level predictions.
+- **project_name**: The name of the project.
+- **annotation_file**: The path to the annotation file.
 
-General settings:
-- `with_continue`: If True, the model will continue training, skipping already finished parameter combinations.
-- `task`: The task can be 'classification', 'regression' or 'survival'.
-- `mode`: The mode can be either 'benchmark' or 'optimization'.
+Training-related settings
+-------------------------
+
+- **balancing**: The balancing technique to be used. This can be ``tile``, ``slide``, ``patient``, or ``category``. Balancing is used to construct training batches with a balanced distribution of classes/patients/slides/tiles.
+- **split_technique**: The split technique to be used. This can be ``k-fold`` or ``fixed``.
+- **k**: The number of folds for k-fold cross-validation.
+- **val_fraction**: The fraction of the training data to be used for validation.
+- **best_epoch_based_on**: Measure to base the epoch selection for selecting the optimal model state on. Can be ``val_loss``, any of the task default metrics (``roc_auc_score``, ``c_index``, ``r2_score``), or any of the custom metrics defined.
+- **epochs**: The number of epochs for training.
+- **batch_size**: The batch size for training.
+- **bag_size**: The bag size for MIL models.
+- **aggregation_level**: The aggregation level can be ``slide`` or ``patient``. This specifies at which levels bags are aggregated, effectively creating slide-level or patient-level predictions.
+- **encoder_layers**: The number of layers used for the encoder in the MIL aggregator.
+- **z_dim**: The dimensionality of the latent space in the MIL encoder.
+- **dropout_p**: The dropout probability in the MIL model.
+
+General settings
+----------------
+
+- **task**: The task can be ``classification``, ``regression``, or ``survival``.
+- **mode**: The mode can be either ``benchmark`` or ``optimization``.
+- **num_workers**: Number of workers for parallelization, set to 0 to disable parallel processing.
+- **custom_metrics**: List of custom metrics to be used, which should be defined in ``metrics.py`` or as a fastai-metric: `fastai metrics <https://docs.fast.ai/metrics.html>`_.
 
 .. code-block:: yaml
 
   experiment:
-    project_name: MF_TEST # Name of the project
-    annotation_file: path/to/your/annotation_file # Path to the annotation file
-    balancing: category # Balancing can be 'tile', 'slide', 'patient' or 'category'
-    split_technique: k-fold # Split technique can be 'k-fold' or 'fixed'
-    k: 3 # Number of folds for k-fold cross-validation
-    val_fraction: 0.1 # Fraction of the training data to be used for validation
-    epochs: 5 # Number of epochs for training
-    batch_size: 32 # Batch size for training
-    bag_size: 512 # Bag size for MIL models
-    with_continue: True # If True, the model will continue training from the last checkpoint.
-    aggregation_level: slide # Aggregation level can be 'slide' or 'patient'
-    task: classification # Task can be 'classification', 'regression' or 'survival'
-    mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
-    #custom_loss:  # Can be any loss as specified in utils/losses.py, or None, in which case the default task loss will be used.
-    #custom_metrics: # Can be any list of metrics as specified in utils/metrics.py, or None, in which case the default task metrics will be used.
+    project_name: Example_Project # Name of the project, where the results will be saved
+    annotation_file: /path/to/your/annotation_file.csv # Path to the annotation file
+    balancing: category # Training set balancing strategy, can be None, category, slide, patient or tile.
+    num_workers: 0 # Number of workers for data loading, 0 for no parallelization.
+    split_technique: k-fold # Splitting technique, can be k-fold or fixed
+    epochs: 5 # Number of training epoch
+    best_epoch_based_on: val_loss # Metric to be used for selecting the best training epoch (e.g. val_loss, roc_auc_score, mae, concordance_index)
+    batch_size: 32 # Batch size
+    bag_size : 512 # Bag size for MIL
+    encoder_layers: 1 # Number of encoder layers to use in the MIL aggregator
+    z_dim: 256 # Latent space dimensionality in the MIL aggregator
+    dropout_p: 0.1 # Dropout probabilitiy in the MIL aggregator
+    k: 2 # Number of folds, if split-technique is k-fold
+    val_fraction: 0.1 # Fraction of training data to use for validation
+    aggregation_level: slide # Aggregation level, can be slide or patient
+    task: classification # Task, can be classification, regression or survival
 
+    visualization: # Visualization options, options: CLASSIFICATION: confusion_matrix, precision_recall_curve, roc_curve, top_tiles SURVIVAL: survival_roc, concordance_index, calibration REGRESSION: predicted_vs_actual, residuals, qq
+        - learning_curve
+        - confusion_matrix
+        - roc_curve
+
+    evaluation: # Evaluation metrics to use. options: CLASSIFICATION: balanced_accuracy, mean_f1, mean_uncertainty, auc, mean_average_precision, mean_average_recall. REGRESSION: mean_absolute_error, mean_squared_error, r2_score. SURVIVAL: c_index, brier_score.
+        - balanced_accuracy
+        - auc
+    mode: optimization # Mode to use, either benchmark or optimization
 
 Datasets
 --------

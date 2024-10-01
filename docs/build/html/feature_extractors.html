@@ -51,7 +51,6 @@
 <li class="toctree-l1"><a class="reference internal" href="benchmarking_mode.html">Benchmarking Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="optimization_mode.html">Optimization Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="visualization_application.html">Visualization Application</a></li>
-<li class="toctree-l1"><a class="reference internal" href="ensemble_model_creation.html">Ensemble Model Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="extending_pathbench.html">Extending PathBench</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Feature Extractors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="mil_aggregators.html">MIL Aggregators</a></li>
@@ -85,108 +84,6 @@
   <section id="feature-extractors">
 <h1>Feature Extractors<a class="headerlink" href="#feature-extractors" title="Link to this heading"></a></h1>
 <p>PathBench supports a wide range of different feature extractors, including SOTA foundation models for pathology. Most of these models are automatically downloaded by PathBench; however, some models require a Hugging Face account key to access the model (labeled ‘Gated’ in the feature extraction table) or require manually downloading the model weights (labeled ‘Manual’ in the extraction table). For each of the models, a link to the publication is given, and for the manual/gated models, the link for downloading the models or gaining model access are also provided.</p>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Feature Extractor</p></th>
-<th class="head"><p>Acquisition</p></th>
-<th class="head"><p>Link</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>ImageNet-ResNet50</p></td>
-<td><p>Automatic</p></td>
-<td><p>NA</p></td>
-</tr>
-<tr class="row-odd"><td><p>CTransPath</p></td>
-<td><p>Automatic</p></td>
-<td><p><a class="reference external" href="https://github.com/Xiyue-Wang/TransPath?tab=readme-ov-file">Link</a></p></td>
-</tr>
-<tr class="row-even"><td><p>MoCoV3-TransPath</p></td>
-<td><p>Automatic</p></td>
-<td><p><a class="reference external" href="https://github.com/Xiyue-Wang/TransPath?tab=readme-ov-file">Link</a></p></td>
-</tr>
-<tr class="row-odd"><td><p>HistoSSL</p></td>
-<td><p>Automatic</p></td>
-<td><p><a class="reference external" href="https://github.com/owkin/HistoSSLscaling">Link</a></p></td>
-</tr>
-<tr class="row-even"><td><p>RetCCL</p></td>
-<td><p>Automatic</p></td>
-<td><p><a class="reference external" href="https://github.com/Xiyue-Wang/RetCCL">Link</a></p></td>
-</tr>
-<tr class="row-odd"><td><p>PLIP</p></td>
-<td><p>Automatic</p></td>
-<td><p><a class="reference external" href="https://github.com/PathologyFoundation/plip?tab=readme-ov-file">Link</a></p></td>
-</tr>
-<tr class="row-even"><td><p>Lunit DINO</p></td>
-<td><p>Automatic</p></td>
-<td><p><a class="reference external" href="https://github.com/lunit-io/benchmark-ssl-pathology">Link</a></p></td>
-</tr>
-<tr class="row-odd"><td><p>Lunit SwAV</p></td>
-<td><p>Automatic</p></td>
-<td><p><a class="reference external" href="https://github.com/lunit-io/benchmark-ssl-pathology">Link</a></p></td>
-</tr>
-<tr class="row-even"><td><p>Lunit Barlow Twins</p></td>
-<td><p>Automatic</p></td>
-<td><p><a class="reference external" href="https://github.com/lunit-io/benchmark-ssl-pathology">Link</a></p></td>
-</tr>
-<tr class="row-odd"><td><p>Lunit MocoV2</p></td>
-<td><p>Automatic</p></td>
-<td><p><a class="reference external" href="https://github.com/lunit-io/benchmark-ssl-pathology">Link</a></p></td>
-</tr>
-<tr class="row-even"><td><p>Phikon</p></td>
-<td><p>Automatic</p></td>
-<td><p><a class="reference external" href="https://huggingface.co/owkin/phikon">Link</a></p></td>
-</tr>
-<tr class="row-odd"><td><p>PathoDuet-HE</p></td>
-<td><p>Manual</p></td>
-<td><p><a class="reference external" href="https://github.com/openmedlab/PathoDuet">Link</a> <a class="reference external" href="https://drive.google.com/drive/folders/1aQHGabQzopSy9oxstmM9cPeF7QziIUxM">Weights</a></p></td>
-</tr>
-<tr class="row-even"><td><p>PathoDuet-IHC</p></td>
-<td><p>Manual</p></td>
-<td><p><a class="reference external" href="https://github.com/openmedlab/PathoDuet">Link</a> <a class="reference external" href="https://drive.google.com/drive/folders/1aQHGabQzopSy9oxstmM9cPeF7QziIUxM">Weights</a></p></td>
-</tr>
-<tr class="row-odd"><td><p>Virchow</p></td>
-<td><p>Gated</p></td>
-<td><p><a class="reference external" href="https://huggingface.co/paige-ai/Virchow">Link</a></p></td>
-</tr>
-<tr class="row-even"><td><p>Hibou-B</p></td>
-<td><p>Automatic</p></td>
-<td><p><a class="reference external" href="https://huggingface.co/histai/hibou-b">Link</a></p></td>
-</tr>
-<tr class="row-odd"><td><p>UNI</p></td>
-<td><p>Gated</p></td>
-<td><p><a class="reference external" href="https://huggingface.co/MahmoodLab/UNI">Link</a></p></td>
-</tr>
-<tr class="row-even"><td><p>Prov-GigaPath</p></td>
-<td><p>Gated</p></td>
-<td><p><a class="reference external" href="https://huggingface.co/prov-gigapath/prov-gigapath">Link</a></p></td>
-</tr>
-<tr class="row-odd"><td><p>Kaiko-S8</p></td>
-<td><p>Automatic</p></td>
-<td><p><a class="reference external" href="https://github.com/kaiko-ai/towards_large_pathology_fms">Link</a></p></td>
-</tr>
-<tr class="row-even"><td><p>Kaiko-S16</p></td>
-<td><p>Automatic</p></td>
-<td><p><a class="reference external" href="https://github.com/kaiko-ai/towards_large_pathology_fms">Link</a></p></td>
-</tr>
-<tr class="row-odd"><td><p>Kaiko-B8</p></td>
-<td><p>Automatic</p></td>
-<td><p><a class="reference external" href="https://github.com/kaiko-ai/towards_large_pathology_fms">Link</a></p></td>
-</tr>
-<tr class="row-even"><td><p>Kaiko-B16</p></td>
-<td><p>Automatic</p></td>
-<td><p><a class="reference external" href="https://github.com/kaiko-ai/towards_large_pathology_fms">Link</a></p></td>
-</tr>
-<tr class="row-odd"><td><p>Kaiko-L14</p></td>
-<td><p>Automatic</p></td>
-<td><p><a class="reference external" href="https://github.com/kaiko-ai/towards_large_pathology_fms">Link</a></p></td>
-</tr>
-<tr class="row-even"><td><p>H-Optimus-0</p></td>
-<td><p>Automatic</p></td>
-<td><p><a class="reference external" href="https://huggingface.co/bioptimus/H-optimus-0">Link</a></p></td>
-</tr>
-</tbody>
-</table>
 </section>
 
 
