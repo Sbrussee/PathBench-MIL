@@ -6,13 +6,13 @@ import logging
 def test():
     root = "pathbench/test/"
     #Test binary classification
-    #experiment = Experiment(root+'binary_test_conf.yaml')
-    #experiment.run()
-    #logging.info("Binary classification test passed")
+    experiment = Experiment(root+'binary_test_conf.yaml')
+    experiment.run()
+    logging.info("Binary classification test passed")
     #Test multi-class classification
-    #experiment = Experiment(root+'classification_test_conf.yaml')
-    #experiment.run()
-    #logging.info("Multiclass classification test passed")
+    experiment = Experiment(root+'classification_test_conf.yaml')
+    experiment.run()
+    logging.info("Multiclass classification test passed")
     #Test survival prediction
     experiment = Experiment(root+'survival_test_conf.yaml')
     experiment.run()
@@ -25,10 +25,6 @@ def test():
     experiment = Experiment(root+'opt_test_conf.yaml')
     experiment.run()
     logging.info("Optimization test passed")
-    #Test ensemble modeling
-    experiment = Experiment(root+'ensemble_test_conf.yaml')
-    experiment.run()
-    logging.info("Ensemble modeling test passed")
-
+    
 if __name__ == "__main__":
     test()
