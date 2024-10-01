@@ -48,7 +48,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../benchmarking_mode.html">Benchmarking Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../optimization_mode.html">Optimization Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../visualization_application.html">Visualization Application</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../ensemble_model_creation.html">Ensemble Model Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../extending_pathbench.html">Extending PathBench</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../feature_extractors.html">Feature Extractors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../mil_aggregators.html">MIL Aggregators</a></li>
@@ -85,6 +84,8 @@
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
 <span class="kn">import</span> <span class="nn">slideflow</span> <span class="k">as</span> <span class="nn">sf</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">PIL</span> <span class="kn">import</span> <span class="n">Image</span><span class="p">,</span> <span class="n">ImageDraw</span><span class="p">,</span> <span class="n">ImageFont</span>
 <span class="kn">from</span> <span class="nn">sklearn.metrics</span> <span class="kn">import</span> <span class="n">auc</span>
 <span class="kn">from</span> <span class="nn">lifelines.utils</span> <span class="kn">import</span> <span class="n">concordance_index</span>
 <span class="kn">from</span> <span class="nn">sklearn.calibration</span> <span class="kn">import</span> <span class="n">calibration_curve</span>
@@ -98,8 +99,7 @@
 <div class="viewcode-block" id="visualize_activations">
 <a class="viewcode-back" href="../../../pathbench_visualization.html#pathbench.visualization.visualization.visualize_activations">[docs]</a>
 <span class="k">def</span> <span class="nf">visualize_activations</span><span class="p">(</span><span class="n">config</span> <span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">dataset</span> <span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-                          <span class="n">tfrecord_dir</span> <span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">bag_dir</span> <span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">target</span> <span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">save_string</span> <span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-                          <span class="n">project</span><span class="p">:</span> <span class="n">sf</span><span class="o">.</span><span class="n">Project</span><span class="p">):</span>
+                          <span class="n">tfrecord_dir</span> <span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">bag_dir</span> <span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">target</span> <span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">save_string</span> <span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Visualize the activations based on the configuration</span>
 
@@ -110,7 +110,6 @@
 <span class="sd">        bag_dir: Directory with bags</span>
 <span class="sd">        target: The target variable</span>
 <span class="sd">        save_string: The save string</span>
-<span class="sd">        Project: The slideflow project object</span>
 <span class="sd">    </span>
 <span class="sd">    Returns:</span>
 <span class="sd">        None</span>
@@ -118,24 +117,14 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1">#Retrieve features from bags</span>
     <span class="n">dts_ftrs</span> <span class="o">=</span> <span class="n">sf</span><span class="o">.</span><span class="n">DatasetFeatures</span><span class="o">.</span><span class="n">from_bags</span><span class="p">(</span><span class="n">bag_dir</span><span class="p">)</span>
+
+    <span class="c1">#Get slide-level embeddings</span>
+
     <span class="c1">#Create slidemap using these features</span>
     <span class="n">slide_map</span> <span class="o">=</span> <span class="n">sf</span><span class="o">.</span><span class="n">SlideMap</span><span class="o">.</span><span class="n">from_features</span><span class="p">(</span><span class="n">dts_ftrs</span><span class="p">)</span>
     <span class="k">if</span> <span class="s1">&#39;umap&#39;</span> <span class="ow">in</span> <span class="n">config</span><span class="p">[</span><span class="s1">&#39;experiment&#39;</span><span class="p">][</span><span class="s1">&#39;visualization&#39;</span><span class="p">]</span> <span class="ow">or</span> <span class="s1">&#39;mosaic&#39;</span> <span class="ow">in</span> <span class="n">config</span><span class="p">[</span><span class="s1">&#39;experiment&#39;</span><span class="p">][</span><span class="s1">&#39;visualization&#39;</span><span class="p">]:</span>
         <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Visualizing activations...&quot;</span><span class="p">)</span>
         <span class="n">labels</span><span class="p">,</span> <span class="n">unique_labels</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">labels</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s1">&#39;name&#39;</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">label</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">unique_labels</span><span class="p">):</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="c1">#TOFIX: DOES NOT WORK NOW</span>
-                <span class="n">slide_map</span><span class="o">.</span><span class="n">label_by_preds</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">)</span>
-                <span class="n">slide_map</span><span class="o">.</span><span class="n">save_plot</span><span class="p">(</span>
-                    <span class="n">filename</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;experiments/</span><span class="si">{</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;experiment&#39;</span><span class="p">][</span><span class="s1">&#39;project_name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">/visualizations/patch_level_umap_pred_</span><span class="si">{</span><span class="n">save_string</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">dataset</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-                    <span class="n">title</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Feature UMAP, by prediction of class </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-
-                <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span> 
-            <span class="k">except</span><span class="p">:</span>
-                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not visualize UMAP for class </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-                <span class="k">pass</span>
             
         <span class="n">slide_map</span><span class="o">.</span><span class="n">label_by_slide</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span>
         <span class="c1">#Make a new directory inside visualizations</span>
@@ -143,7 +132,7 @@
             <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;experiments/</span><span class="si">{</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;experiment&#39;</span><span class="p">][</span><span class="s1">&#39;project_name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">/visualizations/patch_level_umap_label_</span><span class="si">{</span><span class="n">save_string</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">dataset</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="n">slide_map</span><span class="o">.</span><span class="n">save_plot</span><span class="p">(</span>
             <span class="n">filename</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;experiments/</span><span class="si">{</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;experiment&#39;</span><span class="p">][</span><span class="s1">&#39;project_name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">/visualizations/patch_level_umap_label_</span><span class="si">{</span><span class="n">save_string</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">dataset</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-            <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Feature UMAP, by label&quot;</span><span class="p">,</span>
+            <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Patch UMAP, by slide label&quot;</span><span class="p">,</span>
             <span class="n">subsample</span><span class="o">=</span><span class="mi">2000</span>
         <span class="p">)</span>
 
@@ -158,7 +147,8 @@
         <span class="n">slide_map</span><span class="o">.</span><span class="n">label_by_slide</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span>
         <span class="n">slide_map</span><span class="o">.</span><span class="n">save_plot</span><span class="p">(</span>
             <span class="n">filename</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;experiments/</span><span class="si">{</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;experiment&#39;</span><span class="p">][</span><span class="s1">&#39;project_name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">/visualizations/slide_level_umap_label_</span><span class="si">{</span><span class="n">save_string</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">dataset</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-            <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Slide-level UMAP, by label&quot;</span>
+            <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Slide-level UMAP, by label&quot;</span><span class="p">,</span>
+            <span class="n">subsample</span><span class="o">=</span><span class="mi">2000</span>
         <span class="p">)</span>
         <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
     <span class="k">if</span> <span class="s1">&#39;mosaic&#39;</span> <span class="ow">in</span> <span class="n">config</span><span class="p">[</span><span class="s1">&#39;experiment&#39;</span><span class="p">][</span><span class="s1">&#39;visualization&#39;</span><span class="p">]:</span>
@@ -167,7 +157,7 @@
         <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Building mosaic...&quot;</span><span class="p">)</span>
         <span class="c1"># Get list of all directories in the tfrecords dir with full path</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">mosaic</span> <span class="o">=</span> <span class="n">project</span><span class="o">.</span><span class="n">generate_mosaic</span><span class="p">(</span><span class="n">dts_ftrs</span><span class="p">)</span>
+            <span class="n">mosaic</span> <span class="o">=</span>  <span class="n">slide_map</span><span class="o">.</span><span class="n">build_mosaic</span><span class="p">()</span>
             <span class="n">mosaic</span><span class="o">.</span><span class="n">save</span><span class="p">(</span>
                 <span class="n">filename</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;experiments/</span><span class="si">{</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;experiment&#39;</span><span class="p">][</span><span class="s1">&#39;project_name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">/visualizations/slide_level_mosaic_</span><span class="si">{</span><span class="n">save_string</span><span class="si">}</span><span class="s2">.png&quot;</span>
             <span class="p">)</span>
@@ -332,27 +322,7 @@
         <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
 
 
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">def ensure_monotonic(recall : list, precision : list):</span>
-<span class="sd">    </span>
-<span class="sd">    Ensure that the recall is monotonically increasing and the precision is non-increasing</span>
 
-<span class="sd">    Args:</span>
-<span class="sd">        recall: The recall</span>
-<span class="sd">        precision: The precision</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        The recall and precision, ensuring the conditions are met</span>
-<span class="sd">    </span>
-<span class="sd">    # Ensure that recall is monotonically increasing and precision is non-increasing</span>
-<span class="sd">    for i in range(1, len(recall)):</span>
-<span class="sd">        if recall[i] &lt; recall[i - 1]:</span>
-<span class="sd">            recall[i] = recall[i - 1]</span>
-<span class="sd">    for i in range(1, len(precision)):</span>
-<span class="sd">        if precision[i] &gt; precision[i - 1]:</span>
-<span class="sd">            precision[i] = precision[i - 1]</span>
-<span class="sd">    return recall, precision</span>
-<span class="sd">&quot;&quot;&quot;</span>
 <div class="viewcode-block" id="plot_precision_recall_across_splits">
 <a class="viewcode-back" href="../../../pathbench_visualization.html#pathbench.visualization.visualization.plot_precision_recall_across_splits">[docs]</a>
 <span class="k">def</span> <span class="nf">plot_precision_recall_across_splits</span><span class="p">(</span><span class="n">pr_per_split</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">save_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dataset</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
@@ -686,43 +656,121 @@
     <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
 
 
-<span class="c1">#TODO: Implement function that outputs the top 5 most- and least attented tiles</span>
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">def get_top5_annotation_tiles_per_class(attention_map, bag_index, tile_directory, slide_name, diagnosis):</span>
-<span class="sd">    #Get the top 5 attention values</span>
-<span class="sd">    top5_attention_values = np.argsort(attention_map)[::-1][:5]</span>
-<span class="sd">    print(f&quot;Top 5 attention indices: {top5_attention_values}&quot;)</span>
-<span class="sd">    top5_least_attended = np.argsort(attention_map)[:5]</span>
 
-<span class="sd">    #Get the corresponding tile coordinates from bag_index</span>
-<span class="sd">    top5_tile_coordinates = bag_index[top5_attention_values]</span>
-<span class="sd">    print(f&quot;Top 5 tile coordinates: {top5_tile_coordinates}&quot;)</span>
-<span class="sd">    top5_least_attended_coordinates = bag_index[top5_least_attended]</span>
+<div class="viewcode-block" id="plot_top5_attended_tiles_per_class">
+<a class="viewcode-back" href="../../../pathbench_visualization.html#pathbench.visualization.visualization.plot_top5_attended_tiles_per_class">[docs]</a>
+<span class="k">def</span> <span class="nf">plot_top5_attended_tiles_per_class</span><span class="p">(</span><span class="n">slide_name</span> <span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">attention_file</span> <span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">tfr_directory</span> <span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">output_dir</span> <span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+                                       <span class="n">annotation_df</span> <span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">target</span> <span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dataset</span> <span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">split</span> <span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">save_string</span> <span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Plot the top 5 most attended tiles and the top 5 least attended tiles for a given slide</span>
 
-<span class="sd">    #Get the corresponding tile paths</span>
-<span class="sd">    top5_tiles = [f&quot;{tile_directory}/{slide_name}-{coord[0]}-{coord[1]}.png&quot; for coord in top5_tile_coordinates]</span>
-<span class="sd">    top5_least_attended_tiles = [f&quot;{tile_directory}/{slide_name}-{coord[0]}-{coord[1]}.png&quot; for coord in top5_least_attended_coordinates]</span>
-<span class="sd">    print(f&quot;Top 5 tile paths: {top5_tiles}&quot;)</span>
+<span class="sd">    Args:</span>
+<span class="sd">        slide_name: The slide name to get the top 5 attended tiles for</span>
+<span class="sd">        attention_file: The attention file containing the attention map</span>
+<span class="sd">        tfr_directory: The TFRecord directory</span>
+<span class="sd">        output_dir: The output directory</span>
+<span class="sd">        annotation_df: The annotation DataFrame</span>
+<span class="sd">        target: The target variable</span>
+<span class="sd">        dataset: The dataset string (val,test,train)</span>
+<span class="sd">        split: The current cv-split</span>
+<span class="sd">        save_string: The save string</span>
+<span class="sd">    </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        None</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Find the corresponding .npz and .tfrecord files</span>
+    <span class="n">index_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">tfr_directory</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">slide_name</span><span class="si">}</span><span class="s2">.index.npz&quot;</span><span class="p">)</span>
+    <span class="n">tfr_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">tfr_directory</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">slide_name</span><span class="si">}</span><span class="s2">.tfrecords&quot;</span><span class="p">)</span>
 
-<span class="sd">    #Construct top 5 tiles directory</span>
-<span class="sd">    os.makedirs(f&quot;top5_tiles&quot;, exist_ok=True)</span>
+    <span class="c1"># Validate the existence of the files</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">index_path</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Index file not found: </span><span class="si">{</span><span class="n">index_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">tfr_path</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;TFRecord file not found: </span><span class="si">{</span><span class="n">tfr_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-<span class="sd">    #Plot the top 5 tiles using matplotlib</span>
-<span class="sd">    import matplotlib.pyplot as plt</span>
-<span class="sd">    import cv2</span>
-<span class="sd">    fig, axs = plt.subplots(1, 5, figsize=(20, 5))</span>
-<span class="sd">    for i, tile in enumerate(top5_tiles):</span>
-<span class="sd">        img = Image.open(tile)</span>
-<span class="sd">        if img.mode != &#39;RGB&#39;:</span>
-<span class="sd">            img = img.convert(&#39;RGB&#39;)</span>
-<span class="sd">        axs[i].imshow(img)</span>
-<span class="sd">        axs[i].axis(&#39;off&#39;)</span>
-<span class="sd">    #Set global title above the subplots</span>
-<span class="sd">    plt.suptitle(f&quot;Top 5 most attended tiles ({diagnosis} {slide_name})&quot;, fontsize=21)</span>
-<span class="sd">    plt.tight_layout()</span>
-<span class="sd">    plt.savefig(f&quot;top5_tiles/{diagnosis}_{slide_name}_top5_tiles.png&quot;)</span>
-<span class="sd">    plt.close()</span>
-<span class="sd">&quot;&quot;&quot;</span>
+    <span class="c1"># Retrieve the label for the slide from the annotation DataFrame</span>
+    <span class="n">label_row</span> <span class="o">=</span> <span class="n">annotation_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">annotation_df</span><span class="p">[</span><span class="s1">&#39;slide&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">slide_name</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">label_row</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No label found for slide: </span><span class="si">{</span><span class="n">slide_name</span><span class="si">}</span><span class="s2"> in the annotation DataFrame&quot;</span><span class="p">)</span>
+    
+    <span class="n">label</span> <span class="o">=</span> <span class="n">label_row</span><span class="p">[</span><span class="n">target</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="c1"># Load the attention map</span>
+    <span class="n">attention</span> <span class="o">=</span> <span class="n">attention_file</span><span class="p">[</span><span class="s1">&#39;arr_0&#39;</span><span class="p">]</span>
+
+    <span class="c1"># Load the TFRecord and its index</span>
+    <span class="n">tfr</span> <span class="o">=</span> <span class="n">sf</span><span class="o">.</span><span class="n">TFRecord</span><span class="p">(</span><span class="n">tfr_path</span><span class="p">)</span>
+    
+    <span class="c1"># Load the index file, which contains the tile coordinates</span>
+    <span class="n">bag_index</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">index_path</span><span class="p">)</span>
+    <span class="n">tile_coordinates</span> <span class="o">=</span> <span class="n">bag_index</span><span class="p">[</span><span class="s1">&#39;locations&#39;</span><span class="p">]</span>  <span class="c1"># This contains the (x, y) coordinates of the tiles</span>
+
+    <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Bag index shape: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">tile_coordinates</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+
+    <span class="c1"># Get the top 5 attention values and their indices</span>
+    <span class="n">top5_attention_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">attention</span><span class="p">)[::</span><span class="o">-</span><span class="mi">1</span><span class="p">][:</span><span class="mi">5</span><span class="p">]</span>
+    <span class="n">top5_least_attended_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">attention</span><span class="p">)[:</span><span class="mi">5</span><span class="p">]</span>
+
+    <span class="c1"># Get the corresponding tile coordinates from the index file</span>
+    <span class="n">top5_tile_coordinates</span> <span class="o">=</span> <span class="n">tile_coordinates</span><span class="p">[</span><span class="n">top5_attention_indices</span><span class="p">]</span>
+    <span class="n">top5_least_attended_coordinates</span> <span class="o">=</span> <span class="n">tile_coordinates</span><span class="p">[</span><span class="n">top5_least_attended_indices</span><span class="p">]</span>
+
+    <span class="c1"># Ensure the output directory exists</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">output_dir</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Plot the top 5 most attended tiles with attention scores</span>
+    <span class="n">fig</span><span class="p">,</span> <span class="n">axs</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">coord</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">top5_tile_coordinates</span><span class="p">):</span>
+        <span class="n">slide</span><span class="p">,</span> <span class="n">img</span> <span class="o">=</span> <span class="n">tfr</span><span class="o">.</span><span class="n">get_record_by_xy</span><span class="p">(</span><span class="n">coord</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">coord</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">decode</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="c1"># Convert from Tensor to NumPy array if necessary</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">img</span> <span class="o">=</span> <span class="n">img</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>  <span class="c1"># No permutation needed, assuming the shape is already [256, 256, 3]</span>
+
+        <span class="c1"># Convert to image (RGB assumed)</span>
+        <span class="n">img</span> <span class="o">=</span> <span class="n">Image</span><span class="o">.</span><span class="n">fromarray</span><span class="p">(</span><span class="n">img</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">))</span>  <span class="c1"># Convert directly to image</span>
+
+        <span class="c1"># Add attention score text to image</span>
+        <span class="n">draw</span> <span class="o">=</span> <span class="n">ImageDraw</span><span class="o">.</span><span class="n">Draw</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+        <span class="n">font</span> <span class="o">=</span> <span class="n">ImageFont</span><span class="o">.</span><span class="n">load_default</span><span class="p">()</span>
+        <span class="n">draw</span><span class="o">.</span><span class="n">text</span><span class="p">((</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Score: </span><span class="si">{</span><span class="n">attention</span><span class="p">[</span><span class="n">top5_attention_indices</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">fill</span><span class="o">=</span><span class="s2">&quot;red&quot;</span><span class="p">,</span> <span class="n">font</span><span class="o">=</span><span class="n">font</span><span class="p">)</span>
+
+        <span class="c1"># Plot the image</span>
+        <span class="n">axs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+        <span class="n">axs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">&#39;off&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Top 5 most attended tiles (</span><span class="si">{</span><span class="n">dataset</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">slide_name</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">21</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">output_dir</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">dataset</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">split</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">slide_name</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">save_string</span><span class="si">}</span><span class="s2">_top5_tiles.png&quot;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+    <span class="c1"># Plot the top 5 least attended tiles with attention scores</span>
+    <span class="n">fig</span><span class="p">,</span> <span class="n">axs</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">coord</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">top5_least_attended_coordinates</span><span class="p">):</span>
+        <span class="n">slide</span><span class="p">,</span> <span class="n">img</span> <span class="o">=</span> <span class="n">tfr</span><span class="o">.</span><span class="n">get_record_by_xy</span><span class="p">(</span><span class="n">coord</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">coord</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">decode</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="c1"># Log image shape</span>
+        <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Image shape: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">img</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+
+        <span class="c1"># Convert from Tensor to NumPy array if necessary</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">img</span> <span class="o">=</span> <span class="n">img</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>  <span class="c1"># No permutation needed, assuming the shape is already [256, 256, 3]</span>
+
+        <span class="c1"># Convert to image (RGB assumed)</span>
+        <span class="n">img</span> <span class="o">=</span> <span class="n">Image</span><span class="o">.</span><span class="n">fromarray</span><span class="p">(</span><span class="n">img</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">))</span>  <span class="c1"># Convert directly to image</span>
+
+        <span class="c1"># Add attention score text to image</span>
+        <span class="n">draw</span> <span class="o">=</span> <span class="n">ImageDraw</span><span class="o">.</span><span class="n">Draw</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+        <span class="n">font</span> <span class="o">=</span> <span class="n">ImageFont</span><span class="o">.</span><span class="n">load_default</span><span class="p">()</span>
+        <span class="n">draw</span><span class="o">.</span><span class="n">text</span><span class="p">((</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Score: </span><span class="si">{</span><span class="n">attention</span><span class="p">[</span><span class="n">top5_least_attended_indices</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">fill</span><span class="o">=</span><span class="s2">&quot;red&quot;</span><span class="p">,</span> <span class="n">font</span><span class="o">=</span><span class="n">font</span><span class="p">)</span>
+
+        <span class="c1"># Plot the image</span>
+        <span class="n">axs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+        <span class="n">axs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">&#39;off&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Top 5 least attended tiles (</span><span class="si">{</span><span class="n">dataset</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">slide_name</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">21</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">output_dir</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">dataset</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">split</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">slide_name</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">save_string</span><span class="si">}</span><span class="s2">_least_attended_tiles.png&quot;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
 </pre></div>
 
            </div>

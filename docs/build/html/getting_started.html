@@ -49,6 +49,9 @@
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Getting Started</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#setting-up-a-project">Setting up a project</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#project-related-settings">Project-related settings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#training-related-settings">Training-related settings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#general-settings">General settings</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#datasets">Datasets</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#annotations">Annotations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#running-pathbench">Running PathBench</a></li>
@@ -57,7 +60,6 @@
 <li class="toctree-l1"><a class="reference internal" href="benchmarking_mode.html">Benchmarking Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="optimization_mode.html">Optimization Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="visualization_application.html">Visualization Application</a></li>
-<li class="toctree-l1"><a class="reference internal" href="ensemble_model_creation.html">Ensemble Model Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="extending_pathbench.html">Extending PathBench</a></li>
 <li class="toctree-l1"><a class="reference internal" href="feature_extractors.html">Feature Extractors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="mil_aggregators.html">MIL Aggregators</a></li>
@@ -95,38 +97,66 @@
 <p>PathBench inherets the project functionality from SlideFlow. PathBench allows creating projects through the configuration file.
 In the configuration, project-specific settings can be specified in the <cite>experiment</cite> section.
 The <cite>experiment</cite> section also saves several other important settings:</p>
-<p>Project related settings:
-- <cite>project_name</cite>: The name of the project.
-- <cite>annotation_file</cite>: The path to the annotation file.</p>
-<p>Training related settings:
-- <cite>balancing</cite>: The balancing technique to be used. This can be ‘tile’, ‘slide’, ‘patient’ or ‘category’. Balancing is used to construct training batches with a balanced distribution of classes/patients/slides/tiles.
-- <cite>split_technique</cite>: The split technique to be used. This can be ‘k-fold’ or ‘fixed’.
-- <cite>k</cite>: The number of folds for k-fold cross-validation.
-- <cite>val_fraction</cite>: The fraction of the training data to be used for validation.
-- <cite>epochs</cite>: The number of epochs for training.
-- <cite>batch_size</cite>: The batch size for training.
-- <cite>bag_size</cite>: The bag size for MIL models.
-- <cite>aggregation_level</cite>: The aggregation level can be ‘slide’ or ‘patient’. This specifies at which levels bags are aggregated, effectively creating slide-level or patient-level predictions.</p>
-<p>General settings:
-- <cite>with_continue</cite>: If True, the model will continue training, skipping already finished parameter combinations.
-- <cite>task</cite>: The task can be ‘classification’, ‘regression’ or ‘survival’.
-- <cite>mode</cite>: The mode can be either ‘benchmark’ or ‘optimization’.</p>
+</section>
+<section id="project-related-settings">
+<h2>Project-related settings<a class="headerlink" href="#project-related-settings" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>project_name</strong>: The name of the project.</p></li>
+<li><p><strong>annotation_file</strong>: The path to the annotation file.</p></li>
+</ul>
+</section>
+<section id="training-related-settings">
+<h2>Training-related settings<a class="headerlink" href="#training-related-settings" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>balancing</strong>: The balancing technique to be used. This can be <code class="docutils literal notranslate"><span class="pre">tile</span></code>, <code class="docutils literal notranslate"><span class="pre">slide</span></code>, <code class="docutils literal notranslate"><span class="pre">patient</span></code>, or <code class="docutils literal notranslate"><span class="pre">category</span></code>. Balancing is used to construct training batches with a balanced distribution of classes/patients/slides/tiles.</p></li>
+<li><p><strong>split_technique</strong>: The split technique to be used. This can be <code class="docutils literal notranslate"><span class="pre">k-fold</span></code> or <code class="docutils literal notranslate"><span class="pre">fixed</span></code>.</p></li>
+<li><p><strong>k</strong>: The number of folds for k-fold cross-validation.</p></li>
+<li><p><strong>val_fraction</strong>: The fraction of the training data to be used for validation.</p></li>
+<li><p><strong>best_epoch_based_on</strong>: Measure to base the epoch selection for selecting the optimal model state on. Can be <code class="docutils literal notranslate"><span class="pre">val_loss</span></code>, any of the task default metrics (<code class="docutils literal notranslate"><span class="pre">roc_auc_score</span></code>, <code class="docutils literal notranslate"><span class="pre">c_index</span></code>, <code class="docutils literal notranslate"><span class="pre">r2_score</span></code>), or any of the custom metrics defined.</p></li>
+<li><p><strong>epochs</strong>: The number of epochs for training.</p></li>
+<li><p><strong>batch_size</strong>: The batch size for training.</p></li>
+<li><p><strong>bag_size</strong>: The bag size for MIL models.</p></li>
+<li><p><strong>aggregation_level</strong>: The aggregation level can be <code class="docutils literal notranslate"><span class="pre">slide</span></code> or <code class="docutils literal notranslate"><span class="pre">patient</span></code>. This specifies at which levels bags are aggregated, effectively creating slide-level or patient-level predictions.</p></li>
+<li><p><strong>encoder_layers</strong>: The number of layers used for the encoder in the MIL aggregator.</p></li>
+<li><p><strong>z_dim</strong>: The dimensionality of the latent space in the MIL encoder.</p></li>
+<li><p><strong>dropout_p</strong>: The dropout probability in the MIL model.</p></li>
+</ul>
+</section>
+<section id="general-settings">
+<h2>General settings<a class="headerlink" href="#general-settings" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>task</strong>: The task can be <code class="docutils literal notranslate"><span class="pre">classification</span></code>, <code class="docutils literal notranslate"><span class="pre">regression</span></code>, or <code class="docutils literal notranslate"><span class="pre">survival</span></code>.</p></li>
+<li><p><strong>mode</strong>: The mode can be either <code class="docutils literal notranslate"><span class="pre">benchmark</span></code> or <code class="docutils literal notranslate"><span class="pre">optimization</span></code>.</p></li>
+<li><p><strong>num_workers</strong>: Number of workers for parallelization, set to 0 to disable parallel processing.</p></li>
+<li><p><strong>custom_metrics</strong>: List of custom metrics to be used, which should be defined in <code class="docutils literal notranslate"><span class="pre">metrics.py</span></code> or as a fastai-metric: <a class="reference external" href="https://docs.fast.ai/metrics.html">fastai metrics</a>.</p></li>
+</ul>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">experiment</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">project_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MF_TEST</span><span class="w"> </span><span class="c1"># Name of the project</span>
-<span class="w">  </span><span class="nt">annotation_file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">path/to/your/annotation_file</span><span class="w"> </span><span class="c1"># Path to the annotation file</span>
-<span class="w">  </span><span class="nt">balancing</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">category</span><span class="w"> </span><span class="c1"># Balancing can be &#39;tile&#39;, &#39;slide&#39;, &#39;patient&#39; or &#39;category&#39;</span>
-<span class="w">  </span><span class="nt">split_technique</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">k-fold</span><span class="w"> </span><span class="c1"># Split technique can be &#39;k-fold&#39; or &#39;fixed&#39;</span>
-<span class="w">  </span><span class="nt">k</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span><span class="w"> </span><span class="c1"># Number of folds for k-fold cross-validation</span>
-<span class="w">  </span><span class="nt">val_fraction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span><span class="w"> </span><span class="c1"># Fraction of the training data to be used for validation</span>
-<span class="w">  </span><span class="nt">epochs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span><span class="w"> </span><span class="c1"># Number of epochs for training</span>
-<span class="w">  </span><span class="nt">batch_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32</span><span class="w"> </span><span class="c1"># Batch size for training</span>
-<span class="w">  </span><span class="nt">bag_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">512</span><span class="w"> </span><span class="c1"># Bag size for MIL models</span>
-<span class="w">  </span><span class="nt">with_continue</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">True</span><span class="w"> </span><span class="c1"># If True, the model will continue training from the last checkpoint.</span>
-<span class="w">  </span><span class="nt">aggregation_level</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">slide</span><span class="w"> </span><span class="c1"># Aggregation level can be &#39;slide&#39; or &#39;patient&#39;</span>
-<span class="w">  </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">classification</span><span class="w"> </span><span class="c1"># Task can be &#39;classification&#39;, &#39;regression&#39; or &#39;survival&#39;</span>
-<span class="w">  </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">benchmark</span><span class="w"> </span><span class="c1"># Mode can be either &#39;benchmark&#39; or &#39;optimization&#39;.</span>
-<span class="w">  </span><span class="c1">#custom_loss:  # Can be any loss as specified in utils/losses.py, or None, in which case the default task loss will be used.</span>
-<span class="w">  </span><span class="c1">#custom_metrics: # Can be any list of metrics as specified in utils/metrics.py, or None, in which case the default task metrics will be used.</span>
+<span class="w">  </span><span class="nt">project_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Example_Project</span><span class="w"> </span><span class="c1"># Name of the project, where the results will be saved</span>
+<span class="w">  </span><span class="nt">annotation_file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/your/annotation_file.csv</span><span class="w"> </span><span class="c1"># Path to the annotation file</span>
+<span class="w">  </span><span class="nt">balancing</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">category</span><span class="w"> </span><span class="c1"># Training set balancing strategy, can be None, category, slide, patient or tile.</span>
+<span class="w">  </span><span class="nt">num_workers</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span><span class="w"> </span><span class="c1"># Number of workers for data loading, 0 for no parallelization.</span>
+<span class="w">  </span><span class="nt">split_technique</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">k-fold</span><span class="w"> </span><span class="c1"># Splitting technique, can be k-fold or fixed</span>
+<span class="w">  </span><span class="nt">epochs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span><span class="w"> </span><span class="c1"># Number of training epoch</span>
+<span class="w">  </span><span class="nt">best_epoch_based_on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">val_loss</span><span class="w"> </span><span class="c1"># Metric to be used for selecting the best training epoch (e.g. val_loss, roc_auc_score, mae, concordance_index)</span>
+<span class="w">  </span><span class="nt">batch_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32</span><span class="w"> </span><span class="c1"># Batch size</span>
+<span class="w">  </span><span class="nt">bag_size </span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">512</span><span class="w"> </span><span class="c1"># Bag size for MIL</span>
+<span class="w">  </span><span class="nt">encoder_layers</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span><span class="w"> </span><span class="c1"># Number of encoder layers to use in the MIL aggregator</span>
+<span class="w">  </span><span class="nt">z_dim</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">256</span><span class="w"> </span><span class="c1"># Latent space dimensionality in the MIL aggregator</span>
+<span class="w">  </span><span class="nt">dropout_p</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span><span class="w"> </span><span class="c1"># Dropout probabilitiy in the MIL aggregator</span>
+<span class="w">  </span><span class="nt">k</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span><span class="w"> </span><span class="c1"># Number of folds, if split-technique is k-fold</span>
+<span class="w">  </span><span class="nt">val_fraction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span><span class="w"> </span><span class="c1"># Fraction of training data to use for validation</span>
+<span class="w">  </span><span class="nt">aggregation_level</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">slide</span><span class="w"> </span><span class="c1"># Aggregation level, can be slide or patient</span>
+<span class="w">  </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">classification</span><span class="w"> </span><span class="c1"># Task, can be classification, regression or survival</span>
+
+<span class="w">  </span><span class="nt">visualization</span><span class="p">:</span><span class="w"> </span><span class="c1"># Visualization options, options: CLASSIFICATION: confusion_matrix, precision_recall_curve, roc_curve, top_tiles SURVIVAL: survival_roc, concordance_index, calibration REGRESSION: predicted_vs_actual, residuals, qq</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">learning_curve</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">confusion_matrix</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">roc_curve</span>
+
+<span class="w">  </span><span class="nt">evaluation</span><span class="p">:</span><span class="w"> </span><span class="c1"># Evaluation metrics to use. options: CLASSIFICATION: balanced_accuracy, mean_f1, mean_uncertainty, auc, mean_average_precision, mean_average_recall. REGRESSION: mean_absolute_error, mean_squared_error, r2_score. SURVIVAL: c_index, brier_score.</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">balanced_accuracy</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">auc</span>
+<span class="w">  </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">optimization</span><span class="w"> </span><span class="c1"># Mode to use, either benchmark or optimization</span>
 </pre></div>
 </div>
 </section>

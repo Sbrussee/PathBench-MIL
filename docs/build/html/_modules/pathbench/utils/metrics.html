@@ -48,7 +48,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../benchmarking_mode.html">Benchmarking Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../optimization_mode.html">Optimization Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../visualization_application.html">Visualization Application</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../ensemble_model_creation.html">Ensemble Model Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../extending_pathbench.html">Extending PathBench</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../feature_extractors.html">Feature Extractors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../mil_aggregators.html">MIL Aggregators</a></li>
@@ -82,6 +81,7 @@
   <h1>Source code for pathbench.utils.metrics</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span> <span class="nn">fastai.learner</span> <span class="kn">import</span> <span class="n">Metric</span>
 <span class="kn">from</span> <span class="nn">lifelines.utils</span> <span class="kn">import</span> <span class="n">concordance_index</span>
+<span class="kn">from</span> <span class="nn">sklearn.metrics</span> <span class="kn">import</span> <span class="n">roc_auc_score</span>
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">from</span> <span class="nn">fastai.torch_core</span> <span class="kn">import</span> <span class="n">to_detach</span><span class="p">,</span> <span class="n">flatten_check</span>
 
@@ -146,6 +146,84 @@
         <span class="n">events</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">events</span><span class="p">)</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
         <span class="n">ci</span> <span class="o">=</span> <span class="n">concordance_index</span><span class="p">(</span><span class="n">durations</span><span class="p">,</span> <span class="n">preds</span><span class="p">,</span> <span class="n">events</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">ci</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">name</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_name</span>
+
+    <span class="nd">@name</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">name</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_name</span> <span class="o">=</span> <span class="n">value</span></div>
+
+
+
+<div class="viewcode-block" id="safe_roc_auc">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.metrics.safe_roc_auc">[docs]</a>
+<span class="k">class</span> <span class="nc">safe_roc_auc</span><span class="p">(</span><span class="n">Metric</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;ROC AUC metric for multiclass classification that</span>
+<span class="sd">    can handle cases where only one class is present.&quot;&quot;&quot;</span>
+<div class="viewcode-block" id="safe_roc_auc.__init__">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.metrics.safe_roc_auc.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">average</span><span class="o">=</span><span class="s1">&#39;macro&#39;</span><span class="p">,</span> <span class="n">multi_class</span><span class="o">=</span><span class="s1">&#39;ovr&#39;</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">average</span> <span class="o">=</span> <span class="n">average</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">multi_class</span> <span class="o">=</span> <span class="n">multi_class</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;safe_roc_auc&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="safe_roc_auc.reset">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.metrics.safe_roc_auc.reset">[docs]</a>
+    <span class="k">def</span> <span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reset the metric.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">preds</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">targets</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span></div>
+
+
+<div class="viewcode-block" id="safe_roc_auc.accumulate">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.metrics.safe_roc_auc.accumulate">[docs]</a>
+    <span class="k">def</span> <span class="nf">accumulate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">learn</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Accumulate predictions and targets from a batch.&quot;&quot;&quot;</span>
+        <span class="n">preds</span> <span class="o">=</span> <span class="n">learn</span><span class="o">.</span><span class="n">pred</span>
+        <span class="n">targets</span> <span class="o">=</span> <span class="n">learn</span><span class="o">.</span><span class="n">y</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">accum_values</span><span class="p">(</span><span class="n">preds</span><span class="p">,</span> <span class="n">targets</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="safe_roc_auc.accum_values">
+<a class="viewcode-back" href="../../../pathbench_utils.html#pathbench.utils.metrics.safe_roc_auc.accum_values">[docs]</a>
+    <span class="k">def</span> <span class="nf">accum_values</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">preds</span><span class="p">,</span> <span class="n">targets</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Accumulate predictions and targets from a batch.&quot;&quot;&quot;</span>
+        <span class="n">preds</span><span class="p">,</span> <span class="n">targets</span> <span class="o">=</span> <span class="n">to_detach</span><span class="p">(</span><span class="n">preds</span><span class="p">),</span> <span class="n">to_detach</span><span class="p">(</span><span class="n">targets</span><span class="p">)</span>
+
+        <span class="c1"># Convert predictions to probabilities if they are logits</span>
+        <span class="k">if</span> <span class="n">preds</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">preds</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="n">preds</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        
+        <span class="c1"># Flatten predictions and targets if necessary</span>
+        <span class="n">preds</span> <span class="o">=</span> <span class="n">preds</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">preds</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">targets</span> <span class="o">=</span> <span class="n">targets</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">preds</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">preds</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">targets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">targets</span><span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">value</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calculate the ROC AUC score.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">preds</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span> 
+            <span class="k">return</span> <span class="kc">None</span>
+        
+        <span class="n">preds</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">preds</span><span class="p">)</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+        <span class="n">targets</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">targets</span><span class="p">)</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+
+        <span class="c1"># Handle case where only one class is present</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">targets</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">auc</span> <span class="o">=</span> <span class="n">roc_auc_score</span><span class="p">(</span><span class="n">targets</span><span class="p">,</span> <span class="n">preds</span><span class="p">,</span> <span class="n">average</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">average</span><span class="p">,</span> <span class="n">multi_class</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">multi_class</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error calculating ROC AUC: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">auc</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">auc</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">name</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>

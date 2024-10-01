@@ -51,7 +51,6 @@
 <li class="toctree-l1"><a class="reference internal" href="benchmarking_mode.html">Benchmarking Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="optimization_mode.html">Optimization Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="visualization_application.html">Visualization Application</a></li>
-<li class="toctree-l1"><a class="reference internal" href="ensemble_model_creation.html">Ensemble Model Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="extending_pathbench.html">Extending PathBench</a></li>
 <li class="toctree-l1"><a class="reference internal" href="feature_extractors.html">Feature Extractors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="mil_aggregators.html">MIL Aggregators</a></li>
@@ -203,7 +202,10 @@ experiement and run the benchmarking experiment.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="id1">
 <span class="sig-name descname"><span class="pre">load_datasets</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/experiment/experiment.html#Experiment.load_datasets"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id1" title="Link to this definition"></a></dt>
-<dd><p>Load datasets into the project</p>
+<dd><p>Load datasets into the project. the datasets are specified in the configuration file.
+We assume that the first dataset is the main dataset and the rest are additional datasets.
+As such, we create a project based on the first dataset and add the rest of the datasets
+as sources to the project.</p>
 </dd></dl>
 
 <dl class="py method">

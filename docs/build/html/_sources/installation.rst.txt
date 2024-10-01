@@ -14,8 +14,8 @@ Steps to Install PathBench and SlideFlow Fork
 
 .. code-block:: bash
 
-    git clone https://github.com/sbrussee/PathBench.git
-    cd PathBench
+    git clone --recursive_submodules https://github.com/sbrussee/PathBench-MIL.git
+    cd PathBench-MIL
 
 2. **Run `setup_pathbench.py`:**
 
@@ -43,9 +43,25 @@ Steps to Install PathBench and SlideFlow Fork
 
         pathbench_env\Scripts\activate
 
-4. **Install `pathbench` Package:**
+5. **Install `slideflow_fork` Package:**
 
-    After activating the virtual environment, install the `pathbench` package.
+    Navigate to the `slideflow_fork` directory and install it:
+
+.. code-block:: bash
+
+    cd ../slideflow_fork
+    pip install -e .
+
+    Or, if you do not need to modify the code:
+
+.. code-block:: bash
+
+    pip install .
+
+
+5. **Install `pathbench` Package:**
+
+    After installing slideflow, install the `pathbench` package.
 
 .. code-block:: bash
 

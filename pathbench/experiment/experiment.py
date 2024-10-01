@@ -8,7 +8,6 @@ import shutil
 import logging
 from huggingface_hub import login
 import multiprocessing as mp
-mp.set_start_method('fork')
 
 def read_config(config_file : str):
     """

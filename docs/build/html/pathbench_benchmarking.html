@@ -51,7 +51,6 @@
 <li class="toctree-l1"><a class="reference internal" href="benchmarking_mode.html">Benchmarking Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="optimization_mode.html">Optimization Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="visualization_application.html">Visualization Application</a></li>
-<li class="toctree-l1"><a class="reference internal" href="ensemble_model_creation.html">Ensemble Model Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="extending_pathbench.html">Extending PathBench</a></li>
 <li class="toctree-l1"><a class="reference internal" href="feature_extractors.html">Feature Extractors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="mil_aggregators.html">MIL Aggregators</a></li>
@@ -74,7 +73,6 @@
 <li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.run_best_model"><code class="docutils literal notranslate"><span class="pre">run_best_model()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.set_metrics"><code class="docutils literal notranslate"><span class="pre">set_metrics()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.set_mil_config"><code class="docutils literal notranslate"><span class="pre">set_mil_config()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.should_continue"><code class="docutils literal notranslate"><span class="pre">should_continue()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#pathbench.benchmarking.benchmark.split_datasets"><code class="docutils literal notranslate"><span class="pre">split_datasets()</span></code></a></li>
 </ul>
 </li>
@@ -316,8 +314,20 @@ task.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.optimize_parameters">
-<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">optimize_parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#optimize_parameters"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.optimize_parameters" title="Link to this definition"></a></dt>
-<dd></dd></dl>
+<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">optimize_parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Project</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#optimize_parameters"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.optimize_parameters" title="Link to this definition"></a></dt>
+<dd><p>Optuna-based optimization of MIL-pipeline modules and parameters.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config</strong> – The pathbench configuration dictionary</p></li>
+<li><p><strong>project</strong> – The slideflow project</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.plot_across_splits">
@@ -391,26 +401,6 @@ task.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>The MIL configuration</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="pathbench.benchmarking.benchmark.should_continue">
-<span class="sig-prename descclassname"><span class="pre">pathbench.benchmarking.benchmark.</span></span><span class="sig-name descname"><span class="pre">should_continue</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">all_combinations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pathbench/benchmarking/benchmark.html#should_continue"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pathbench.benchmarking.benchmark.should_continue" title="Link to this definition"></a></dt>
-<dd><p>Check if the benchmarking should continue based on the finished combinations</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>config</strong> – The configuration dictionary</p></li>
-<li><p><strong>all_combinations</strong> – The list of all combinations</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A boolean indicating whether the benchmarking should continue, the filtered list of all combinations, the validation results and the test results
-all_combinations: The filtered list of all combinations
-val_df: The validation results dataframe
-test_df: The test results dataframe</p>
 </dd>
 </dl>
 </dd></dl>

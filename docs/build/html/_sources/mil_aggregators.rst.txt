@@ -96,3 +96,39 @@ In addition to a wide range of feature extractors, PathBench also includes a wid
      - Supported
      - Supported
      - `Link <https://github.com/binli123/dsmil-wsi>`_
+   * - PERCEIVER-MIL
+      - Supported
+      - Supported
+      - Supported
+      - Supported
+      - `Link <https://arxiv.org/abs/2103.03206>`_
+   * - Adaptive Instance Ranking (AIR)-MIL 
+      - Supported
+      - Supported
+      - Supported
+      - Supported
+      - NA
+   * - Top-K MIL
+      - Supported
+      - Supported
+      - Supported
+      - Supported
+      - NA
+   * - Weighted Mean MIL
+      - Supported
+      - Supported
+      - Supported
+      - Supported
+      - NA
+   * - Gated Attention MIL
+      - Supported
+      - Supported
+      - Supported
+      - Supported
+      - NA
+   * - Instance-Level (IL)-MIL
+      - Supported
+      - Supported
+      - Supported
+      - Supported
+      - NA

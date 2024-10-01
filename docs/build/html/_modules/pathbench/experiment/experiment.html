@@ -48,7 +48,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../benchmarking_mode.html">Benchmarking Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../optimization_mode.html">Optimization Mode</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../visualization_application.html">Visualization Application</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../ensemble_model_creation.html">Ensemble Model Creation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../extending_pathbench.html">Extending PathBench</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../feature_extractors.html">Feature Extractors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../mil_aggregators.html">MIL Aggregators</a></li>
@@ -84,12 +83,12 @@
 <span class="kn">import</span> <span class="nn">slideflow</span> <span class="k">as</span> <span class="nn">sf</span>
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">from</span> <span class="nn">..benchmarking.benchmark</span> <span class="kn">import</span> <span class="n">benchmark</span>
-<span class="kn">from</span> <span class="nn">..benchmarking.benchmark</span> <span class="kn">import</span> <span class="n">optimize_parameters</span>
+<span class="kn">from</span> <span class="nn">..benchmarking.benchmark</span> <span class="kn">import</span> <span class="n">benchmark</span><span class="p">,</span> <span class="n">optimize_parameters</span>
 <span class="kn">import</span> <span class="nn">random</span>
 <span class="kn">import</span> <span class="nn">shutil</span>
 <span class="kn">import</span> <span class="nn">logging</span>
-<span class="kn">from</span> <span class="nn">..utils.utils</span> <span class="kn">import</span> <span class="n">increase_file_limit</span>
+<span class="kn">from</span> <span class="nn">huggingface_hub</span> <span class="kn">import</span> <span class="n">login</span>
+<span class="kn">import</span> <span class="nn">multiprocessing</span> <span class="k">as</span> <span class="nn">mp</span>
 
 <div class="viewcode-block" id="read_config">
 <a class="viewcode-back" href="../../../pathbench_experiment.html#pathbench.experiment.experiment.read_config">[docs]</a>
@@ -162,14 +161,13 @@
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;hf_token&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">HF_TOKEN</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;hf_token&#39;</span><span class="p">]</span>
                 <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;HF_TOKEN&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">HF_TOKEN</span>
+                <span class="n">login</span><span class="p">(</span><span class="n">token</span><span class="o">=</span><span class="n">HF_TOKEN</span><span class="p">)</span>
+                <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Logged in to Hugging Face&quot;</span><span class="p">)</span>
         <span class="c1">#Set pretrained weights directory</span>
         <span class="n">WEIGHTS_DIR</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;weights_dir&#39;</span><span class="p">]</span>
         <span class="c1"># Set environment variables</span>
         <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;TORCH_HOME&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">WEIGHTS_DIR</span>
-        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;HF_HOME&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">WEIGHTS_DIR</span>
-
-        <span class="c1">#Increase open file limit, useful for multiprocessing</span>
-        <span class="n">increase_file_limit</span><span class="p">(</span><span class="mi">16384</span><span class="p">)</span></div>
+        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;HF_HOME&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">WEIGHTS_DIR</span></div>
 
 
 <div class="viewcode-block" id="Experiment.run">
@@ -189,13 +187,15 @@
 <a class="viewcode-back" href="../../../pathbench_experiment.html#pathbench.experiment.experiment.Experiment.load_datasets">[docs]</a>
     <span class="k">def</span> <span class="nf">load_datasets</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Load datasets into the project</span>
+<span class="sd">        Load datasets into the project. the datasets are specified in the configuration file.</span>
+<span class="sd">        We assume that the first dataset is the main dataset and the rest are additional datasets.</span>
+<span class="sd">        As such, we create a project based on the first dataset and add the rest of the datasets</span>
+<span class="sd">        as sources to the project.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="c1">#Create an experiment folder</span>
         <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="s1">&#39;experiments&#39;</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">project_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;experiment&#39;</span><span class="p">][</span><span class="s1">&#39;project_name&#39;</span><span class="p">]</span>
-
         <span class="k">if</span> <span class="s1">&#39;datasets&#39;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">:</span>
             <span class="n">first_dataset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;datasets&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
         <span class="c1">#Create project based on first dataset</span>
@@ -206,6 +206,10 @@
             <span class="n">annotations</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;experiment&#39;</span><span class="p">][</span><span class="s1">&#39;annotation_file&#39;</span><span class="p">])</span>
             <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Project </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project_name</span><span class="si">}</span><span class="s2"> loaded&quot;</span><span class="p">)</span>
             <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Annotations in project: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="o">.</span><span class="n">annotations</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">source</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="o">.</span><span class="n">sources</span><span class="p">):</span>
+                <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Source </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">source</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Slides in source: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;datasets&#39;</span><span class="p">][</span><span class="n">index</span><span class="p">][</span><span class="s1">&#39;slide_path&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
         <span class="k">else</span><span class="p">:</span>
             <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Creating project </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
             <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;experiments&quot;</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -214,9 +218,10 @@
                 <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">project_name</span><span class="p">,</span>
                 <span class="n">root</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;experiments/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
                 <span class="n">annotations</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;experiment&#39;</span><span class="p">][</span><span class="s1">&#39;annotation_file&#39;</span><span class="p">],</span>
-                <span class="n">slides</span><span class="o">=</span><span class="n">first_dataset</span><span class="p">[</span><span class="s1">&#39;slide_path&#39;</span><span class="p">]</span>
-            <span class="p">)</span> 
+                <span class="n">slides</span><span class="o">=</span><span class="n">first_dataset</span><span class="p">[</span><span class="s1">&#39;slide_path&#39;</span><span class="p">])</span>
+            
             <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Project </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project_name</span><span class="si">}</span><span class="s2"> created&quot;</span><span class="p">)</span>
+            <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Annotations in project: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="o">.</span><span class="n">annotations</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
         <span class="c1">#Add additional datasets to the project</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;datasets&#39;</span><span class="p">])</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
@@ -224,66 +229,13 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="o">.</span><span class="n">add_source</span><span class="p">(</span>
                     <span class="n">name</span><span class="o">=</span><span class="n">source</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">],</span>
                     <span class="n">slides</span><span class="o">=</span><span class="n">source</span><span class="p">[</span><span class="s1">&#39;slide_path&#39;</span><span class="p">],</span>
-                    <span class="n">tfrecords</span><span class="o">=</span><span class="n">source</span><span class="p">[</span><span class="s1">&#39;tfrecord_path&#39;</span><span class="p">],</span>
-                    <span class="n">tiles</span><span class="o">=</span><span class="n">source</span><span class="p">[</span><span class="s1">&#39;tile_path&#39;</span><span class="p">]</span>
-                <span class="p">)</span></div>
+                    <span class="n">tfrecords</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;experiments/</span><span class="si">{</span><span class="n">source</span><span class="p">[</span><span class="s2">&quot;tfrecord_path&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                    <span class="n">tiles</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;experiments/</span><span class="si">{</span><span class="n">source</span><span class="p">[</span><span class="s2">&quot;tile_path&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Added source </span><span class="si">{</span><span class="n">source</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2"> to project </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Slides in source: </span><span class="si">{</span><span class="n">source</span><span class="p">[</span><span class="s1">&#39;slide_path&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
 
-<span class="w">        </span>
-<span class="w">        </span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    def ssl(self):</span>
-<span class="sd">        ssl_parameters = self.config[&#39;ssl&#39;]</span>
-<span class="sd">        (method, backbone, train_path, val_path, val_split,</span>
-<span class="sd">        ssl_model_name) = (ssl_parameters[&#39;method&#39;],</span>
-<span class="sd">            ssl_parameters[&#39;backbone&#39;], ssl_parameters[&#39;train_path&#39;],</span>
-<span class="sd">            ssl_parameters[&#39;val_path&#39;], ssl_parameters[&#39;val_split&#39;],</span>
-<span class="sd">            ssl_parameters[&#39;ssl_model_name&#39;])</span>
-<span class="sd">        </span>
-<span class="sd">        os.makedirs(f&#39;{self.config[&quot;experiment&quot;][&quot;project_name&quot;]}/ssl_train&#39;, exist_ok=True)</span>
-<span class="sd">        os.makedirs(f&#39;{self.config[&quot;experiment&quot;][&quot;project_name&quot;]}/ssl_val&#39;, exist_ok=True)</span>
-
-<span class="sd">        if val_path == None and val_split != None:</span>
-<span class="sd">            #Get all directories in the training directory</span>
-<span class="sd">            train_slides = os.listdir(train_path)</span>
-<span class="sd">            print(&quot;Total number of slides: &quot;, len(train_slides))</span>
-
-<span class="sd">            #Shuffle the directory</span>
-<span class="sd">            random.shuffle(train_slides)</span>
-<span class="sd">            #Split training data into training and validation data</span>
-<span class="sd">            val_size = int(val_split * len(train_slides))</span>
-<span class="sd">            val_files = train_slides[:val_size]</span>
-<span class="sd">            train_files = train_slides[val_size:]</span>
-
-<span class="sd">            for slide in train_files:</span>
-<span class="sd">                images = os.listdir(f&#39;{train_path}/{slide}&#39;)</span>
-<span class="sd">                for image in images:</span>
-<span class="sd">                    shutil.copy(f&#39;{train_path}/{slide}/{image}&#39;, f&quot;{self.config[&#39;experiment&#39;][&#39;project_name&#39;]}/ssl_train/{image}&quot;)</span>
-
-<span class="sd">            for slide in val_files:</span>
-<span class="sd">                images = os.listdir(f&#39;{train_path}/{slide}&#39;)</span>
-<span class="sd">                for image in images:</span>
-<span class="sd">                    shutil.copy(f&#39;{train_path}/{slide}/{image}&#39;, f&quot;{self.config[&#39;experiment&#39;][&#39;project_name&#39;]}/ssl_val/{image}&quot;)</span>
-
-<span class="sd">        elif val_path != None:</span>
-<span class="sd">            #Copy all files from the training directory to the ssl_train directory</span>
-<span class="sd">            for slide in os.listdir(train_path):</span>
-<span class="sd">                for image in os.listdir(f&quot;{train_path}/{slide}&quot;):</span>
-<span class="sd">                    shutil.copy(f&#39;{train_path}/{slide}/{image}&#39;, f&quot;{self.config[&#39;experiment&#39;][&#39;project_name&#39;]}/ssl_train/{image}&quot;)</span>
-<span class="sd">            #Copy all files from the validation directory to the ssl_val directory</span>
-<span class="sd">            for slide in os.listdir(val_path):</span>
-<span class="sd">                for image in os.listdir(f&quot;{val_path}/{slide}&quot;):</span>
-<span class="sd">                    shutil.copy(f&#39;{val_path}/{slide}/{image}&#39;, f&quot;{self.config[&#39;experiment&#39;][&#39;project_name&#39;]}/ssl_val/{image}&quot;)</span>
-<span class="sd">        else:</span>
-<span class="sd">            for slide in os.listdir(train_path):</span>
-<span class="sd">                for image in os.listdir(f&quot;{train_path}/{slide}&quot;):</span>
-<span class="sd">                    shutil.copy(f&#39;{train_path}/{slide}/{image}&#39;, f&quot;{self.config[&#39;experiment&#39;][&#39;project_name&#39;]}/ssl_train/{image}&quot;)</span>
-
-<span class="sd">        if val_path != None:</span>
-<span class="sd">            train_ssl_model(method, backbone, ssl_model_name, f&quot;{self.config[&#39;experiment&#39;][&#39;project_name&#39;]}/ssl_train&quot;,</span>
-<span class="sd">                        f&quot;{self.config[&#39;experiment&#39;][&#39;project_name&#39;]}/ssl_val&quot;)</span>
-<span class="sd">        else:</span>
-<span class="sd">            train_ssl_model(method, backbone, ssl_model_name, f&quot;{self.config[&#39;experiment&#39;][&#39;project_name&#39;]}/ssl_train&quot;)</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+        
 <div class="viewcode-block" id="Experiment.benchmark">
 <a class="viewcode-back" href="../../../pathbench_experiment.html#pathbench.experiment.experiment.Experiment.benchmark">[docs]</a>
     <span class="k">def</span> <span class="nf">benchmark</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -294,14 +246,9 @@
 <div class="viewcode-block" id="Experiment.optimize_parameters">
 <a class="viewcode-back" href="../../../pathbench_experiment.html#pathbench.experiment.experiment.Experiment.optimize_parameters">[docs]</a>
     <span class="k">def</span> <span class="nf">optimize_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1">#Optimize the MIL pipeline</span>
         <span class="n">optimize_parameters</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="p">)</span></div>
-
-
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    def hpo(self):</span>
-<span class="sd">        optimizer = HyperParameterOptimizer()</span>
-<span class="sd">        optimizer.run()</span>
-<span class="sd">    &quot;&quot;&quot;</span></div>
+</div>
 
 </pre></div>
 
