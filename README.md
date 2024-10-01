@@ -32,8 +32,8 @@ PathBench's documentation is available [here](https://pathbench.readthedocs.io/e
 1. **Clone the Repository:**
 
     ```bash
-    git clone --recurse_submodules https://github.com/sbrussee/PathBench.git
-    cd PathBench
+    git clone --recurse_submodules https://github.com/sbrussee/PathBench-MIL.git
+    cd PathBench-MIL
     ```
 
 2. **Run `setup_pathbench.py`:**
@@ -108,12 +108,16 @@ experiment:
   k: 2 # Number of folds, if split-technique is k-fold
   val_fraction: 0.1 # Fraction of training data to use for validation
   aggregation_level: slide # Aggregation level, can be slide or patient
-  with_continue: True # Continue training from a previous checkpoint, if available
   task: classification # Task, can be classification, regression or survival
-  visualization: # Visualization options, options: CLASSIFICATION: confusion_matrix, precision_recall_curve, roc_curve, top_tiles URVIVAL: survival_roc, concordance_index, calibration REGRESSION: predicted_vs_actual, residuals, qq
+
+  visualization: # Visualization options, options: CLASSIFICATION: confusion_matrix, precision_recall_curve, roc_curve, top_tiles SURVIVAL: survival_roc, concordance_index, calibration REGRESSION: predicted_vs_actual, residuals, qq
     - learning_curve
     - confusion_matrix
     - roc_curve
+
+  evaluation: # Evaluation metrics to use. options: CLASSIFICATION: balanced_accuracy, mean_f1, mean_uncertainty, auc, mean_average_precision, mean_average_recall. REGRESSION: mean_absolute_error, mean_squared_error, r2_score. SURVIVAL: c_index, brier_score.
+    - balanced_accuracy
+    - auc
   mode: optimization # Mode to use, either benchmark or optimization
 
   custom_metrics: [RocAuc]: List of evaluation metrics to measure in the validation set during model training. Needs to be either specified in metrics.py or a fastai metric: https://docs.fast.ai/metrics.html
@@ -129,12 +133,12 @@ experiment:
     - whitespace_fraction: 1.0 # Image tiles with whitespace above this fraction are discarded.
 
 optimization:
-  objective_metric: balanced_accuracy # Objective metric to optimize
+  objective_metric: balanced_accuracy # Objective metric to optimize, should also be specified in 'evaluation'
   objective_mode: max # Optimization mode, can be 'max' or 'min'
   objective_dataset: test # Dataset to be used for the objective metric, can be 'val' or 'test'
   sampler: TPESampler # Algorithm to use for optimization: grid_search, TPE, Bayesian
   trials: 100 # Number of optimization trials
-  pruner: HyperbandPruner # Pruner for optimization, can be Hyperband, Median etc.
+  pruner: HyperbandPruner # Pruner for optimization, can be Hyperband, Median etc. Remove this line if you do not want to use a pruner.
 
 datasets: # List of datasets to use, each dataset should have a name, slide_path, tfrecord_path, tile_path and used_for.
   - name: dataset_1
@@ -153,7 +157,7 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
   tile_px: # Tile size in pixels
     - 256
 
-  tile_um: # Tile size in micrometers
+  tile_um: # Tile size (magnification str (e.g 20x, 40x) or microns integer (150, 250))
     - 20x
 
   normalization: # Normalization method, can be macenko, reinhard, ruifrok or cyclegan
@@ -215,8 +219,8 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 # - virchow2
 
 # Available MIL aggregation methods:
-# - CLAM_SB
-# - CLAM_MB
+# - clam_mil
+# - clam_mil_mb
 # - Attention_MIL
 # - transmil
 # - bistro.transformer
@@ -231,6 +235,11 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 # - varmil
 # - perceiver_mil
 # - air_mil
+# - topk_mil
+# - weighted_mean_mil
+# - gated_attention_mil
+# - il_mil
+
 
 #Available Loss functions
   # - Classification:
@@ -241,6 +250,10 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
      # - AttentionEntropyMinimizedCrossEntropyLoss
      # - DiversityRegularizedCrossEntropyLoss
      # - SparseAttentionCrossEntropyLoss
+ # - Survival:
+     # - RankingLoss
+     # - CoxPHLoss
+     # - DeepHitLoss
 
 #Available MIL-friendly augmentations:
   # - patch_dropout
@@ -253,7 +266,7 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
   # - patch_mixing
   # - cutmix
 
-weights_dir : ./pretrained_weights # Path to the model weights, and where newly retrieved model weights will be saved
+weights_dir : ./pretrained_weights # Path to the model weights, and where newly retrieved model weights will be saved, defaults to the pretrained_weights directory in the PathBench directory.
 hf_key: YOUR_HUGGINGFACE_TOKEN # Token for Hugging Face model hub to access gated models, if you do not have one, just set to None
 
 ```
@@ -266,6 +279,7 @@ PathBench inherits the project functionality from SlideFlow. PathBench allows cr
 - `project_name`: The name of the project.
 - `annotation_file`: The path to the annotation file.
 
+
 ### Training-related settings:
 
 - `balancing`: The balancing technique to be used. This can be `tile`, `slide`, `patient`, or `category`. Balancing is used to construct training batches with a balanced distribution of classes/patients/slides/tiles.
@@ -277,13 +291,16 @@ PathBench inherits the project functionality from SlideFlow. PathBench allows cr
 - `batch_size`: The batch size for training.
 - `bag_size`: The bag size for MIL models.
 - `aggregation_level`: The aggregation level can be `slide` or `patient`. This specifies at which levels bags are aggregated, effectively creating slide-level or patient-level predictions.
-
+- `encoder_layers` : The number of layers used for the encoder in the MIL aggregator
+- `z_dim` : The dimensionality of the latent space in the MIL encoder.
+- `dropout_p` : The dropout probability in the MIL model.
+  
 ### General settings:
 
-- `with_continue`: If `True`, the model will continue training, skipping already finished parameter combinations.
 - `task`: The task can be `classification`, `regression`, or `survival`.
 - `mode`: The mode can be either `benchmark` or `optimization`.
 - `num_workers` : Number of workers for parallelization, set to 0 to disable parallel processing.
+- `custom_metrics` : List of custom metrics to be used, which should be defined in metrics.py or as a fastai-metric: https://docs.fast.ai/metrics.html
 
 # Datasets
 The datasets to be used in the project can be specified in the datasets section. One can add any arbitrary number of data sources to a project and specify whether these should be used for training/validation or as testing datasets:
@@ -457,6 +474,7 @@ PathBench supports a wide range of different feature extractors, including SOTA 
 | Lunit Barlow Twins | Automatic | [Link](https://github.com/lunit-io/benchmark-ssl-pathology) |
 | Lunit MocoV2 | Automatic | [Link](https://github.com/lunit-io/benchmark-ssl-pathology)  |
 | Phikon | Automatic | [Link](https://huggingface.co/owkin/phikon) |
+| Phikon-V2 | Automatic | [Link](https://huggingface.co/owkin/phikon-v2) |
 | PathoDuet-HE | Manual | [Link](https://github.com/openmedlab/PathoDuet) [Weights](https://drive.google.com/drive/folders/1aQHGabQzopSy9oxstmM9cPeF7QziIUxM)|
 | PathoDuet-IHC | Manual | [Link](https://github.com/openmedlab/PathoDuet) [Weights](https://drive.google.com/drive/folders/1aQHGabQzopSy9oxstmM9cPeF7QziIUxM)|
 | Virchow | Gated | [Link](https://huggingface.co/paige-ai/Virchow)|
@@ -464,6 +482,7 @@ PathBench supports a wide range of different feature extractors, including SOTA 
 | Hibou-B | Automatic | [Link](https://huggingface.co/histai/hibou-b) |
 | Hibou-L | Gated | [Link](https://huggingface.co/histai/hibou-L)
 | UNI | Gated | [Link](https://huggingface.co/MahmoodLab/UNI) |
+| CONCH | Gated | [Link](https://huggingface.co/MahmoodLab/CONCH) |
 | Prov-GigaPath | Gated | [Link](https://huggingface.co/prov-gigapath/prov-gigapath) |
 | Kaiko-S8 | Automatic | [Link](https://github.com/kaiko-ai/towards_large_pathology_fms) |
 | Kaiko-S16 | Automatic | [Link](https://github.com/kaiko-ai/towards_large_pathology_fms) |
@@ -472,13 +491,14 @@ PathBench supports a wide range of different feature extractors, including SOTA 
 | Kaiko-L14 | Automatic | [Link](https://github.com/kaiko-ai/towards_large_pathology_fms) |
 | H-Optimus-0 | Automatic | [Link](https://huggingface.co/bioptimus/H-optimus-0) |
 
+
 ## MIL aggregators
 In addition to a wide range of feature extractors, PathBench also includes a wide variety of MIL aggregation methods. Most of these support all tasks (Binary classification, Muliclass classifcation, regression and survival prediction), but some like the CLAM-models only support binary classification. We are actively working on extending support for these models.
 
 | MIL aggregator | Bin. class. | Multi-class. | Regression | Survival | Link |
 |----------|----------|----------|----------|----------|----------|
-| CLAM-SB | Supported | Not Supported | Not Supported | Not Supported | [Link](https://github.com/mahmoodlab/CLAM) |
-| CLAM-MB | Supported | Not Supported | Not Supported | Not Supported | [Link](https://github.com/mahmoodlab/CLAM)  |
+| CLAM-SB | Supported | Supported | Supported | Supported | [Link](https://github.com/mahmoodlab/CLAM) |
+| CLAM-MB | Supported | Supported |Supported | Supported | [Link](https://github.com/mahmoodlab/CLAM)  |
 | Attention MIL | Supported | Supported | Supported | Supported | [Link](https://github.com/AMLab-Amsterdam/AttentionDeepMIL)|
 | TransMIL | Supported | Supported | Supported | Supported | [Link](https://github.com/szc19990412/TransMIL) |
 | HistoBistro Transformer | Supported | Supported | Supported | Supported | [Link](https://github.com/peng-lab/HistoBistro) |
@@ -491,6 +511,12 @@ In addition to a wide range of feature extractors, PathBench also includes a wid
 | Distribution-pool MIL | Supported | Supported | Supported | Supported | NA |
 | VarMIL | Supported | Supported | Supported | Supported | [Link](https://github.com/NKI-AI/dlup-lightning-mil)|
 | DSMIL | Supported | Supported | Supported | Supported | [Link](https://github.com/binli123/dsmil-wsi)  |
+| PERCEIVER-MIL | Supported | Supported | Supported | Supported | [Link](https://arxiv.org/abs/2103.03206) |
+| Adaptive Instance Ranking (AIR)-MIL | Supported | Supported | Supported | Supported | NA |
+| TopK-MIL | Supported | Supported | Supported | Supported | NA |
+| Weighted Mean MIL | Supported | Supported | Supported | Supported | NA |
+| Gated Attention MIL | Supported | Supported | Supported | Supported | NA |
+| Instance-Level (IL)-MIL | Supported | Supported | Supported | Supported | NA |
 
 
 ## Extending PathBench
