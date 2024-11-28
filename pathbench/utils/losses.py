@@ -4,31 +4,76 @@ from torch import Tensor
 import torch.nn as nn
 import logging
 
-def cox_ph_loss_sorted(log_h: Tensor, events: Tensor, event_weight=1.0, censored_weight=1.0, eps: float = 1e-7) -> Tensor:
-    """CoxPH loss requires sorted inputs by descending duration time."""
-    if events.dtype is torch.bool:
-        events = events.float()
+def cox_ph_loss_breslow_weighted(log_h: torch.Tensor, durations: torch.Tensor, events: torch.Tensor,
+                                 event_weight=1.0, censored_weight=1.0, eps: float = 1e-7) -> torch.Tensor:
+    """
+    Computes the Cox PH loss with Breslow's approximation for tied event times,
+    including weights for events and censored observations.
+
+    Args:
+        log_h (Tensor): Predicted log hazard ratios (shape [n_samples]).
+        durations (Tensor): Observed durations or times (shape [n_samples]).
+        events (Tensor): Event indicators (1 if event occurred, 0 if censored) (shape [n_samples]).
+        event_weight (float): Weight for events.
+        censored_weight (float): Weight for censored observations.
+        eps (float): Small constant to avoid division by zero.
+
+    Returns:
+        loss (Tensor): Computed loss value.
+    """
+    # Ensure tensors are of correct shape
+    durations = durations.view(-1)
     events = events.view(-1)
     log_h = log_h.view(-1)
-    gamma = log_h.max()
-    
-    # Calculate cumulative hazard
-    log_cumsum_h = log_h.sub(gamma).exp().cumsum(0).add(eps).log().add(gamma)
-    
-    # Apply weights based on event or censoring
-    weights = torch.where(events == 1, event_weight, censored_weight)
-    
-    # Compute weighted loss (use weights for events and censored samples)
-    loss = -log_h.sub(log_cumsum_h).mul(events).mul(weights).sum().div(events.sum().add(eps))
-    
-    return loss
 
-def cox_ph_loss(log_h: Tensor, durations: Tensor, events: Tensor, event_weight=1.0, censored_weight=1.0, eps: float = 1e-7) -> Tensor:
-    """CoxPH loss that uses sorted inputs by descending duration."""
-    idx = durations.sort(descending=True)[1]
-    events = events[idx]
-    log_h = log_h[idx]
-    return cox_ph_loss_sorted(log_h, events, event_weight=event_weight, censored_weight=censored_weight, eps=eps)
+    # Number of samples
+    n = durations.shape[0]
+
+    # Assign weights based on event or censoring
+    weights = torch.where(events == 1, event_weight, censored_weight)
+
+    # Sort by descending durations (to handle risk sets correctly)
+    sorted_indices = torch.argsort(durations, descending=True)
+    durations = durations[sorted_indices]
+    events = events[sorted_indices]
+    log_h = log_h[sorted_indices]
+    weights = weights[sorted_indices]
+
+    # Unique event times and counts of tied events at each unique time
+    unique_times, counts = torch.unique(durations[events == 1], return_counts=True)
+
+    # Initialize loss
+    loss = torch.tensor(0.0, dtype=log_h.dtype, device=log_h.device)
+
+    # Cumulative sum of exp(log_h) (risk set denominator)
+    exp_log_h = torch.exp(log_h)
+    cum_exp_log_h = torch.cumsum(exp_log_h, dim=0)
+
+    # Iterate over each unique event time
+    for i, time in enumerate(unique_times):
+        # Get the indices of individuals who experienced the event at this time (tied events)
+        at_risk = durations >= time
+        event_at_time = (durations == time) & (events == 1)
+        num_events_at_time = counts[i]
+
+        # Breslow approximation: sum log_h for tied events
+        sum_log_h_events = log_h[event_at_time].sum()
+
+        # Calculate the denominator (risk set) for this event time
+        denom = cum_exp_log_h[at_risk].sum()
+
+        # Breslow approximation: adjust for tied events by using the same denominator for all tied events
+        loss_term = sum_log_h_events - num_events_at_time * torch.log(denom + eps)
+
+        # Apply event weights
+        loss += loss_term * event_weight
+
+    # Normalize by total number of events
+    total_events = events.sum()
+    if total_events > 0:
+        loss = -loss / total_events
+
+    return loss
 
 class CoxPHLoss(nn.Module):
     """CoxPH loss class with event and censored weights."""
@@ -40,21 +85,147 @@ class CoxPHLoss(nn.Module):
     def forward(self, preds, targets):
         """
         Args:
-            preds (torch.Tensor): Predictions from the model.
-            targets (torch.Tensor): Target values containing durations and event indicators.
-        
+            preds (torch.Tensor): Predictions from the model (shape [n_samples]).
+            targets (torch.Tensor): Target values containing durations and event indicators (shape [n_samples, 2]).
+
         Returns:
             torch.Tensor: Weighted loss value.
         """
         durations = targets[:, 0]
         events = targets[:, 1]
-        
+
         # Check for zero events and handle accordingly
         if torch.sum(events) == 0:
             return torch.tensor(1e-6, dtype=preds.dtype, device=preds.device)
-        
-        # Calculate log_h from preds
-        loss = cox_ph_loss(preds, durations, events, self.event_weight, self.censored_weight).float()
+
+        # Calculate loss using the weighted Cox PH loss with Breslow's approximation
+        loss = cox_ph_loss_breslow_weighted(
+            preds,
+            durations,
+            events,
+            event_weight=self.event_weight,
+            censored_weight=self.censored_weight
+        ).float()
+        return loss
+
+def cox_ph_loss_breslow_weighted(log_h: torch.Tensor, durations: torch.Tensor, events: torch.Tensor,
+                                 event_weight=1.0, censored_weight=1.0, eps: float = 1e-7) -> torch.Tensor:
+    """
+    Computes the Cox PH loss with Breslow's approximation for tied event times,
+    including weights for events and censored observations.
+
+    Args:
+        log_h (Tensor): Predicted log hazard ratios (shape [n_samples]).
+        durations (Tensor): Observed durations or times (shape [n_samples]).
+        events (Tensor): Event indicators (1 if event occurred, 0 if censored) (shape [n_samples]).
+        event_weight (float): Weight for events.
+        censored_weight (float): Weight for censored observations.
+        eps (float): Small constant to avoid division by zero.
+
+    Returns:
+        loss (Tensor): Computed loss value.
+    """
+    # Ensure tensors are of correct shape
+    durations = durations.view(-1)
+    events = events.view(-1)
+    log_h = log_h.view(-1)
+
+    # Number of samples
+    n = durations.shape[0]
+
+    # Assign weights based on event or censoring
+    weights = torch.where(events == 1, event_weight, censored_weight)
+
+    # Sort by descending durations
+    sorted_indices = torch.argsort(durations, descending=True)
+    durations = durations[sorted_indices]
+    events = events[sorted_indices]
+    log_h = log_h[sorted_indices]
+    weights = weights[sorted_indices]
+
+    # Compute cumulative sums of exp(log_h)
+    exp_log_h = torch.exp(log_h)
+    cum_exp_log_h = torch.cumsum(exp_log_h, dim=0)
+
+    # Compute the log of cumulative sums
+    log_cum_exp_log_h = torch.log(cum_exp_log_h + eps)
+
+    # Compute the loss components
+    log_likelihood = (log_h - log_cum_exp_log_h) * events * weights
+
+    # Negative partial log-likelihood
+    loss = -log_likelihood.sum() / (events.mul(weights).sum() + eps)
+
+    return loss
+class ExponentialConcordanceLoss(nn.Module):
+    def __init__(self, event_weight=1.0, censored_weight=1.0):
+        super().__init__()
+        self.event_weight = event_weight
+        self.censored_weight = censored_weight
+
+    def forward(self, preds, targets):
+        """
+        Computes the Exponential Concordance Loss with event and censoring weights.
+
+        Args:
+            preds (Tensor): Predicted risk scores (shape [n_samples]).
+            targets (Tensor): Tensor containing durations and event indicators (shape [n_samples, 2]).
+
+        Returns:
+            loss (Tensor): Computed loss value.
+        """
+        durations = targets[:, 0]
+        events = targets[:, 1]
+        # Ensure tensors are of correct shape and type
+        durations = durations.view(-1)
+        events = events.view(-1)
+        preds = preds.view(-1)
+
+        n = len(durations)
+
+        # Create pairwise comparison matrices
+        durations_i = durations.unsqueeze(0).repeat(n, 1)
+        durations_j = durations.unsqueeze(1).repeat(1, n)
+        events_i = events.unsqueeze(0).repeat(n, 1)
+        events_j = events.unsqueeze(1).repeat(1, n)
+        preds_i = preds.unsqueeze(0).repeat(n, 1)
+        preds_j = preds.unsqueeze(1).repeat(1, n)
+
+        # Mask for valid pairs: durations[i] < durations[j]
+        valid_pairs = (durations_i < durations_j)
+
+        # Apply event and censoring weights
+        weights_i = torch.where(events_i == 1, self.event_weight, self.censored_weight)
+        weights_j = torch.where(events_j == 1, self.event_weight, self.censored_weight)
+        pair_weights = weights_i * weights_j  # Combine weights for both individuals in the pair
+
+        # Mask for events[i] == 1 (event occurred for individual i)
+        event_i_mask = (events_i == 1)
+
+        # Final mask: valid pairs where event occurred for individual i
+        final_mask = valid_pairs & event_i_mask
+
+        # Difference in predictions
+        pred_diff = preds_i - preds_j  # Shape: [n_samples, n_samples]
+
+        # Compute exponential loss components
+        exp_neg_pred_diff = torch.exp(-pred_diff)
+
+        # Apply masks and weights
+        loss_matrix = exp_neg_pred_diff * final_mask.float() * pair_weights
+
+        # Sum over all valid pairs
+        loss = loss_matrix.sum()
+
+        # Number of valid pairs
+        num_pairs = final_mask.float().sum()
+
+        # Avoid division by zero
+        if num_pairs > 0:
+            loss = loss / num_pairs
+        else:
+            loss = torch.tensor(0.0, dtype=preds.dtype, device=preds.device)
+
         return loss
 
 class RankingLoss(nn.Module):

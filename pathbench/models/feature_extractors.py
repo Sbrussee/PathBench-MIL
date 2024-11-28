@@ -21,6 +21,7 @@ import math
 import functools
 from functools import reduce
 from operator import mul
+from conch.open_clip_custom import create_model_from_pretrained
 
 
 # Directory to save pretrained weights
@@ -840,28 +841,6 @@ class kaiko_l14(TorchFeatureExtractor):
             'kwargs': {}
         }
 
-#TODO: Implement CONCH
-"""
-@register_torch
-class conch(TorchFeatureExtractor):
-    def __init__(self, tile_px=256):
-        super().__init__()
-        self.model = create_model_from_pretrained("conch_ViT-B-16", "hf_hub:MahmoodLab/conch", hf_auth_token=keys['conch'])
-        self.model.to('cuda')
-        self.num_features = 1024
-        self.transform = transforms.Compose(
-            [
-                transforms.Resize(224),
-                # Transform to float tensor
-                transforms.ConvertImageDtype(torch.float32),
-                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-            ]
-        )
-        self.model.eval()
-        # Slideflow standardization
-        self.preprocess_kwargs = {'standardize': False}
-"""
-
 class VisionTransformerMoCoWithoutHead(VisionTransformer):
     """
     Vision Transformer model with MoCo pretraining, without the final fully connected layer
@@ -1577,7 +1556,6 @@ class transpath_mocov3(TorchFeatureExtractor):
         
 @register_torch
 class conch(TorchFeatureExtractor):
-    from conch.open_clip_custom import create_model_from_pretrained
     
     def __init__(self, tile_px=256):
         super().__init__()
@@ -1608,6 +1586,12 @@ class conch(TorchFeatureExtractor):
         self.model.eval()
         # Slideflow standardization
         self.preprocess_kwargs = {'standardize': False}
+
+    def dump_config(self):
+        return {
+            'class': 'conch',
+            'kwargs': {}
+        }
 
 @register_torch
 class exaone_path(TorchFeatureExtractor):

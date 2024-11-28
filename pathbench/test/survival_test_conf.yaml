@@ -1,22 +1,24 @@
 experiment:
   project_name: TCGA_LUSC
-  annotation_file: /exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/pathbench/test/dataset2_survival.csv
+  annotation_file: pathbench/test/dataset2_survival.csv
   balancing: category
-  split_technique: fixed
-  k: 3
+  class_weighting: False
+  split_technique: k-fold
+  k: 5
   val_fraction: 0.1
-  best_epoch_based_on: concordance_index # Metric to be used for selecting the best epoch, can be val_loss or any metric in evaluation
-  epochs: 25 # Number of epochs for training
-  batch_size: 32 # Batch size for training
+  best_epoch_based_on: concordance_index  # Metric to be used for selecting the best epoch, can be val_loss or any metric in evaluation
+  epochs: 50 # Number of epochs for training
+  batch_size: 64 # Batch size for training
   bag_size: 512 # Bag size for MIL models
   encoder_layers: 1 # Number of layers in the MIL encoder
-  z_dim: 64 # Dimension of the latent space in the MIL encoder
+  z_dim: 256 # Dimension of the latent space in the MIL encoder
   dropout_p: 0.1 # Dropout probability for the MIL model
-  num_workers: 0 # Number of workers for data loading, 0 for no parallelization.
+  num_workers: 2 # Number of workers for data loading, 0 for no parallelization.
   aggregation_level: patient # Aggregation level can be 'slide' or 'patient'
   task: survival # Task can be 'classification', 'regression' or 'survival'
   mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
-  custom_metrics: [ConcordanceIndex] # Can be any metric as specified in utils/metrics.py, or None, in which case the default task metrics will be used.
+  custom_metrics: [ConcordanceIndex]
+  report: False
 
   qc: # List of quality control methods to be used
     - GaussianV2
@@ -33,19 +35,10 @@ experiment:
     - brier_score
 
   visualization:
-    - survival_roc
-    - calibration
     - concordance_index
-
-  qc: # List of quality control methods to be used
-    - GaussianV2
-    - Otsu-CLAHE
-
-  qc_filters: #Tile-level filters for discarding tiles
-    grayspace_threshold : 0.05 #Pixels below this value (ranged 0-1) are considered gray.
-    grayspace_fraction: 0.6 # Image tiles with grayspace above this fraction are discarded.
-    whitespace_threshold: 230 #Pixel intensities (0-255) above this value are considered white.
-    whitespace_fraction: 1.0 # Image tiles with whitespace above this fraction are discarded.
+    - calibration
+    - kaplan_meier
+    - survival_roc
 
 datasets:
   - name: train
@@ -64,38 +57,23 @@ benchmark_parameters:
   tile_px:
     - 256
   tile_um:
+    - 256
     - 128
   normalization:
     - macenko
-    #- reinhard
+  
   feature_extraction:
-    #- resnet50_imagenet
-    - CTransPath
-    #- RetCCL
-    - PLIP
-    #- uni
-    - phikon_v2
-    - h_optimus_0
+    - resnet50_imagenet
+    - uni
 
   mil:
-    - clam_sb
-    - dsmil
-    - varmil
     - attention_mil
 
-  loss: # Loss functions, as specified in losses.py
+  loss:
     - CoxPHLoss
-    - RankingLoss
     - DeepHitLoss
+    - RankingLoss
 
-  #augmentation: # MIL-friendly augmentations, as specified in augmentations.py
-  #  - patch_mixing
-
-  activation_function: # activation function for the MIL encoder, supports any pytorch.nn activation function.
-    - ReLU
-
-  optimizer: # Optimizers, can be any fastai optimizer (Default: Adam)
-    - Adam
 
 weights_dir: ../pretrained_weights
 #hf_token: None

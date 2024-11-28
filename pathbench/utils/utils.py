@@ -9,6 +9,8 @@ import weakref
 import psutil
 import torch
 
+CURRENT_OPEN_FILES = []
+
 def calculate_entropy(row : pd.Series):
     """
     Calculate the entropy based on the row (instance prediction).
@@ -29,6 +31,33 @@ def calculate_entropy(row : pd.Series):
         return - (p0 * np.log2(p0) + p1 * np.log2(p1))
     else:
         return 0.0
+
+def list_open_files():
+    """
+    List the open files in the process
+
+    Returns:
+        The list of open files
+    """
+    # Get the process ID
+    pid = os.getpid()
+
+    #Get process
+    process = psutil.Process(pid)
+
+    #Get open files
+    open_files = process.open_files()
+
+    #Print all newly opened files (not in current open files)
+    for file in open_files:
+        logging.info("Number of open files:", len(open_files))
+        if file not in CURRENT_OPEN_FILES:
+            CURRENT_OPEN_FILES.append(file)
+            logging.info("Newly opened file:", file.path)
+            logging.info("File descriptor:", file.fd)
+            logging.info("File mode:", file.mode)
+
+    
 
 def assign_group(certainty : float):
     """

@@ -25,16 +25,23 @@ def read_config(config_file : str):
 
 # Check if GPU is available
 if torch.cuda.is_available():
-    # Get the current GPU device
-    device = torch.cuda.current_device()
-
-    # Get the name of the GPU
-    gpu_name = torch.cuda.get_device_name(device)
-
-    print(f'Using GPU: {gpu_name}')
+    try:
+        # Check if device already set
+        device = torch.cuda.current_device()
+    except NameError:
+        # Set device to GPU
+        device = torch.device('cuda')
+        torch.cuda.set_device(device)
+        logging.info(f'Using GPU: {torch.cuda.get_device_name(device)}')
 else:
-    print('GPU not available. Using CPU.')
-
+    try:
+        # Check if device already set
+        device = torch.cuda.current_device()
+    except NameError:
+        # Set device to CPU
+        device = torch.device('cpu')
+        logging.info('Using CPU')
+        
 class Experiment():
     """
     Experiment class, designed to load the data and the configuration of a benchmarking
