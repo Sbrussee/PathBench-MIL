@@ -49,6 +49,11 @@ import optuna.visualization as opt_vis
 from optuna.samplers import *
 from optuna.pruners import *
 
+import random
+import gc
+
+from conch.open_clip_custom import create_model_from_pretrained 
+
 #Set logging level
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -186,6 +191,11 @@ def balance_dataset(dataset : sf.Dataset, task: str, config : dict):
     Returns:
         The balanced dataset
     """
+    #If config['experiment']['balancing'] does not exist, no balancing is applied
+    if 'balancing' not in config['experiment']:
+        logging.info("No balancing specified, continuing without balancing")
+        return dataset
+
     if task == 'survival':
         headers = ['event']
         logging.info(f"Balancing datasets on {headers} for training using {config['experiment']['balancing']} strategy")
@@ -282,13 +292,14 @@ def generate_bags(config : dict, project : sf.Project, all_data : sf.Dataset,
     return bags
 
 
-def set_mil_config(config : dict, combination_dict : dict):
+def set_mil_config(config : dict, combination_dict : dict, task: str):
     """
     Set the MIL configuration based on the configuration
 
     Args:
         config: The configuration dictionary
         combination_dict: The combination dictionary
+        task: Task for the model (e.g. classification, regression, survival)
 
     Returns:
         The MIL configuration
@@ -298,13 +309,14 @@ def set_mil_config(config : dict, combination_dict : dict):
         mil_method = get_model_class(aggregators, combination_dict['mil'].lower())
         mil_conf = mil_config(mil_method, aggregation_level=config['experiment']['aggregation_level'], trainer="fastai",
                             epochs=config['experiment']['epochs'], drop_last=True,
-                            batch_size=config['experiment']['batch_size'], bag_size=config['experiment']['bag_size'])
+                            batch_size=config['experiment']['batch_size'], bag_size=config['experiment']['bag_size'],
+                            task=task)
     else:
         mil_method = combination_dict['mil'].lower()
-        #Check whether multiclass and CLAM problem
         mil_conf = mil_config(mil_method, aggregation_level=config['experiment']['aggregation_level'], trainer="fastai",
                     epochs=config['experiment']['epochs'], drop_last=True,
-                    batch_size=config['experiment']['batch_size'], bag_size=config['experiment']['bag_size'])
+                    batch_size=config['experiment']['batch_size'], bag_size=config['experiment']['bag_size'],
+                    task=task)
     return mil_conf
 
 
@@ -337,6 +349,9 @@ def plot_across_splits(config : dict, survival_results_per_split : list, test_su
         if 'calibration' in config['experiment']['visualization']:
             plot_calibration_across_splits(survival_results_per_split, save_string, 'val', config)
             plot_calibration_across_splits(test_survival_results_per_split, save_string, 'test', config)
+        if 'kaplan_meier' in config['experiment']['visualization']:
+            plot_kaplan_meier_curves_across_folds(survival_results_per_split, save_string, 'val', config)
+            plot_kaplan_meier_curves_across_folds(test_survival_results_per_split, save_string, 'test', config)
     
     elif config['experiment']['task'] == 'regression':
         if 'residuals' in config['experiment']['visualization']:
@@ -571,8 +586,9 @@ def benchmark(config, project):
                                     whitespace_fraction = float(config['experiment']['qc_filters']['whitespace_fraction']),
                                     grayspace_threshold = float(config['experiment']['qc_filters']['grayspace_threshold']),
                                     whitespace_threshold = int(config['experiment']['qc_filters']['whitespace_threshold']),
-                                    num_threads = config['experiment']['num_workers'])
-
+                                    num_threads = config['experiment']['num_workers'],
+                                    report=config['experiment']['report'],)
+                                    
             #Select which datasets should be used for training and testing
             datasets = config['datasets']
 
@@ -613,7 +629,7 @@ def benchmark(config, project):
             #Generate bags
             bags = generate_bags(config, project, all_data, combination_dict, string_without_mil, feature_extractor)
             #Set MIL configuration
-            mil_conf = set_mil_config(config, combination_dict)
+            mil_conf = set_mil_config(config, combination_dict, task)
 
             #Create results directory
             os.makedirs(f"experiments/{config['experiment']['project_name']}/results", exist_ok=True)
@@ -718,10 +734,6 @@ def benchmark(config, project):
                         output_dir = f"experiments/{config['experiment']['project_name']}/visualizations/top_tiles"
                         for slide_name in val_slides:
                             attention = np.load(f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/attention/{slide_name}_att.npz")
-                            logging.info("Attention keys:", attention.files)
-                            logging.info("Attention:", attention['arr_0'])
-                            logging.info("Attention shape:", attention['arr_0'].shape)
-
                             plot_top5_attended_tiles_per_class(slide_name,
                                                                 attention,
                                                                 test_dict['tfrecord_dir'],
@@ -755,15 +767,22 @@ def benchmark(config, project):
             plot_across_splits(config, survival_results_per_split, test_survival_results_per_split,
                                 val_results_per_split, test_results_per_split, val_pr_per_split, test_pr_per_split,
                                 save_string)
+
+            #Close all unused file handles
+            gc.collect()
                                     
         except Exception as e:
             logging.warning(f"Combination {save_string} was not succesfully trained due to Error {e}")
             logging.warning(traceback.format_exc())
+        
 
     print(val_df, test_df)
     print(list(benchmark_parameters.keys()))
 
     val_df_agg, test_df_agg = build_aggregated_results(val_df, test_df, config, benchmark_parameters, aggregation_functions)
+
+    visualize_benchmarking_results_for_all_metrics(val_df_agg, config, "val")
+    visualize_benchmarking_results_for_all_metrics(test_df_agg, config, "test")
     
     find_and_apply_best_model(config, val_df_agg, test_df_agg, benchmark_parameters, val_df, test_df,
                               val, test_set, target)
@@ -1027,6 +1046,7 @@ def optimize_parameters(config : dict, project : sf.Project):
         z_dim = trial.suggest_int('z_dim', 128, 512)
         encoder_layers = trial.suggest_int('encoder_layers', 1, 3)
         balancing = trial.suggest_categorical('balancing', ['slide', 'tile', 'patient', 'category'])
+        class_weighting = trial.suggest_categorical('class_weighting', [True, False])
         tile_px = trial.suggest_categorical('tile_px', config['benchmark_parameters']['tile_px'])
         tile_um = trial.suggest_categorical('tile_um', config['benchmark_parameters']['tile_um'])
         normalization = trial.suggest_categorical('normalization', config['benchmark_parameters']['normalization'])
@@ -1044,6 +1064,7 @@ def optimize_parameters(config : dict, project : sf.Project):
         config['experiment']['z_dim'] = z_dim
         config['experiment']['encoder_layers'] = encoder_layers
         config['experiment']['balancing'] = balancing
+        config['experiment']['class_weighting'] = class_weighting
 
         combination_dict = {
             'tile_px': tile_px,
@@ -1098,7 +1119,8 @@ def optimize_parameters(config : dict, project : sf.Project):
                                whitespace_fraction = float(config['experiment']['qc_filters']['whitespace_fraction']),
                                grayspace_threshold = float(config['experiment']['qc_filters']['grayspace_threshold']),
                                whitespace_threshold = int(config['experiment']['qc_filters']['whitespace_threshold']),
-                               num_threads=config['experiment']['num_workers'])
+                               num_threads=config['experiment']['num_workers'],
+                               report=config['experiment']['report'])
                             
         #Select which datasets should be used for training and testing
         datasets = config['datasets']
@@ -1117,6 +1139,8 @@ def optimize_parameters(config : dict, project : sf.Project):
 
         # Filter test set
         test_set = all_data.filter(filters={'dataset': [d['name'] for d in test_datasets]})
+
+        splits_file = determine_splits_file(config, project_directory)
 
         logging.info("Splitting datasets...")
         splits = split_datasets(config, project, splits_file, target, project_directory, train_set)
@@ -1138,7 +1162,7 @@ def optimize_parameters(config : dict, project : sf.Project):
         #Generate bags
         bags = generate_bags(config, project, all_data, combination_dict, string_without_mil, feature_extractor)
         #Set MIL configuration
-        mil_conf = set_mil_config(config, combination_dict)
+        mil_conf = set_mil_config(config, combination_dict, task)
 
         #Create results directory
         os.makedirs(f"experiments/{config['experiment']['project_name']}/results", exist_ok=True)
@@ -1260,63 +1284,71 @@ def optimize_parameters(config : dict, project : sf.Project):
 
     # Load the specified configuration
     objective_metric = config['optimization']['objective_metric']
-
     task = config['experiment']['task']
-    benchmark_parameters = config['benchmark_parameters']
     project_directory = f"experiments/{config['experiment']['project_name']}"
-    annotations = project.annotations
-    logging.info(f"Using {project_directory} for project directory...")
-    logging.info(f"Using {annotations} for annotations...")
+
+    #Create optimization directory
+    os.makedirs(f"experiments/{config['experiment']['project_name']}/optimization", exist_ok=True)
     
-    #Determine splits file
-    splits_file = determine_splits_file(config, project_directory)
+    # Use the study name and load flag from config
+    study_name = config['optimization']['study_name']
+    load_study = config['optimization']['load_study']
 
-    #Set the evaluation metrics
-    config, evaluation_metrics, aggregation_functions = set_metrics(config)
+    # Define the storage path (e.g., an SQLite database)
+    storage_path = f"sqlite:///{project_directory}/optimization/optuna_study.db"
 
-    logging.info(f"Using {splits_file} splits for benchmarking...")
+    logging.info(f"Using {storage_path} for study checkpointing...")
 
-    # Load the sampler/pruner
-    sampler = config['optimization'].get('sampler', 'TPESampler')
-    sampler_class = getattr(optuna.samplers, sampler, TPESampler)()
-    if 'pruner' in config['optimization']:
-        pruner = config['optimization'].get('pruner', 'HyperbandPruner')
-        pruner_class = getattr(optuna.pruners, pruner)()
-        logging.info(f"Using {sampler} sampler and {pruner} pruner...")
+    # Load or create the study based on the 'load_study' flag
+    if load_study and os.path.exists(storage_path):
+        # Attempt to load the existing study
+        study = optuna.load_study(study_name=study_name, storage=storage_path)
+        logging.info(f"Loaded existing study '{study_name}'. Continuing optimization...")
     else:
-        logging.info(f"Using {sampler} sampler...")
+        logging.info(f"Creating new study '{study_name}'...")
+        # Create a new study or load if it already exists
+        sampler = config['optimization'].get('sampler', 'TPESampler')
+        sampler_class = getattr(optuna.samplers, sampler, TPESampler)()
+        
+        if 'pruner' in config['optimization']:
+            pruner = config['optimization'].get('pruner', 'HyperbandPruner')
+            pruner_class = getattr(optuna.pruners, pruner)()
+            logging.info(f"Using {sampler} sampler and {pruner} pruner...")
+        else:
+            pruner_class = None
+            logging.info(f"Using {sampler} sampler without pruner...")
 
-    # Determine the direction of the optimization
-    if config['optimization']['objective_mode'] == 'max':
-        direction = 'maximize'
-    elif config['optimization']['objective_mode'] == 'min':
-        direction = 'minimize'
-    else:
-        raise ValueError("Objective mode should be either 'max' or 'min'")
-    # Create the study with the specified sampler and pruner
-    study = optuna.create_study(sampler=sampler_class, pruner=pruner_class, direction=direction)
-
-    # Optimize the study
+        direction = 'maximize' if config['optimization']['objective_mode'] == 'max' else 'minimize'
+        study = optuna.create_study(
+            study_name=study_name,
+            direction=direction,
+            sampler=sampler_class,
+            pruner=pruner_class,
+            storage=storage_path,
+            load_if_exists=True  # This ensures loading if the study already exists
+        )
+    
+    # Start the optimization
+    logging.info("Starting optimization...")
     study.optimize(objective, n_trials=config['optimization']['trials'])
 
     # Visualize the optimization results
     current_date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    fig = vis.plot_param_importances(study)
+    fig = opt_vis.plot_param_importances(study)
     plt.title("Parameter Importances")
     plt.savefig(f"experiments/{config['experiment']['project_name']}/optimization/parameter_importances_{current_date}.png")
     plt.close()
 
-    fig = vis.plot_optimization_history(study)
+    fig = opt_vis.plot_optimization_history(study)
     plt.title("Optimization History")
     plt.savefig(f"experiments/{config['experiment']['project_name']}/optimization/optimization_history_{current_date}.png")
     plt.close()
 
     # Save the best parameters
     best_params = study.best_params
-    # Create optimization directory
     os.makedirs(f"experiments/{config['experiment']['project_name']}/optimization", exist_ok=True)
     with open(f"experiments/{config['experiment']['project_name']}/optimization/best_params.json", 'w') as f:
         json.dump(best_params, f)
 
-    logging.info(f"Best parameters: {best_params} found in trial {study.best_trial}, with value: {study.best_value}")
-    logging.info("Optimization finished...")
+    logging.info(f"Best parameters: {best_params} found in trial {study.best_trial.number}, with value: {study.best_value}")
+    logging.info("Optimization finished.")

@@ -2,6 +2,7 @@ experiment:
   project_name: TCGA_LUSC
   annotation_file: /exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/pathbench/test/dataset1_multi_classification_pathologic_stage.csv
   balancing: category
+  class_weighting: True
   split_technique: fixed
   k: 3
   val_fraction: 0.1
@@ -12,11 +13,12 @@ experiment:
   encoder_layers: 1 # Number of layers in the MIL encoder
   z_dim: 256 # Dimension of the latent space in the MIL encoder
   dropout_p: 0.1 # Dropout probability for the MIL model
-  num_workers: 0 # Number of workers for data loading, 0 for no parallelization.
+  num_workers: 4 # Number of workers for data loading, 0 for no parallelization.
   aggregation_level: slide # Aggregation level can be 'slide' or 'patient'
   task: classification # Task can be 'classification', 'regression' or 'survival'
   mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
   custom_metrics: [RocAuc]
+  report: False
 
   qc: # List of quality control methods to be used
     - GaussianV2
@@ -67,6 +69,7 @@ benchmark_parameters:
     #- uni
     - h_optimus_0
     - phikon_v2
+    - uni
   mil:
     #- CLAM_SB
     #- dsmil

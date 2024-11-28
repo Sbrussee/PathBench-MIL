@@ -17,7 +17,8 @@ experiment:
   task: classification # Task can be 'classification', 'regression' or 'survival'
   mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
   custom_metrics: [RocAuc] # Custom metrics to be used, needs to be defined in metrics.py or as a fastai-metric: https://docs.fast.ai/metrics.html
-
+  report: False # Whether to generate a tile extraction report
+  
   qc: # List of quality control methods to be used
     - GaussianV2
     - Otsu-CLAHE
@@ -37,6 +38,8 @@ experiment:
     - roc_curve
 
 optimization: # Optimization parameters
+  study_name: Exp1 # Name of the optimization study
+  load_study: True # Whether to load an existing study, which continues the optimization from a checkpoint
   objective_metric: balanced_accuracy # Objective metric to be optimized
   objective_mode: max # Optimization mode, can be 'max' or 'min'
   objective_dataset: test # Dataset to be used for the objective metric, can be 'val' or 'test'

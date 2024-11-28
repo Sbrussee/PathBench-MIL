@@ -7,6 +7,8 @@ import torch
 from PIL import Image, ImageDraw, ImageFont
 from sklearn.metrics import auc
 from lifelines.utils import concordance_index
+from lifelines import KaplanMeierFitter
+from lifelines.statistics import logrank_test
 from sklearn.calibration import calibration_curve
 from sksurv.metrics import cumulative_dynamic_auc
 import scipy.stats as stats
@@ -14,75 +16,8 @@ from sklearn.metrics import precision_recall_curve, average_precision_score, roc
 import seaborn as sns
 import logging
 import sys
-
-def visualize_activations(config : dict, dataset : str,
-                          tfrecord_dir : str, bag_dir : str, target : str, save_string : str):
-    """
-    Visualize the activations based on the configuration
-
-    Args:
-        config: The configuration dictionary
-        dataset: The dataset string
-        tfrecord_dir: Directory with tfrecords
-        bag_dir: Directory with bags
-        target: The target variable
-        save_string: The save string
-    
-    Returns:
-        None
-
-    """
-    #Retrieve features from bags
-    dts_ftrs = sf.DatasetFeatures.from_bags(bag_dir)
-
-    #Get slide-level embeddings
-
-    #Create slidemap using these features
-    slide_map = sf.SlideMap.from_features(dts_ftrs)
-    if 'umap' in config['experiment']['visualization'] or 'mosaic' in config['experiment']['visualization']:
-        logging.info("Visualizing activations...")
-        labels, unique_labels = dataset.labels(target, format='name')
-            
-        slide_map.label_by_slide(labels)
-        #Make a new directory inside visualizations
-        if not os.path.exists(f"experiments/{config['experiment']['project_name']}/visualizations/patch_level_umap_label_{save_string}_{dataset}"):
-            os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations/patch_level_umap_label_{save_string}_{dataset}")
-        slide_map.save_plot(
-            filename=f"experiments/{config['experiment']['project_name']}/visualizations/patch_level_umap_label_{save_string}_{dataset}",
-            title="Patch UMAP, by slide label",
-            subsample=2000
-        )
-
-        plt.close()
-    
-        print(dts_ftrs)
-        #Take mean of features, to get slide-level features
-        slide_ftrs = dts_ftrs.mean(axis=1)
-        print(slide_ftrs)
-        #Create a new slide map
-        slide_map = sf.SlideMap.from_features(slide_ftrs)
-        slide_map.label_by_slide(labels)
-        slide_map.save_plot(
-            filename=f"experiments/{config['experiment']['project_name']}/visualizations/slide_level_umap_label_{save_string}_{dataset}",
-            title="Slide-level UMAP, by label",
-            subsample=2000
-        )
-        plt.close()
-    if 'mosaic' in config['experiment']['visualization']:
-
-        #TOFIX: DOES NOT WORK NOW!
-        logging.info("Building mosaic...")
-        # Get list of all directories in the tfrecords dir with full path
-        try:
-            mosaic =  slide_map.build_mosaic()
-            mosaic.save(
-                filename=f"experiments/{config['experiment']['project_name']}/visualizations/slide_level_mosaic_{save_string}.png"
-            )
-            plt.close()
-        except:
-            print("Could not build mosaic")
-            pass
-
+from matplotlib import cm
+from matplotlib.patches import Patch
 
 
 def plot_roc_curve_across_splits(rates : list, save_string : str, dataset : str, config : dict):
@@ -141,7 +76,7 @@ def plot_roc_curve_across_splits(rates : list, save_string : str, dataset : str,
     
 def plot_survival_auc_across_folds(results: pd.DataFrame, save_string: str, dataset: str, config: dict):
     """
-    Plot the survival ROC-AUC across folds based on the results
+    Plot the overall survival ROC-AUC across folds with standard deviation as error margins.
 
     Args:
         results: The results
@@ -152,85 +87,111 @@ def plot_survival_auc_across_folds(results: pd.DataFrame, save_string: str, data
     Returns:
         None
     """
-
+    import warnings
     all_aucs = []
-    times_list = []
 
     os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations", exist_ok=True)
 
-    for fold_idx, (durations, events, predictions) in enumerate(results):
-        fig, ax = plt.subplots()
+    # Collect all durations to determine the overall max_duration
+    all_durations = []
+    for durations, events, predictions in results:
+        all_durations.extend(durations)
+    all_durations = np.asarray(all_durations)
+    max_duration = all_durations.max()
 
+    # Define common time points
+    times = np.linspace(0, max_duration, 100)
+
+    for fold_idx, (durations, events, predictions) in enumerate(results):
+        print(f"Processing fold {fold_idx}")
         # Ensure durations and events are numpy arrays
         durations = np.asarray(durations)
         events = np.asarray(events)
+        predictions = np.asarray(predictions)
+
+        # Check for NaNs and constants in predictions
+        if np.isnan(predictions).any():
+            print(f"Fold {fold_idx}: Predictions contain NaN values.")
+            continue
+        if np.all(predictions == predictions[0]):
+            print(f"Fold {fold_idx}: Predictions are constant.")
+            continue
 
         # Create a structured array for survival data
-        survival_data = np.array([(e, d) for e, d in zip(events, durations)], dtype=[('event', '?'), ('time', '<f8')])
-
-        # Ensure time points are within the follow-up time range
-        max_duration = durations.max()
-        times = np.linspace(0, max_duration, 100)
-        times_list.append(times)
+        survival_data = np.array(
+            list(zip(events.astype(bool), durations)),
+            dtype=[('event', bool), ('time', float)]
+        )
 
         aucs = []
-        for time in times:
-            if time >= max_duration:
-                continue  # Skip time points that are out of range
 
-            # Calculate AUC and check for validity
-            try:
-                auc_score = cumulative_dynamic_auc(survival_data, survival_data, predictions, time)[0]
-                if not np.isnan(auc_score):
-                    aucs.append(auc_score)
-            except ZeroDivisionError:
+        for time_idx, time in enumerate(times):
+            # Skip time points beyond maximum duration in the fold
+            if time >= durations.max():
+                aucs.append(np.nan)
                 continue
 
-        if aucs:
-            all_aucs.append(np.array(aucs).flatten())  # Ensure the AUC array is flattened
-            mean_auc = np.mean(aucs)
-            std_auc = np.std(aucs)
-            ax.plot(times[:len(aucs)], aucs, label=f'AUC (mean = {mean_auc:.2f}, std = {std_auc:.2f})')
+            # Count events up to current time
+            event_count = np.sum((durations <= time) & (events == 1))
+            if event_count == 0:
+                print(f"Fold {fold_idx}, Time {time}: No events occurred. AUC cannot be computed.")
+                aucs.append(np.nan)
+                continue
 
-        # Add random model baseline (0.5)
-        ax.plot(times, [0.5] * len(times), 'r--', label='Random Model (AUC = 0.5)')
-        ax.set_xlim([0, max_duration])
-        ax.set_ylim([0, 1])
-        ax.set_xlabel('Time')  
-        ax.set_ylabel('AUC')
-        ax.set_title(f'Time-dependent ROC-AUC for Fold {fold_idx + 1}')
-        ax.legend(loc="lower right")
+            # Calculate AUC
+            try:
+                with warnings.catch_warnings():
+                    warnings.filterwarnings('error')
+                    auc_scores, _ = cumulative_dynamic_auc(
+                        survival_train=survival_data,
+                        survival_test=survival_data,
+                        estimate=predictions,
+                        times=[time]
+                    )
+                    auc_score = auc_scores[0]
+                    if not np.isnan(auc_score):
+                        aucs.append(auc_score)
+                    else:
+                        print(f"Fold {fold_idx}, Time {time}: AUC is NaN.")
+                        aucs.append(np.nan)
+            except Exception as e:
+                print(f"Fold {fold_idx}, Time {time}: Exception occurred: {e}")
+                aucs.append(np.nan)
+                continue
 
-        plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/survival_roc_auc_{save_string}_{dataset}_fold_{fold_idx + 1}.png")
-        plt.close()
+        all_aucs.append(aucs)
 
-    if all_aucs:
-        fig, ax = plt.subplots()
-        # Determine the maximum length of the AUC lists
-        max_len = max(len(auc) for auc in all_aucs)
+    # Now compute mean and std AUCs at each time point
+    all_aucs = np.array(all_aucs)  # Shape: (n_folds, n_times)
 
-        # Pad the aucs lists to have the same length
-        padded_aucs = np.full((len(all_aucs), max_len), np.nan)
-        for i, auc in enumerate(all_aucs):
-            padded_aucs[i, :len(auc)] = auc
+    # Identify time points where not all values are NaN
+    valid_time_points = ~np.all(np.isnan(all_aucs), axis=0)
+    if not np.any(valid_time_points):
+        print("All time points have NaN AUCs. Cannot compute mean AUC.")
+        return
 
-        mean_aucs = np.nanmean(padded_aucs, axis=0)
-        std_aucs = np.nanstd(padded_aucs, axis=0)
-        times = times_list[0]  # Use times from the first split
+    # Get valid times
+    valid_times = times[valid_time_points]
 
-        ax.plot(times[:len(mean_aucs)], mean_aucs, label=f'Mean AUC (mean = {np.nanmean(mean_aucs):.2f}, std = {np.nanmean(std_aucs):.2f})', color='blue')
-        ax.fill_between(times[:len(mean_aucs)], mean_aucs - std_aucs, mean_aucs + std_aucs, color='blue', alpha=0.2)
+    # Compute mean and std only for valid time points
+    mean_aucs = np.nanmean(all_aucs[:, valid_time_points], axis=0)
+    std_aucs = np.nanstd(all_aucs[:, valid_time_points], axis=0)
 
-        # Add random model baseline (0.5)
-        ax.plot(times, [0.5] * len(times), 'r--', label='Random Model (AUC = 0.5)')
+    fig, ax = plt.subplots()
 
-        ax.set_xlabel('Time')
-        ax.set_ylabel('AUC')
-        ax.set_title('Time-dependent ROC-AUC (Overall)')
-        ax.legend(loc="lower right")
+    ax.plot(valid_times, mean_aucs, label='Mean AUC', color='blue')
+    ax.fill_between(valid_times, mean_aucs - std_aucs, mean_aucs + std_aucs, color='blue', alpha=0.2)
 
-        plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/survival_roc_auc_{save_string}_{dataset}_overall.png")
-        plt.close()
+    # Add random model baseline (0.5)
+    ax.plot(valid_times, [0.5] * len(valid_times), 'r--', label='Random Model (AUC = 0.5)')
+
+    ax.set_xlabel('Time')
+    ax.set_ylabel('AUC')
+    ax.set_title('Time-dependent ROC-AUC (Overall)')
+    ax.legend(loc="lower right")
+
+    plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/survival_roc_auc_{save_string}_{dataset}_overall.png")
+    plt.close()
 
 
 def plot_precision_recall_across_splits(pr_per_split: list, save_string: str, dataset: str, config: dict):
@@ -545,6 +506,131 @@ def plot_calibration_across_splits(results: pd.DataFrame, save_string: str, data
     plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/calibration_{save_string}_{dataset}.png")
     plt.close()
 
+def plot_kaplan_meier_curves_across_folds(results: pd.DataFrame, save_string: str, dataset: str, config: dict):
+    """
+    Plot the Kaplan-Meier curves by averaging the results across folds, splitting patients into high-risk and low-risk groups,
+    and include the p-value from the log-rank test.
+
+    Args:
+        results: List of tuples containing (durations, events, predictions) for each fold.
+        save_string: String used to save the plot.
+        dataset: Dataset name (e.g., 'train', 'test', 'val').
+        config: The configuration dictionary.
+
+    Returns:
+        None
+    """
+    kmf_high = KaplanMeierFitter()
+    kmf_low = KaplanMeierFitter()
+
+    # Initialize lists to collect pooled durations and events for high-risk and low-risk groups
+    all_durations_high, all_events_high = [], []
+    all_durations_low, all_events_low = [], []
+
+    # Iterate over each fold and collect high-risk and low-risk groups
+    for fold_idx, (durations, events, predictions) in enumerate(results):
+        # Split into high-risk and low-risk groups using the median of the predictions
+        median_prediction = np.median(predictions)
+
+        high_risk_mask = predictions >= median_prediction
+        low_risk_mask = predictions < median_prediction
+
+        # Append the durations and events for high-risk group
+        all_durations_high.append(durations[high_risk_mask])
+        all_events_high.append(events[high_risk_mask])
+
+        # Append the durations and events for low-risk group
+        all_durations_low.append(durations[low_risk_mask])
+        all_events_low.append(events[low_risk_mask])
+
+    # Concatenate the pooled durations and events across all folds
+    pooled_durations_high = np.concatenate(all_durations_high)
+    pooled_events_high = np.concatenate(all_events_high)
+
+    pooled_durations_low = np.concatenate(all_durations_low)
+    pooled_events_low = np.concatenate(all_events_low)
+
+    # Perform the log-rank test to compute the p-value
+    results_logrank = logrank_test(
+        pooled_durations_high,
+        pooled_durations_low,
+        event_observed_A=pooled_events_high,
+        event_observed_B=pooled_events_low
+    )
+    p_value = results_logrank.p_value
+
+    # Create a plot for the Kaplan-Meier curves averaged over folds
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # Fit and plot the Kaplan-Meier curve for the high-risk group
+    kmf_high.fit(
+        pooled_durations_high,
+        event_observed=pooled_events_high,
+        label='High Risk (Averaged)'
+    )
+    kmf_high.plot(
+        ax=ax,
+        ci_show=True,
+        show_censors=True,
+        linestyle='--'
+    )
+
+    # Fit and plot the Kaplan-Meier curve for the low-risk group
+    kmf_low.fit(
+        pooled_durations_low,
+        event_observed=pooled_events_low,
+        label='Low Risk (Averaged)'
+    )
+    kmf_low.plot(
+        ax=ax,
+        ci_show=True,
+        show_censors=True,
+        linestyle='-'
+    )
+
+    # Customize the plot
+    ax.set_title(
+        'Kaplan-Meier Curves for High-Risk and Low-Risk Groups (Averaged Across Folds)'
+    )
+    ax.set_xlabel('Time (Days)')
+    ax.set_ylabel('Survival Probability')
+    ax.legend(title="Risk Groups", loc='best')
+
+    # Format the p-value for display
+    if p_value < 0.001:
+        p_value_text = 'p < 0.001'
+    else:
+        p_value_text = f'p = {p_value:.3f}'
+
+    # Add the p-value text to the plot
+    ax.text(
+        0.95,
+        0.95,
+        p_value_text,
+        transform=ax.transAxes,
+        verticalalignment='top',
+        horizontalalignment='right',
+        fontsize=12,
+        bbox=dict(facecolor='white', alpha=0.5)
+    )
+
+    # Ensure the visualization directory exists
+    os.makedirs(
+        f"experiments/{config['experiment']['project_name']}/visualizations",
+        exist_ok=True
+    )
+
+    # Save the Kaplan-Meier plot
+    plot_path = (
+        f"experiments/{config['experiment']['project_name']}/visualizations/"
+        f"kaplan_meier_averaged_{save_string}_{dataset}.png"
+    )
+    plt.savefig(plot_path)
+    plt.close()
+
+    logging.info(
+        f"Averaged Kaplan-Meier curves for high-risk and low-risk groups saved to {plot_path}"
+    )
 
 def plot_top5_attended_tiles_per_class(slide_name : str, attention_file : str, tfr_directory : str, output_dir : str,
                                        annotation_df : pd.DataFrame, target : str, dataset : str, split : str, save_string : str):
@@ -592,8 +678,6 @@ def plot_top5_attended_tiles_per_class(slide_name : str, attention_file : str, t
     bag_index = np.load(index_path)
     tile_coordinates = bag_index['locations']  # This contains the (x, y) coordinates of the tiles
 
-    logging.info("Bag index shape: %s", tile_coordinates.shape)
-
     # Get the top 5 attention values and their indices
     top5_attention_indices = np.argsort(attention)[::-1][:5]
     top5_least_attended_indices = np.argsort(attention)[:5]
@@ -635,8 +719,6 @@ def plot_top5_attended_tiles_per_class(slide_name : str, attention_file : str, t
     for i, coord in enumerate(top5_least_attended_coordinates):
         slide, img = tfr.get_record_by_xy(coord[0], coord[1], decode=True)
 
-        # Log image shape
-        logging.info("Image shape: %s", img.shape)
 
         # Convert from Tensor to NumPy array if necessary
         if isinstance(img, torch.Tensor):
@@ -657,3 +739,86 @@ def plot_top5_attended_tiles_per_class(slide_name : str, attention_file : str, t
     plt.tight_layout()
     plt.savefig(f"{output_dir}/{dataset}_{split}_{label}_{slide_name}_{save_string}_least_attended_tiles.png")
     plt.close()
+
+def visualize_benchmarking_results_for_all_metrics(df: pd.DataFrame, config: dict, dataset: str):
+    import os
+    import matplotlib.pyplot as plt
+    from matplotlib import cm
+    from matplotlib.patches import Patch
+    import numpy as np
+    import pandas as pd
+    
+    # Dynamically select columns that are not float-valued for the combination
+    non_float_columns = df.select_dtypes(exclude=['float']).columns.tolist()
+    
+    # Combine the non-float columns to form the combination string
+    df['combination'] = df[non_float_columns].astype(str).agg(' | '.join, axis=1)
+    
+    # Identify all the metrics (columns that end with '_mean')
+    metric_columns = [col for col in df.columns if col.endswith('_mean')]
+    
+    # Create the directory to save plots
+    results_dir = f"experiments/{config['experiment']['project_name']}/results/"
+    os.makedirs(results_dir, exist_ok=True)
+    
+    # Loop through each metric and create a separate plot
+    for metric in metric_columns:
+        # Get the corresponding standard deviation column
+        metric_std = metric.replace('_mean', '_std')
+        
+        # Sort the dataframe by the current metric
+        df_sorted = df.sort_values(by=metric, ascending=False).reset_index(drop=True)
+        
+        # Create a figure for each metric
+        fig, ax = plt.subplots(figsize=(12, 10))
+        
+        # Get unique combinations and assign colors
+        unique_combinations = df_sorted['combination'].unique()
+        num_combinations = len(unique_combinations)
+        
+        # Generate a colormap with enough colors
+        if num_combinations <= 20:
+            cmap = cm.get_cmap('tab20', num_combinations)
+        else:
+            cmap = cm.get_cmap('hsv', num_combinations)
+        
+        colors = cmap(np.linspace(0, 1, num_combinations))
+        
+        # Map combinations to colors
+        color_map = {combination: colors[i] for i, combination in enumerate(unique_combinations)}
+        
+        # Map colors to combinations for the bars
+        bar_colors = df_sorted['combination'].map(color_map)
+        
+        # Plot the bar plot with numeric y values (use range(len(df_sorted)) for y-axis)
+        bars = ax.barh(range(len(df_sorted)), df_sorted[metric], xerr=df_sorted[metric_std], 
+                       color=bar_colors, edgecolor='black', capsize=5, 
+                       error_kw={'elinewidth': 1.5, 'capthick': 2})
+        
+        # Set y-ticks to correspond to the number of bars
+        ax.set_yticks(range(len(df_sorted)))
+        ax.set_yticklabels(df_sorted['combination'], fontsize=8)  # Smaller text for y-tick labels
+        
+        # Invert y-axis so the highest value is on top
+        ax.invert_yaxis()
+
+        # Add labels and title
+        ax.set_xlabel(f'{metric.replace("_mean", "").capitalize()} (Mean)')
+        ax.set_title(f'Benchmarking Results: {metric.replace("_mean", "").capitalize()}')
+        
+        # Create legend
+        # To avoid duplicates in legend, we can create a mapping from combination to color once
+        legend_handles = [Patch(facecolor=color_map[combination], edgecolor='black', label=combination) 
+                          for combination in unique_combinations]
+        ax.legend(handles=legend_handles, loc='best', fontsize=8)
+        
+        # Adjust layout to make sure labels fit
+        plt.tight_layout()
+        
+        # Save each plot to the results directory
+        metric_name = metric.replace('_mean', '')
+        plot_path = os.path.join(results_dir, f"{metric_name}_{dataset}_benchmarking_results.png")
+        plt.savefig(plot_path, dpi=300)
+        plt.close()  # Close the figure after saving to free memory
+
+    print(f"All plots saved to {results_dir}")
