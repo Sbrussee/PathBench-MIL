@@ -264,6 +264,10 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
      # - BCESurvLoss
      # - DeepHitLoss
      # - AdaptedCrossEntropySurvivalLoss
+# - Regression
+     # - MSELossReg
+     # - L1LossReg
+     # - HuberLossReg
 
 #Available MIL-friendly augmentations:
   # - patch_dropout
