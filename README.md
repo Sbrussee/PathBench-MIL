@@ -18,8 +18,6 @@ PathBench is being developed at the Leiden University Medical Center: Department
 - Lead Developer: Siemen Brussee
 - Developers:
 
-PathBench's documentation is available [here](https://pathbench.readthedocs.io/en/latest/index.html)
-
 # Installation Guide for PathBench
 
 ## Prerequisites
@@ -96,6 +94,7 @@ experiment:
   project_name: Example_Project # Name of the project, where the results will be saved
   annotation_file: /path/to/your/annotation_file.csv # Path to the annotation file
   balancing: category # Training set balancing strategy, can be None, category, slide, patient or tile.
+  class_weighting: False # Boolean denoting whether to weight instances based on class occurence during model training
   num_workers: 0 # Number of workers for data loading, 0 for no parallelization.
   split_technique: k-fold # Splitting technique, can be k-fold or fixed
   epochs: 5 # Number of training epoch
@@ -108,14 +107,17 @@ experiment:
   k: 2 # Number of folds, if split-technique is k-fold
   val_fraction: 0.1 # Fraction of training data to use for validation
   aggregation_level: slide # Aggregation level, can be slide or patient
-  task: classification # Task, can be classification, regression or survival
+  task: classification # Task, can be classification, regression, survival or survival_discrete
+  mixed_precision: False # Whether to retrieve features in mixed precision (fp16), which is useful for situations with gigantic models and limited GPU-VRAM)
+
+  report: False # Boolean denoting whether to provide a tile processing report
 
   visualization: # Visualization options, options: CLASSIFICATION: confusion_matrix, precision_recall_curve, roc_curve, top_tiles SURVIVAL: survival_roc, concordance_index, calibration REGRESSION: predicted_vs_actual, residuals, qq
     - learning_curve
     - confusion_matrix
     - roc_curve
 
-  evaluation: # Evaluation metrics to use. options: CLASSIFICATION: balanced_accuracy, mean_f1, mean_uncertainty, auc, mean_average_precision, mean_average_recall. REGRESSION: mean_absolute_error, mean_squared_error, r2_score. SURVIVAL: c_index, brier_score.
+  evaluation: # Evaluation metrics to use. options: CLASSIFICATION: balanced_accuracy, mean_f1, mean_uncertainty, auc, mean_average_precision, mean_average_recall. REGRESSION: mean_absolute_error, mean_squared_error, r2_score. SURVIVAL/DISCRETE SURVIVAL: c_index, brier_score.
     - balanced_accuracy
     - auc
   mode: optimization # Mode to use, either benchmark or optimization
@@ -197,6 +199,7 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 # - PLIP
 # - HistoSSL
 # - uni
+# - uni_h
 # - conch
 # - dino
 # - mocov2
@@ -250,10 +253,17 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
      # - AttentionEntropyMinimizedCrossEntropyLoss
      # - DiversityRegularizedCrossEntropyLoss
      # - SparseAttentionCrossEntropyLoss
- # - Survival:
+ # - Survival (Continuous):
      # - RankingLoss
      # - CoxPHLoss
+     # - ExponentialConcordanceLoss
+ # - Survival (Discrete):
+     # - NLLLogisticHazardLoss
+     # - NLLPMFLoss
+     # - NLLMTLRLoss
+     # - BCESurvLoss
      # - DeepHitLoss
+     # - AdaptedCrossEntropySurvivalLoss
 
 #Available MIL-friendly augmentations:
   # - patch_dropout
@@ -294,6 +304,7 @@ PathBench inherits the project functionality from SlideFlow. PathBench allows cr
 - `encoder_layers` : The number of layers used for the encoder in the MIL aggregator
 - `z_dim` : The dimensionality of the latent space in the MIL encoder.
 - `dropout_p` : The dropout probability in the MIL model.
+- `class_weighting`: Whether to weight the instances for each class during training based on occurence.
   
 ### General settings:
 
@@ -301,6 +312,9 @@ PathBench inherits the project functionality from SlideFlow. PathBench allows cr
 - `mode`: The mode can be either `benchmark` or `optimization`.
 - `num_workers` : Number of workers for parallelization, set to 0 to disable parallel processing.
 - `custom_metrics` : List of custom metrics to be used, which should be defined in metrics.py or as a fastai-metric: https://docs.fast.ai/metrics.html
+- `report` : Whether to output a slide processing report (see Slideflow documentation)
+- `mixed_precision` : Whether to extract features in mixed precision (fp16) mode, reducing GPU requirements.
+
 
 # Datasets
 The datasets to be used in the project can be specified in the datasets section. One can add any arbitrary number of data sources to a project and specify whether these should be used for training/validation or as testing datasets:
@@ -357,7 +371,7 @@ slide9,patient5,dataset2,0.9
 slide10,patient5,dataset2,1.0
 ```
 
-For a survival task:
+For a continuous survival task, where time is a number of days/weeks/months/years and event expects 1 for patient which are dead (event occured) and 0 for those that are alive (event not occured).:
 ```csv
 slide,patient,dataset,time,event
 slide1,patient1,dataset1,26,1
@@ -370,6 +384,21 @@ slide7,patient4,dataset2,6,0
 slide8,patient4,dataset2,5,1
 slide9,patient5,dataset2,84,1
 slide10,patient5,dataset2,43,1
+```
+
+For a discrete survival task, we bin the time column into bins (e.g. quantiles):
+```csv
+slide,patient,dataset,time,event
+slide1,patient1,dataset1,3,1
+slide2,patient1,dataset1,2,1
+slide3,patient2,dataset1,2,1
+slide4,patient2,dataset1,3,0
+slide5,patient3,dataset1,2,1
+slide6,patient3,dataset1,2,1
+slide7,patient4,dataset2,1,0
+slide8,patient4,dataset2,1,1
+slide9,patient5,dataset2,1,1
+slide10,patient5,dataset2,3,1
 ```
 # Running PathBench
 To run pathbench once installed using default setting, one can simply run
@@ -482,6 +511,7 @@ PathBench supports a wide range of different feature extractors, including SOTA 
 | Hibou-B | Automatic | [Link](https://huggingface.co/histai/hibou-b) |
 | Hibou-L | Gated | [Link](https://huggingface.co/histai/hibou-L)
 | UNI | Gated | [Link](https://huggingface.co/MahmoodLab/UNI) |
+| UNI-H | Gated | [Link](https://huggingface.co/MahmoodLab/UNI2-h) |
 | CONCH | Gated | [Link](https://huggingface.co/MahmoodLab/CONCH) |
 | Prov-GigaPath | Gated | [Link](https://huggingface.co/prov-gigapath/prov-gigapath) |
 | Kaiko-S8 | Automatic | [Link](https://github.com/kaiko-ai/towards_large_pathology_fms) |
@@ -550,8 +580,8 @@ class kaiko_s8(TorchFeatureExtractor):
     """
     tag = 'kaiko_s8'
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
 
         self.model = torch.hub.load("kaiko-ai/towards_large_pathology_fms", 'vits8', trust_repo=True)
 
@@ -595,6 +625,12 @@ class lse_mil(nn.Module):
         Dropout probability
     r : float
         scaling factor for log-sum-exp pooling
+    activation_function : str
+        activation function to use (as present in pytorch), given as a string
+    encoder_layers: int
+        number of encoder layers to use.
+    goal: str
+        overall goal of the model (classification, regression, survival, survival_discrete), used to account for different output requirements.
     
     Attributes
     ----------
@@ -612,25 +648,52 @@ class lse_mil(nn.Module):
     
     """
 
-    def __init__(self, n_feats: int, n_out: int, z_dim: int = 256, dropout_p: float = 0.1, r: float = 1.0) -> None:
+def __init__(self,
+                 n_feats: int,
+                 n_out: int,
+                 z_dim: int = 256,
+                 dropout_p: float = 0.1,
+                 r: float = 1.0,
+                 activation_function='ReLU',
+                 encoder_layers=1,
+                 goal='classification'):
         super().__init__()
-        self.encoder = nn.Sequential(
-            nn.Linear(n_feats, z_dim),
-            nn.ReLU()
-        )
-        self.head = nn.Sequential(
-            nn.Flatten(),
-            nn.BatchNorm1d(z_dim),
-            nn.Dropout(dropout_p),
-            nn.Linear(z_dim, n_out)
-        )
+        use_bn = (goal == 'classification')
+        self.encoder = build_encoder(n_feats, z_dim, encoder_layers,
+                                     activation_function, dropout_p, use_bn)
+
+        if goal == 'classification':
+            self.head = nn.Sequential(
+                nn.Flatten(),
+                nn.BatchNorm1d(z_dim),
+                nn.Dropout(dropout_p),
+                nn.Linear(z_dim, n_out)
+            )
+        #Continuous survival or regression models should output a single value
+        elif goal in ['survival', 'regression']:
+            self.head = nn.Linear(z_dim, 1)
+        #Discrete survival models should output a distribution over time bins
+        elif goal == 'survival_discrete':
+            self.head = nn.Linear(z_dim, n_out)
+        else:
+            raise ValueError(f"Unsupported goal: {goal}")
+
         self.r = r
+        self.goal = goal
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        initialize_weights(self)
 
     def forward(self, bags):
-        embeddings = self.encoder(bags)
+        batch_size, n_patches, n_feats = bags.shape
+        embeddings = self.encoder(bags.view(-1, n_feats))
+        embeddings = embeddings.view(batch_size, n_patches, -1)
+        # LSE pooling
         lse_pooling = self.r * torch.logsumexp(embeddings / self.r, dim=1)
         scores = self.head(lse_pooling)
         return scores
+
 ```
 The MIL aggregation function should take the bags in its forward function and output the prediction scores. Typically, this involves an encoder network and a prediction head. If the aggregation method supports attention values, one can add an additional method:
 ```python
@@ -699,14 +762,23 @@ def patch_mixing(bag: torch.Tensor, mixing_rate: float = 0.5) -> torch.Tensor:
 Similarly, one can add custom training metrics which will be measured during training. The metrics needs to inheret from fastai's Metric class and have the methods as given down below:
 ```python
 class ConcordanceIndex(Metric):
-    """Concordance index metric for survival analysis."""
+    """
+    Concordance index metric for survival analysis, supporting both:
+      (1) Continuous survival predictions: preds.shape == (batch_size,)
+      (2) Discrete survival predictions:   preds.shape == (batch_size, n_bins)
+          We automatically convert discrete to continuous by a weighted sum
+          over the bin indices [1..n_bins].
+    """
+
     def __init__(self):
-        self.name = "concordance_index"
+        self._name = "concordance_index"
         self.reset()
 
     def reset(self):
         """Reset the metric."""
-        self.preds, self.durations, self.events = [], [], []
+        self.preds = []
+        self.durations = []
+        self.events = []
 
     def accumulate(self, learn):
         """Accumulate predictions and targets from a batch."""
@@ -715,34 +787,67 @@ class ConcordanceIndex(Metric):
         self.accum_values(preds, targets)
 
     def accum_values(self, preds, targets):
-        """Accumulate predictions and targets from a batch."""
+        """
+        Accumulate predictions and targets from a batch.
+
+        - targets must be shape (batch_size, 2) -> [duration, event].
+        - preds can be (batch_size,) for continuous survival
+          or (batch_size, n_bins) for discrete survival.
+
+        We automatically interpret 2D preds as discrete probabilities
+        and convert them to a single predicted time by a weighted sum
+        with bin indices [1..n_bins].
+        """
         preds, targets = to_detach(preds), to_detach(targets)
 
-        # Ensure preds are tensors, handle dict, tuple, and list cases
-        if isinstance(preds, dict):
-            preds = torch.cat([torch.tensor(v).view(-1) if not isinstance(v, torch.Tensor) else v.view(-1) for v in preds.values()])
-        elif isinstance(preds, tuple):
-            preds = torch.cat([torch.tensor(p).view(-1) if not isinstance(p, torch.Tensor) else p.view(-1) for p in preds])
-        elif isinstance(preds, list):
-            preds = torch.cat([torch.tensor(p).view(-1) if not isinstance(p, torch.Tensor) else p.view(-1) for p in preds])
-        else:
-            preds = preds.view(-1) if isinstance(preds, torch.Tensor) else torch.tensor(preds).view(-1)
+        # Flatten or convert any containers into a single tensor
+        preds = self._flatten_preds(preds)
 
-        # Handle survival targets (durations and events)
-        durations = targets[:, 0].view(-1)
-        events = targets[:, 1].view(-1)
-        
+        # durations = targets[:, 0], events = targets[:, 1]
+        durations = targets[:, 0].float()
+        events = targets[:, 1].float()
+
+        # If we have discrete predictions, convert to continuous
+        if preds.dim() > 1 and preds.shape[1] > 1:
+            #Check if preds are probabilities
+            if not torch.all(preds.sum(dim=1) == 1.0):
+                preds = torch.softmax(preds, dim=-1)
+            #Perform weighted sum over bins
+            preds = (preds * torch.arange(1, preds.shape[1] + 1).float()).sum(dim=1)
+
+
+        #Check if preds should be 
+
+        # Accumulate for final c-index computation
         self.preds.append(preds)
         self.durations.append(durations)
         self.events.append(events)
 
+    def _flatten_preds(self, preds):
+        """
+        Flattens nested structures of predictions, if needed.
+        E.g. if preds is a tuple/list, or has multiple dimensions.
+        """
+        # For your use case, you might just do: return preds.view(-1, *preds.shape[2:])
+        # But here's a robust fallback:
+        if isinstance(preds, (list, tuple)):
+            # Attempt to concatenate or flatten
+            preds = torch.cat([p.view(-1, *p.shape[2:]) if p.dim() > 1 else p.flatten()
+                               for p in preds], dim=0)
+        return preds
+
     @property
     def value(self):
-        """Calculate the concordance index."""
-        if len(self.preds) == 0: return None
+        """Calculate the concordance index using lifelines."""
+        if len(self.preds) == 0:
+            return None
+
+        # Concatenate all predictions/durations/events across mini-batches
         preds = torch.cat(self.preds).cpu().numpy()
         durations = torch.cat(self.durations).cpu().numpy()
         events = torch.cat(self.events).cpu().numpy()
+
+        # events must be bool or 0/1 for lifelines
         ci = concordance_index(durations, preds, events)
         return ci
 
