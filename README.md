@@ -18,6 +18,22 @@ PathBench is being developed at the Leiden University Medical Center: Department
 - Lead Developer: Siemen Brussee
 - Developers:
 
+## 📖 Citation
+
+If you use **PathBench-MIL** in your research or projects, please cite:
+
+> **Brussee et al.** *PathBench-MIL: A comprehensive, flexible Benchmarking/AutoML framework for multiple instance learning in pathology.*
+
+```bibtex
+@software{Brussee_PathBenchMIL,
+  author = {Siemen Brussee, Pieter A. Valkema, Thom Doeleman, Anne-Roos M.R. Schrader, Jesper Kers},
+  title = {PathBench-MIL: A comprehensive, flexible Benchmarking/AutoML framework for multiple instance learning in pathology},
+  year = {2024},
+  url = {https://github.com/Sbrussee/PathBench-MIL},
+  note = {Version 1.0}
+}
+```
+
 # Installation Guide for PathBench
 
 ## Prerequisites
