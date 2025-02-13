@@ -170,11 +170,11 @@ This script will:
 - Source it and set the slideflow backend environment variables.
 - Execute main.py with your configuration file.
 ## Docker TDLR:
-- Build the image with docker build -t pathbench-gpu .
-- Run interactively with GPU support and mount your custom config:
-Option A: Mount just the config file.
-Option B: Mount the entire /app/PathBench-MIL directory.
-- Edit and run the application within the container shell.
+1) Build the image with docker build -t pathbench-gpu .
+2) Run interactively with GPU support and mount your custom config:
+- Option A: Mount just the config file.
+- Option B: Mount the entire /app/PathBench-MIL directory.
+3) Edit and run the application within the container shell.
 
 # PathBench Configuration Example
 To use PathBench, you need to provide a configuration file in YAML format. Below is an example configuration file:
