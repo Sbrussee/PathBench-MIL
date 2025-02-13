@@ -101,6 +101,80 @@ If you use **PathBench-MIL** in your research or projects, please cite:
     pip install .
     ```
 
+# Running PathBench with Docker (GPU Support)
+
+This guide explains how to build and run the PathBench-MIL repository using Docker with GPU support. It also shows how to modify the configuration file (`conf.yaml`) interactively.
+
+## Prerequisites
+
+- **Docker** installed
+- **NVIDIA Drivers** and [nvidia-container-toolkit](https://github.com/NVIDIA/nvidia-container-toolkit) installed (for GPU support)
+
+## Building the Docker Image
+Navigate to the root of your repository (where the Dockerfile is located).
+
+Build the Docker image by running:
+
+```bash
+docker build -t pathbench-gpu .
+```
+### Running the Container Interactively
+To modify the configuration file (conf.yaml) without rebuilding the image, you can run the container interactively and mount your custom config.
+
+### Option A: Mount a Custom Config File
+If you have a custom conf.yaml on your host (for example, located at /path/to/custom/conf.yaml), run:
+
+```bash
+
+docker run --gpus all -it --rm \
+  -v /path/to/custom/conf.yaml:/app/PathBench-MIL/conf.yaml \
+  pathbench-gpu bash
+```
+This command does the following:
+
+- --gpus all: Enables GPU support.
+- -it: Runs the container interactively.
+- --rm: Automatically removes the container when it exits.
+- -v /path/to/custom/conf.yaml:/app/PathBench-MIL/conf.yaml: Mounts your local conf.yaml to override the one inside the container.
+- bash: Opens a bash shell in the container.
+
+### Option B: Mount the Entire Directory
+If you want the flexibility to modify any files in /app/PathBench-MIL, mount the whole directory:
+
+```bash
+docker run --gpus all -it --rm \
+  -v /path/to/local/PathBench-MIL:/app/PathBench-MIL \
+  pathbench-gpu bash
+```
+## Modifying the Config and Running PathBench
+Once inside the container's bash shell, you can:
+
+Edit the configuration file using an editor (e.g., nano or vim):
+
+```bash
+nano conf.yaml
+```
+Note: If an editor like nano is not installed, you can install it by running:
+
+```bash
+apt-get update && apt-get install -y nano
+```
+Run PathBench by executing:
+
+```bash
+bash run_pathbench.sh
+```
+This script will:
+
+- Check for the virtual environment (already set up during build).
+- Source it and set the slideflow backend environment variables.
+- Execute main.py with your configuration file.
+## Docker TDLR:
+- Build the image with docker build -t pathbench-gpu .
+- Run interactively with GPU support and mount your custom config:
+Option A: Mount just the config file.
+Option B: Mount the entire /app/PathBench-MIL directory.
+- Edit and run the application within the container shell.
 
 # PathBench Configuration Example
 To use PathBench, you need to provide a configuration file in YAML format. Below is an example configuration file:
