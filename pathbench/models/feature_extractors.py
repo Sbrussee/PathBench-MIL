@@ -202,8 +202,8 @@ class dino(TorchFeatureExtractor):
     """
     tag = "dino"
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
 
         self.model = vit_small(pretrained=True, progress=False, key="DINO_p16")
         self.model.to('cuda')
@@ -251,8 +251,8 @@ class barlow_twins(TorchFeatureExtractor):
     """
     tag = 'barlow_twins'
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
 
         # Load ResNet50 trunk with Barlow Twins pre-trained weights
         self.model = resnet50(pretrained=True, progress=False, key="BT")
@@ -306,8 +306,8 @@ class mocov2(TorchFeatureExtractor):
     """
     tag = 'mocov2'
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
 
         # Load ResNet50 trunk with Barlow Twins pre-trained weights
         self.model = resnet50(pretrained=True, progress=False, key="MoCoV2")
@@ -361,8 +361,8 @@ class swav(TorchFeatureExtractor):
     """
     tag = 'swav'
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
 
         # Load ResNet50 trunk with Barlow Twins pre-trained weights
         self.model = resnet50(pretrained=True, progress=False, key="SwAV")
@@ -417,8 +417,8 @@ class uni(TorchFeatureExtractor):
     """
     tag = "uni"
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
         local_dir = WEIGHTS_DIR
         model_name = "uni.bin"
         model_temp_name = "pytorch_model.bin"
@@ -453,6 +453,84 @@ class uni(TorchFeatureExtractor):
 
 
 @register_torch
+class uni_h(TorchFeatureExtractor):
+    """
+    UNI-h (UNI 2) feature extractor, ViT-H/14 architecture
+
+    Parameters
+    ----------
+    tile_px : int
+        The size of the tile
+    
+    Attributes
+    ----------
+    model : VisionTransformer
+        The Vision Transformer model
+    transform : torchvision.transforms.Compose
+        The transformation pipeline
+    preprocess_kwargs : dict
+
+    Methods
+    -------
+    dump_config()
+        Dump the configuration of the feature extractor
+    """
+    tag = "uni_h"
+
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
+        local_dir = WEIGHTS_DIR
+        os.makedirs(local_dir, exist_ok=True)  # create directory if it does not exist
+        hf_hub_download("MahmoodLab/UNI2-h", filename="pytorch_model.bin", local_dir=local_dir, force_download=True)
+        # rename to uni_h.bin
+        os.rename(os.path.join(local_dir, "pytorch_model.bin"), os.path.join(local_dir, "uni_h.bin"))
+        if not os.path.exists(os.path.join(local_dir, "uni_h.bin")):
+            print("Downloading UNI-h model...")
+            model = create_model_from_pretrained("MahmoodLab/UNI2-h")
+            torch.save(model.state_dict(), os.path.join(local_dir, "uni_h.bin"))
+            print("UNI-h model downloaded successfully.")
+        
+        timm_kwargs = {
+                    'model_name': 'vit_giant_patch14_224',
+                    'img_size': 224, 
+                    'patch_size': 14, 
+                    'depth': 24,
+                    'num_heads': 24,
+                    'init_values': 1e-5, 
+                    'embed_dim': 1536,
+                    'mlp_ratio': 2.66667*2,
+                    'num_classes': 0, 
+                    'no_embed_class': True,
+                    'mlp_layer': timm.layers.SwiGLUPacked, 
+                    'act_layer': torch.nn.SiLU, 
+                    'reg_tokens': 8, 
+                    'dynamic_img_size': True
+                }
+        self.model = timm.create_model(
+            pretrained=False, **timm_kwargs
+        )
+        self.model.load_state_dict(torch.load(os.path.join(local_dir, "uni_h.bin"), map_location="cpu"), strict=True)
+        self.num_features = 1536
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize(224),
+                transforms.ConvertImageDtype(torch.float32),
+                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+            ]
+        )
+        self.model.to('cuda')
+        self.model.eval()
+
+        self.preprocess_kwargs = {'standardize': False}
+
+    def dump_config(self):
+        return {
+            'class': 'uni_h',
+            'kwargs': {}
+        }
+
+
+@register_torch
 class phikon(TorchFeatureExtractor):
     """
     Phikon feature extractor, with ViT-Large backbone
@@ -479,8 +557,8 @@ class phikon(TorchFeatureExtractor):
     """
     tag = 'phikon'
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
 
         local_dir = WEIGHTS_DIR
 
@@ -550,8 +628,8 @@ class gigapath(TorchFeatureExtractor):
     """
     tag = 'gigapath'
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
 
         local_dir = WEIGHTS_DIR
         model_name = "gigapath.bin"
@@ -613,8 +691,8 @@ class kaiko_s8(TorchFeatureExtractor):
     """
     tag = 'kaiko_s8'
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
 
         self.model = torch.hub.load("kaiko-ai/towards_large_pathology_fms", 'vits8', trust_repo=True)
 
@@ -664,8 +742,8 @@ class kaiko_s16(TorchFeatureExtractor):
     """
     tag = 'kaiko_s16'
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
 
         self.model = torch.hub.load("kaiko-ai/towards_large_pathology_fms", 'vits16', trust_repo=True)
 
@@ -715,8 +793,8 @@ class kaiko_b8(TorchFeatureExtractor):
     """
     tag = 'kaiko_b8'
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
 
         self.model = torch.hub.load("kaiko-ai/towards_large_pathology_fms", 'vitb8', trust_repo=True)
         self.model.to('cuda')
@@ -765,8 +843,8 @@ class kaiko_b16(TorchFeatureExtractor):
     """
     tag = 'kaiko_b16'
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
 
         self.model = torch.hub.load("kaiko-ai/towards_large_pathology_fms", 'vitb16', trust_repo=True)
         self.model.to('cuda')
@@ -816,8 +894,8 @@ class kaiko_l14(TorchFeatureExtractor):
     """
     tag = 'kaiko_l14'
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
 
         self.model = torch.hub.load("kaiko-ai/towards_large_pathology_fms", 'vitl14', trust_repo=True)
 
@@ -1050,8 +1128,8 @@ class pathoduet_he(TorchFeatureExtractor):
     """
     tag = 'pathoduet_he'
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
         self.model = VisionTransformerMoCoWithoutHead(pretext_token=True, global_pool='avg')
         checkpoint = torch.load(f'{WEIGHTS_DIR}/checkpoint_HE.pth')
         # Remove the 'head.weight' and 'head.bias' keys from the state dictionary
@@ -1106,8 +1184,8 @@ class pathoduet_ihc(TorchFeatureExtractor):
     """
     tag = 'pathoduet_ihc'
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
         self.model = VisionTransformerMoCoWithoutHead(pretext_token=True, global_pool='avg')
         checkpoint = torch.load(f'{WEIGHTS_DIR}/checkpoint_IHC.pth')
         # Remove the 'head.weight' and 'head.bias' keys from the state dictionary
@@ -1160,8 +1238,8 @@ class hibou_b(TorchFeatureExtractor):
     """
     tag = 'hibou_b'
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
         
         model_name = "hibou_b"
         self.num_features = 768
@@ -1242,8 +1320,8 @@ class hibou_l(TorchFeatureExtractor):
     """
     tag = 'hibou_l'
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
         
         model_name = "hibou_l"
         self.num_features = 768
@@ -1322,8 +1400,8 @@ class virchow(TorchFeatureExtractor):
     """
     tag = 'virchow'
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
         local_dir = WEIGHTS_DIR
         base_model = timm.create_model("hf-hub:paige-ai/Virchow", pretrained=True,
                                         mlp_layer=SwiGLUPacked, act_layer=nn.SiLU)
@@ -1400,8 +1478,8 @@ class virchow2(TorchFeatureExtractor):
     """
     tag = 'virchow2'
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
         local_dir = WEIGHTS_DIR
         base_model = timm.create_model("hf-hub:paige-ai/Virchow2", pretrained=True,
                                         mlp_layer=SwiGLUPacked, act_layer=nn.SiLU)
@@ -1475,8 +1553,8 @@ class h_optimus_0(TorchFeatureExtractor):
     """
     tag = 'h_optimus_0'
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
 
         self.model = timm.create_model(
             "hf-hub:bioptimus/H-optimus-0", pretrained=True, init_values=1e-5, dynamic_img_size=False
@@ -1528,8 +1606,8 @@ class transpath_mocov3(TorchFeatureExtractor):
     """
     tag = 'transpath_mocov3'
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
         self.model = timm.create_model(
             model_name="hf-hub:1aurent/vit_small_patch16_224.transpath_mocov3",
             pretrained=True,
@@ -1557,8 +1635,8 @@ class transpath_mocov3(TorchFeatureExtractor):
 @register_torch
 class conch(TorchFeatureExtractor):
     
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
         model, preprocess = create_model_from_pretrained("conch_ViT-B-16", "hf_hub:MahmoodLab/conch")
         model.to('cuda')
         self.num_features = 512
@@ -1619,8 +1697,8 @@ class exaone_path(TorchFeatureExtractor):
     """
     tag = 'exaone_path'
 
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
 
         def _no_grad_trunc_normal_(tensor, mean, std, a, b):
             # Cut & paste from PyTorch official master until it's in a few official releases - RW
@@ -1932,8 +2010,8 @@ class phikon_v2(TorchFeatureExtractor):
     """
 
     tag = 'phikon_v2'
-    def __init__(self, tile_px=256):
-        super().__init__()
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
         model = AutoModel.from_pretrained("owkin/phikon-v2")
         self.num_features = 1024
 
@@ -1970,11 +2048,12 @@ class phikon_v2(TorchFeatureExtractor):
             'kwargs': {}
         }
 
-#TODO: Correct implementation of the model, does not work right now.
+
+#TO BE TESTED
 @register_torch
-class beph(TorchFeatureExtractor):
+class musk(TorchFeatureExtractor):
     """
-    BEPH feature extractor, with base Vision Transformer backbone
+    Musk feature extractor, with Vision Transformer backbone
 
     Parameters
     ----------
@@ -1995,31 +2074,175 @@ class beph(TorchFeatureExtractor):
     dump_config()
         Dump the configuration of the feature extractor
     """
-    tag = 'beph'
+    tag = 'musk'
 
-    def __init__(self, tile_px=256):
-        super().__init__()
-        state_dict = torch.load(f"{WEIGHTS_DIR}/BEPH_backbone.pth")['state_dict']
-        self.model = timm.create_model('beitv2_base_patch16_224.in1k_ft_in22k_in1k', pretrained=True, num_classes=0)
-        self.model.to('cuda')
-        #Load the state dictionary
-        self.model.load_state_dict(state_dict)
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
+        model = timm.create_model("musk_large_patch16_384")
+        utils.load_model_and_may_interpolate("hf_hub:xiangjx/musk", model, 'model|moduke', '')
 
-        self.num_features = 384
-        self.transform = transforms.Compose(
-            [
-                transforms.Resize(224),
-                transforms.ConvertImageDtype(torch.float32),
-                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-            ]
-        )
+        self.model = MuskEmbedder(model)
 
-        # Slideflow standardization
-        self.preprocess_kwargs = {'standardize': False}
+        if self.mixed_precision:
+            self.model.to(device='cuda', dtype=torch.float16)
+        else:
+            self.model.to(device='cuda')
+        
+        self.transforms = transforms.Compose([
+            torchvision.transforms.Resize(384, interpolation=3, antialias=True),
+            torchvision.transforms.CenterCrop((384, 384)),
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.Normalize(mean=timm.data.constants.IMAGENET_INCEPTION_MEAN,
+                                             std=timm.data.constants.IMAGENET_INCEPTION_STD)
+            ])
+        self.model.eval()
 
-    def dump_config(self):
-        return {
-            'class': 'beph',
-            'kwargs': {}
-        }
+        class MuskEmbedder(nn.Module):
+            def __init__(self, model):
+                super(MuskEmbedder, self).__init__()
+                self.model = model
 
+            def forward(self, x):
+                features = self.model(image=x,
+                with_head=False,
+                out_norm=False,
+                ms_aug=True,
+                return_global=True)[0]
+                return features
+
+    def load_state_dict(model, state_dict, prefix='', ignore_missing="relative_position_index"):
+        missing_keys = []
+        unexpected_keys = []
+        error_msgs = []
+        # copy state_dict so _load_from_state_dict can modify it
+        metadata = getattr(state_dict, '_metadata', None)
+        state_dict = state_dict.copy()
+        if metadata is not None:
+            state_dict._metadata = metadata
+
+        def load(module, prefix=''):
+            local_metadata = {} if metadata is None else metadata.get(
+                prefix[:-1], {})
+            module._load_from_state_dict(
+                state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
+            for name, child in module._modules.items():
+                if child is not None:
+                    load(child, prefix + name + '.')
+
+        load(model, prefix=prefix)
+
+        warn_missing_keys = []
+        ignore_missing_keys = []
+        for key in missing_keys:
+            keep_flag = True
+            for ignore_key in ignore_missing.split('|'):
+                if ignore_key in key:
+                    keep_flag = False
+                    break
+            if keep_flag:
+                warn_missing_keys.append(key)
+            else:
+                ignore_missing_keys.append(key)
+
+        missing_keys = warn_missing_keys
+
+        if len(missing_keys) > 0:
+            print("Weights of {} not initialized from pretrained model: {}".format(
+                model.__class__.__name__, missing_keys))
+        if len(unexpected_keys) > 0:
+            print("Weights from pretrained model not used in {}: {}".format(
+                model.__class__.__name__, unexpected_keys))
+        if len(ignore_missing_keys) > 0:
+            print("Ignored weights of {} not initialized from pretrained model: {}".format(
+                model.__class__.__name__, ignore_missing_keys))
+        if len(error_msgs) > 0:
+            print('\n'.join(error_msgs))
+
+
+
+    # The implementation code is modified from DeiT (https://github.com/facebookresearch/deit.git)
+    def load_model_and_may_interpolate(
+            ckpt_path, 
+            model,
+            model_key, 
+            model_prefix, 
+            local_dir: str = os.path.join(os.path.expanduser("~"), ".cache/")
+            ):
+        
+        if ckpt_path.startswith("hf_hub:"):
+            local_path = os.path.join(local_dir, "model.safetensors")
+            if not os.path.exists(local_path):    
+                hub_name = ckpt_path.split(":")[1]
+                huggingface_hub.hf_hub_download(
+                    hub_name, 
+                    filename="model.safetensors", 
+                    local_dir=local_dir, 
+                    force_download=True
+                    )
+            
+        else:
+            local_path = ckpt_path
+        
+        checkpoint = load_file(local_path)
+
+        print("Load ckpt from %s" % ckpt_path)
+        checkpoint_model = None
+        for model_key in model_key.split('|'):
+            if model_key in checkpoint:
+                checkpoint_model = checkpoint[model_key]
+                print("Load state_dict by model_key = %s" % model_key)
+                break
+
+        if checkpoint_model is None:
+            checkpoint_model = checkpoint
+
+        state_dict = model.state_dict()
+        for k in ['head.weight', 'head.bias']:
+            if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
+                print(f"Removing key {k} from pretrained checkpoint")
+                del checkpoint_model[k]
+
+        # interpolate position embedding
+        for pos_embed_key in ("vision_pos_embed", "pos_embed", "beit3.encoder.embed_positions.A.weight"):
+            if pos_embed_key in checkpoint_model:
+                pos_embed_checkpoint = checkpoint_model[pos_embed_key]
+                embedding_size = pos_embed_checkpoint.shape[-1]
+                if pos_embed_key == "beit3.encoder.embed_positions.A.weight":
+                    # being consistent with Fairseq, which starts from 2 for position embedding
+                    torchscale_model = True
+                    num_patches = model.beit3.vision_embed.num_patches
+                    num_extra_tokens = model.beit3.vision_embed.num_position_embeddings() + 2 - num_patches
+                else:
+                    torchscale_model = False
+                    num_patches = model.patch_embed.num_patches
+                    num_extra_tokens = getattr(model, pos_embed_key).shape[-2] - num_patches
+                # height (== width) for the checkpoint position embedding
+                orig_size = int((pos_embed_checkpoint.shape[-2] - num_extra_tokens) ** 0.5)
+                # height (== width) for the new position embedding
+                new_size = int(num_patches ** 0.5)
+                # class_token and dist_token are kept unchanged
+                if orig_size != new_size:
+                    print("Position interpolate from %dx%d to %dx%d" % (orig_size, orig_size, new_size, new_size))
+                    if torchscale_model:
+                        extra_tokens = pos_embed_checkpoint[:num_extra_tokens].unsqueeze(0)
+                        # only the position tokens are interpolated
+                        pos_tokens = pos_embed_checkpoint[num_extra_tokens:]
+                    else:
+                        extra_tokens = pos_embed_checkpoint[:, :num_extra_tokens]
+                        # only the position tokens are interpolated
+                        pos_tokens = pos_embed_checkpoint[:, num_extra_tokens:]
+                    pos_tokens = pos_tokens.reshape(-1, orig_size, orig_size, embedding_size).permute(0, 3, 1, 2)
+
+                    # interpolate must be carried out on float
+                    pos_token_type = pos_tokens.dtype
+                    pos_tokens = torch.nn.functional.interpolate(
+                        pos_tokens.float(), size=(new_size, new_size), mode='bicubic', align_corners=False).to(
+                        dtype=pos_token_type)
+
+                    pos_tokens = pos_tokens.permute(0, 2, 3, 1).flatten(1, 2)
+                    new_pos_embed = torch.cat((extra_tokens, pos_tokens), dim=1)
+                    if torchscale_model:
+                        new_pos_embed = new_pos_embed.squeeze(0)
+                    checkpoint_model[pos_embed_key] = new_pos_embed
+
+        load_state_dict(model, checkpoint_model, prefix=model_prefix)

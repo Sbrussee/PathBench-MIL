@@ -166,6 +166,9 @@ def save_correct(result: pd.DataFrame, save_string: str, dataset_type: str, conf
 
 
 def free_up_gpu_memory():
+    """
+    Function to free up GPU memory in PyTorch.
+    """
     # Free up cached memory in PyTorch
     torch.cuda.empty_cache()
     

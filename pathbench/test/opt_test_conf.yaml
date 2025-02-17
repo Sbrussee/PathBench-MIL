@@ -1,8 +1,8 @@
 experiment:
   project_name: TCGA_LUSC
-  annotation_file: /exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/pathbench/test/dataset5_multi_classification_primary_diagnosis.csv
+  annotation_file: /exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/pathbench/test/dataset1_multi_classification_pathologic_stage.csv
   balancing: category
-  class_weighting: True
+  class_weighting: False
   split_technique: fixed
   k: 1
   val_fraction: 0.1
@@ -19,6 +19,7 @@ experiment:
   mode: optimization # Mode can be either 'benchmark' or 'optimization'.
   custom_metrics: [RocAuc] # Custom metrics to be used, needs to be defined in metrics.py or as a fastai-metric: https://docs.fast.ai/metrics.html
   report: False
+  feature_extraction_only: False
   
   qc: # List of quality control methods to be used
     - GaussianV2
@@ -73,7 +74,6 @@ benchmark_parameters:
     - reinhard
   feature_extraction:
     - resnet50_imagenet
-    - CTransPath
     - uni
     - PLIP
     - phikon_v2
@@ -83,6 +83,13 @@ benchmark_parameters:
     - dsmil
     - varmil
     - attention_mil
+  
+  loss:
+    - CrossEntropyLoss
+  
+  optimizer:
+    - Adam
+
 
 weights_dir: ../pretrained_weights
 #hf_token: None
