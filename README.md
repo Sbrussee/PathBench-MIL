@@ -77,7 +77,7 @@ If you use **PathBench-MIL** in your research or projects, please cite:
     Navigate to the `slideflow_fork` directory and install it:
 
     ```bash
-    cd ../slideflow_fork
+    cd slideflow_fork
     pip install -e .
     ```
 
