@@ -9,6 +9,11 @@ import logging
 from huggingface_hub import login
 import multiprocessing as mp
 
+#Set hf_hub and torch_home to local .cache
+os.makedirs('.cache', exist_ok=True)
+os.environ['HF_HOME'] = '.cache'
+os.environ['TORCH_HOME'] = '.cache'
+
 def read_config(config_file : str):
     """
     Read the configuration file for the experiment

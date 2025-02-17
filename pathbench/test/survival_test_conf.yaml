@@ -1,24 +1,25 @@
 experiment:
   project_name: TCGA_LUSC
-  annotation_file: pathbench/test/dataset2_survival.csv
-  balancing: category
+  annotation_file: pathbench/test/dataset2_continuous_survival.csv
+  balancing: event
   class_weighting: False
   split_technique: k-fold
-  k: 5
-  val_fraction: 0.1
-  best_epoch_based_on: concordance_index  # Metric to be used for selecting the best epoch, can be val_loss or any metric in evaluation
+  k: 3
+  val_fraction: 0.2
+  best_epoch_based_on: val_loss  # Metric to be used for selecting the best epoch, can be val_loss or any metric in evaluation
   epochs: 50 # Number of epochs for training
   batch_size: 64 # Batch size for training
   bag_size: 512 # Bag size for MIL models
-  encoder_layers: 1 # Number of layers in the MIL encoder
+  encoder_layers: 2 # Number of layers in the MIL encoder
   z_dim: 256 # Dimension of the latent space in the MIL encoder
-  dropout_p: 0.1 # Dropout probability for the MIL model
-  num_workers: 2 # Number of workers for data loading, 0 for no parallelization.
+  dropout_p: 0.3 # Dropout probability for the MIL model
+  num_workers: 4 # Number of workers for data loading, 0 for no parallelization.
   aggregation_level: patient # Aggregation level can be 'slide' or 'patient'
-  task: survival # Task can be 'classification', 'regression' or 'survival'
+  task: survival # Task can be 'classification', 'regression', 'survival' or 'survival_discrete'
   mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
   custom_metrics: [ConcordanceIndex]
   report: False
+  mixed_precision: True
 
   qc: # List of quality control methods to be used
     - GaussianV2
@@ -36,7 +37,6 @@ experiment:
 
   visualization:
     - concordance_index
-    - calibration
     - kaplan_meier
     - survival_roc
 
@@ -57,22 +57,28 @@ benchmark_parameters:
   tile_px:
     - 256
   tile_um:
-    - 256
     - 128
   normalization:
     - macenko
   
   feature_extraction:
-    - resnet50_imagenet
     - uni
 
   mil:
     - attention_mil
+    - mean_mil
+    - linear_evaluation_mil
 
   loss:
     - CoxPHLoss
-    - DeepHitLoss
     - RankingLoss
+    - ExponentialConcordanceLoss
+
+  optimizer:
+    - Adam
+
+  activation_function:
+    - LeakyReLU
 
 
 weights_dir: ../pretrained_weights

@@ -19,6 +19,7 @@ experiment:
   mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
   custom_metrics: [RocAuc] # Custom metrics to be used, needs to be defined in metrics.py or as a fastai-metric: https://docs.fast.ai/metrics.html
   report: False
+  feature_extraction_only: False
   
   qc: # List of quality control methods to be used
     - GaussianV2

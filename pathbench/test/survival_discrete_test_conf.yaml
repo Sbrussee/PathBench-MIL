@@ -1,25 +1,26 @@
 experiment:
   project_name: TCGA_LUSC
-  annotation_file: /exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/pathbench/test/dataset1_multi_classification_pathologic_stage.csv
-  balancing: category
-  class_weighting: True
-  split_technique: fixed
+  annotation_file: pathbench/test/dataset2_discretized_survival.csv
+  balancing: event
+  class_weighting: False
+  split_technique: k-fold
   k: 3
-  val_fraction: 0.1
-  best_epoch_based_on: roc_auc_score
-  epochs: 25 # Number of epochs for training
+  val_fraction: 0.2
+  best_epoch_based_on: val_loss  # Metric to be used for selecting the best epoch, can be val_loss or any metric in evaluation
+  epochs: 50 # Number of epochs for training
   batch_size: 64 # Batch size for training
   bag_size: 512 # Bag size for MIL models
   encoder_layers: 1 # Number of layers in the MIL encoder
   z_dim: 256 # Dimension of the latent space in the MIL encoder
-  dropout_p: 0.1 # Dropout probability for the MIL model
+  dropout_p: 0.3 # Dropout probability for the MIL model
   num_workers: 4 # Number of workers for data loading, 0 for no parallelization.
-  aggregation_level: slide # Aggregation level can be 'slide' or 'patient'
-  task: classification # Task can be 'classification', 'regression' or 'survival'
+  aggregation_level: patient # Aggregation level can be 'slide' or 'patient'
+  task: survival_discrete # Task can be 'classification', 'regression', 'survival' or 'survival_discrete'
   mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
-  custom_metrics: [RocAuc]
+  custom_metrics: [ConcordanceIndex]
   report: False
-  feature_extraction_only: False
+
+
 
   qc: # List of quality control methods to be used
     - GaussianV2
@@ -32,13 +33,13 @@ experiment:
     whitespace_fraction: 1.0 # Image tiles with whitespace above this fraction are discarded.
 
   evaluation:
-    - balanced_accuracy
+    - c_index
+    - brier_score
 
   visualization:
-    - confusion_matrix
-    - roc_curve
-    - precision_recall_curve
-    - top_tiles
+    - concordance_index
+    - kaplan_meier
+    - survival_roc
 
 datasets:
   - name: train
@@ -53,8 +54,6 @@ datasets:
     tile_path: TCGA_LUSC/tiles
     used_for: testing
 
-
-
 benchmark_parameters:
   tile_px:
     - 256
@@ -62,23 +61,23 @@ benchmark_parameters:
     - 128
   normalization:
     - macenko
-    #- reinhard
+  
   feature_extraction:
-    - resnet50_imagenet
-    - CTransPath
-    #- RetCCL
-    #- PLIP
-    #- uni
-    - h_optimus_0
-    - phikon_v2
     - uni
-  mil:
-    #- CLAM_SB
-    #- dsmil
-    - varmil
-    - dsmil
-    - attention_mil
 
+  mil:
+    - attention_mil
+    - mean_mil
+    - linear_evaluation_mil
+
+  loss:
+    - NLLLogisticHazardLoss
+    - BCESurvLoss
+    - DeepHitLoss
+    - AdaptedCrossEntropySurvivalLoss
+
+  activation:
+    - LeakyReLU
 
 weights_dir: ../pretrained_weights
 #hf_token: None
