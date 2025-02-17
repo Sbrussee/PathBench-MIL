@@ -91,6 +91,12 @@ If you use **PathBench-MIL** in your research or projects, please cite:
 
     After activating the virtual environment, install the `pathbench-mil` package.
 
+    First, move back to the pathbench-mil main directory:
+    ```bash
+    cd ..
+    ```
+
+    Then, run:
     ```bash
     pip install -e .
     ```
