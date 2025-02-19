@@ -77,7 +77,7 @@ If you use **PathBench-MIL** in your research or projects, please cite:
     Navigate to the `slideflow_fork` directory and install it:
 
     ```bash
-    cd ../slideflow_fork
+    cd slideflow_fork
     pip install -e .
     ```
 
@@ -91,6 +91,12 @@ If you use **PathBench-MIL** in your research or projects, please cite:
 
     After activating the virtual environment, install the `pathbench-mil` package.
 
+    First, move back to the pathbench-mil main directory:
+    ```bash
+    cd ..
+    ```
+
+    Then, run:
     ```bash
     pip install -e .
     ```
@@ -310,6 +316,7 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 # - h_optimus_0
 # - virchow
 # - virchow2
+# - exaone_path
 
 # Available MIL aggregation methods:
 # - clam_mil
