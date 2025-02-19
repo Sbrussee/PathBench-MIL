@@ -242,7 +242,7 @@ def benchmark(config, project):
                 val_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/predictions.parquet")
                 #Print the unique values in y_pred0:
                 print(val_result)
-                if config['experiment']['task'] == 'survival':
+                if config['experiment']['task'] == 'survival' or config['experiment']['task'] == 'survival_discrete':	
                     metrics, durations, events, predictions = calculate_survival_results(val_result)
                     survival_results_per_split.append((durations, events, predictions))
                 elif config['experiment']['task'] == 'regression':
@@ -275,7 +275,7 @@ def benchmark(config, project):
                     model_string = f"<class 'pathbench.models.aggregators.{combination_dict['mil'].lower()}'>"
                 test_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}/00000-{model_string}/predictions.parquet")
                 print(test_result)
-                if config['experiment']['task'] == 'survival':
+                if config['experiment']['task'] == 'survival' or config['experiment']['task'] == 'survival_discrete':
                     metrics, durations, events, predictions = calculate_survival_results(test_result)
                     test_survival_results_per_split.append((durations, events, predictions))
                 elif config['experiment']['task'] == 'regression':
@@ -565,18 +565,17 @@ def generate_bags(config: dict, project: sf.Project, all_data: sf.Dataset,
     outdir = f"experiments/{config['experiment']['project_name']}/bags"
     os.makedirs(outdir, exist_ok=True)
     bags_dir = f"{outdir}/{string_without_mil}"
-    if os.path.exists(bags_dir):
-        bags = bags_dir
+
+    #If some bags are missing, recalculate them
+    if "mixed_precision" in config['experiment']:
+        bags = project.generate_feature_bags(model=feature_extractor, dataset=all_data,
+                                            normalizer=combination_dict['normalization'],
+                                            outdir=bags_dir,
+                                            mixed_precision=config['experiment']['mixed_precision'])
     else:
-        if "mixed_precision" in config['experiment']:
-            bags = project.generate_feature_bags(model=feature_extractor, dataset=all_data,
-                                                   normalizer=combination_dict['normalization'],
-                                                   outdir=bags_dir,
-                                                   mixed_precision=config['experiment']['mixed_precision'])
-        else:
-            bags = project.generate_feature_bags(model=feature_extractor, dataset=all_data,
-                                                   normalizer=combination_dict['normalization'],
-                                                   outdir=bags_dir)
+        bags = project.generate_feature_bags(model=feature_extractor, dataset=all_data,
+                                            normalizer=combination_dict['normalization'],
+                                            outdir=bags_dir)
     return bags
 
 
@@ -911,6 +910,10 @@ def calculate_results(result: pd.DataFrame, config: dict, save_string: str, data
             all_y_pred_prob.append(y_pred_prob)
             m = ClassifierMetrics(y_true=(all_y_true == class_label).astype(int), y_pred=y_pred_prob)
             fpr_, tpr_, auroc, threshold = m.fpr, m.tpr, m.auroc, m.threshold
+
+            fpr.append(fpr_)
+            tpr.append(tpr_)
+            
             optimal_idx = np.argmax(tpr_ - fpr_)
             optimal_threshold = threshold[optimal_idx]
             y_pred_binary_opt = (y_pred_prob > optimal_threshold).astype(int)
@@ -1020,6 +1023,25 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
     task = config['experiment']['task']
     project_directory = f"experiments/{config['experiment']['project_name']}"
 
+    benchmark_params = config['benchmark_parameters']
+    tile_px_choices = benchmark_params.get('tile_px', ['256'])
+    tile_um_choices = benchmark_params.get('tile_um', ['20x'])
+    normalization_choices = benchmark_params.get('normalization', ['macenko'])
+    feature_extraction_choices = benchmark_params.get('feature_extraction', ['uni'])
+    mil_choices = benchmark_params.get('mil', ['attention_mil'])
+    # For objects (e.g., loss functions), use string identifiers (or factory functions) instead
+    loss_choices = benchmark_params.get('loss', ['CrossEntropyLoss'])
+    augmentation_choices = benchmark_params.get('augmentation', [None])
+    activation_function_choices = benchmark_params.get('activation_function', ['ReLU'])
+    optimizer_choices = benchmark_params.get('optimizer', ['Adam'])
+    balancing = config['experiment'].get('balancing', None)
+    class_weighting = config['experiment'].get('class_weighting', None)
+
+    logging.info("Starting Optuna optimization...")
+    logging.info(f"Objective metric: {objective_metric}")
+    #Log the search space
+    logging.info(f"Search space: {benchmark_params}")
+
     def objective(trial: optuna.Trial) -> float:
         """
         Objective function for Optuna optimization.
@@ -1040,18 +1062,15 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
         batch_size = trial.suggest_int('batch_size', 8, 64)
         z_dim = trial.suggest_int('z_dim', 128, 512)
         encoder_layers = trial.suggest_int('encoder_layers', 1, 3)
-        balancing = config['experiment'].get('balancing', None)
-        class_weighting = config['experiment'].get('class_weighting', None)
-        tile_px = trial.suggest_categorical('tile_px', config['benchmark_parameters'].get('tile_px', ['256']))
-        tile_um = trial.suggest_categorical('tile_um', config['benchmark_parameters'].get('tile_um', ['20x']))
-        normalization = trial.suggest_categorical('normalization', config['benchmark_parameters'].get('normalization', ['macenko']))
-        feature_extraction = trial.suggest_categorical('feature_extraction', config['benchmark_parameters'].get('feature_extraction', ['uni']))
-        mil = trial.suggest_categorical('mil', config['benchmark_parameters'].get('mil', ['attention_mil']))
-        loss = trial.suggest_categorical('loss', config['benchmark_parameters'].get('loss', [CrossEntropyLoss()]))
-        augmentation = trial.suggest_categorical('augmentation', config['benchmark_parameters'].get('augmentation', [None]))
-        activation_function = trial.suggest_categorical('activation_function', config['benchmark_parameters'].get('activation_function', ['ReLU']))
-        optimizer = trial.suggest_categorical('optimizer', config['benchmark_parameters']['optimizer'])
-
+        tile_px = trial.suggest_categorical('tile_px', tile_px_choices)
+        tile_um = trial.suggest_categorical('tile_um', tile_um_choices)
+        normalization = trial.suggest_categorical('normalization', normalization_choices)
+        feature_extraction = trial.suggest_categorical('feature_extraction', feature_extraction_choices)
+        mil = trial.suggest_categorical('mil', mil_choices)
+        loss = trial.suggest_categorical('loss', loss_choices)
+        augmentation = trial.suggest_categorical('augmentation', augmentation_choices)
+        activation_function = trial.suggest_categorical('activation_function', activation_function_choices)
+        optimizer = trial.suggest_categorical('optimizer', optimizer_choices)
         logging.info(f"Trial {trial.number} hyperparameters: epochs={epochs}, batch_size={batch_size}, tile_px={tile_px}, tile_um={tile_um}, normalization={normalization}, feature_extraction={feature_extraction}, mil={mil}")
 
         # Update configuration with sampled hyperparameters
