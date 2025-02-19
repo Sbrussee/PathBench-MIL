@@ -316,6 +316,7 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 # - h_optimus_0
 # - virchow
 # - virchow2
+# - exaone_path
 
 # Available MIL aggregation methods:
 # - clam_mil
