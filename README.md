@@ -204,8 +204,9 @@ experiment:
   val_fraction: 0.1 # Fraction of training data to use for validation
   aggregation_level: slide # Aggregation level, can be slide or patient
   task: classification # Task, can be classification, regression, survival or survival_discrete
+  mode: benchmark # Mode can be either 'benchmark' or 'optimization'
   mixed_precision: False # Whether to retrieve features in mixed precision (fp16), which is useful for situations with gigantic models and limited GPU-VRAM)
-
+  feature_extraction_only: False # Wheter to only retrieve features
   report: False # Boolean denoting whether to provide a tile processing report
 
   visualization: # Visualization options, options: CLASSIFICATION: confusion_matrix, precision_recall_curve, roc_curve, top_tiles SURVIVAL: survival_roc, concordance_index, kaplan_meier REGRESSION: predicted_vs_actual, residuals, qq
