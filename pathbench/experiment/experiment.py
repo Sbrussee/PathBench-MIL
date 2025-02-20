@@ -81,12 +81,13 @@ class Experiment():
         logging.info(f"Configuration file {config_file} loaded")
         self.load_datasets()
         #Set Hugging Face token
-        if 'hf_token' in self.config:
-            if self.config['hf_token'] is not None:
-                HF_TOKEN = self.config['hf_token']
+        if 'hf_key' in self.config:
+            if self.config['hf_key'] is not None:
+                HF_TOKEN = self.config['hf_key']
                 os.environ['HF_TOKEN'] = HF_TOKEN
                 login(token=HF_TOKEN)
                 logging.info("Logged in to Hugging Face")
+
         #Set pretrained weights directory
         WEIGHTS_DIR = self.config['weights_dir']
         # Set environment variables
