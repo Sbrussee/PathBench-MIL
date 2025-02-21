@@ -111,7 +111,6 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
-import warnings
 from sklearn.metrics import roc_auc_score
 
 def plot_survival_auc_across_folds(results_per_split, save_string, dataset, config):
