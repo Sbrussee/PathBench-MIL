@@ -23,13 +23,11 @@ RUN apt-get update && apt-get install -y \
 # Set the working directory inside the container
 WORKDIR /app
 
-# Copy the entire repository into the container.
-# (Ensure your Docker build context is the root of your project.)
-COPY . /app
 
 # --------------------------------------------------
 # Build steps for PathBench-MIL
 # --------------------------------------------------
+COPY . /app/PathBench-MIL
 WORKDIR /app/PathBench-MIL
 
 # Run setup_pathbench.py to create the virtual environment and install base tools.
@@ -42,7 +40,7 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 # --------------------------------------------------
 # Install the slideflow fork package
 # --------------------------------------------------
-WORKDIR /app/slideflow_fork
+WORKDIR /app/PathBench-MIL/slideflow_fork
 RUN pip install -e .
 
 # --------------------------------------------------
