@@ -258,77 +258,100 @@ def benchmark(config, project):
                 val_dict.update(metrics)
 
                 val_df = val_df.append(val_dict, ignore_index=True)
-                # Test the trained model
-                test_result = eval_mil(
-                    weights=f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}",
-                    outcomes=target,
-                    dataset=test_set,
-                    bags=bags,
-                    config=mil_conf,
-                    outdir=f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}",
-                    pb_config=config,
-                    activation_function = combination_dict['activation_function'] if 'activation_function' in combination_dict else None
-                )   
-                if combination_dict['mil'].lower() in ['clam_sb', 'clam_mb', 'attention_mil', 'mil_fc', 'mil_fc_mc', 'transmil', 'bistro.transformer']:
-                    model_string = combination_dict['mil'].lower()
-                else:
-                    model_string = f"<class 'pathbench.models.aggregators.{combination_dict['mil'].lower()}'>"
-                test_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}/00000-{model_string}/predictions.parquet")
-                print(test_result)
-                if config['experiment']['task'] == 'survival' or config['experiment']['task'] == 'survival_discrete':
-                    metrics, durations, events, predictions = calculate_survival_results(test_result)
-                    test_survival_results_per_split.append((durations, events, predictions))
-                elif config['experiment']['task'] == 'regression':
-                    metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
-                    y_true, y_pred = test_result['y_true'], test_result['y_pred0']
-                    test_results_per_split.append((y_true, y_pred))
-                else:
-                    metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
-                    test_results_per_split.append([tpr, fpr])
-                    test_pr_per_split.extend(test_pr_curves)
-                test_dict = combination_dict.copy()
-                test_dict.update(metrics)
-                #Add weights directory to test dict
-                test_dict['weights'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}"
-                test_dict['mil_params'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/mil_params.json"
-                test_dict['bag_dir'] = bags
-                
-                test_dict['tfrecord_dir'] = f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}" if 'x' in str(combination_dict['tile_um']) else f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}um"
 
 
-                # Visualize the top 5 tiles, if applicable
-                #Check if model supports attention
-                if 'top_tiles' in config['experiment']['visualization']:
-                    #Select 10 random slides from train, val and test
-                    train_slides = random.sample(train.slides(), 10)
-                    val_slides = random.sample(val.slides(), 10)
-                    test_slides = random.sample(test_set.slides(), 10)
+                #Loop through the test datasets
+                for test_dataset in test_datasets:
+                    individual_test_set = all_data.filter(filters={'dataset': [test_dataset['name']]})
+                    # Define a unique output directory for this test dataset evaluation
+                    test_outdir = (
+                        f"experiments/{config['experiment']['project_name']}/mil_eval/"
+                        f"{number}-{save_string}_{index}_{test_dataset['name']}"
+                    )
 
+                    # Evaluate the MIL model on this specific test set
+                    _ = eval_mil(
+                        weights=f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}",
+                        outcomes=target,
+                        dataset=individual_test_set,
+                        bags=bags,
+                        config=mil_conf,
+                        outdir=test_outdir,
+                        pb_config=config,
+                        activation_function=combination_dict.get('activation_function')
+                    )
 
-                    os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations/top_tiles", exist_ok=True)
-                    try:
-                        output_dir = f"experiments/{config['experiment']['project_name']}/visualizations/top_tiles"
-                        for slide_name in val_slides:
-                            attention = np.load(f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/attention/{slide_name}_att.npz")
-                            plot_top5_attended_tiles_per_class(slide_name,
-                                                                attention,
-                                                                test_dict['tfrecord_dir'],
-                                                                output_dir,
-                                                                annotation_df, target, "val", str(index), save_string)
-
-                        for slide_name in test_slides:
-                            attention = np.load(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}/00000-{model_string}/attention/{slide_name}_att.npz")
-                            plot_top5_attended_tiles_per_class(slide_name,
-                                                                attention,
-                                                                test_dict['tfrecord_dir'],
-                                                                output_dir,
-                                                                annotation_df, target, "test", str(index), save_string)
-                    except:
-                        logging.warning("Could not plot top 5 attended tiles, attention is likely not available for this model")
+                    # Determine the model string used in the predictions file path
+                    if combination_dict['mil'].lower() in BUILT_IN_MIL:
+                        model_string = combination_dict['mil'].lower()
+                    else:
+                        model_string = f"<class 'pathbench.models.aggregators.{combination_dict['mil'].lower()}'>"
                     
-                test_df = test_df.append(test_dict, ignore_index=True)
-                print(test_df)
-                index += 1
+                    # Load test predictions for this specific test dataset
+                    predictions_path = (
+                        f"{test_outdir}/00000-{model_string}/predictions.parquet"
+                    )
+                    test_result = pd.read_parquet(predictions_path)
+                    
+                    # Process the test_result based on task type
+                    if config['experiment']['task'] in ['survival', 'survival_discrete']:
+                        metrics, durations, events, predictions = calculate_survival_results(test_result)
+                        test_survival_results_per_split.append((durations, events, predictions))
+                    elif config['experiment']['task'] == 'regression':
+                        metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
+                        y_true, y_pred = test_result['y_true'], test_result['y_pred0']
+                        test_results_per_split.append((y_true, y_pred))
+                    else:
+                        metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
+                        test_results_per_split.append([tpr, fpr])
+                        test_pr_per_split.extend(test_pr_curves)
+                    
+                    # Build a dictionary to record the test results for the current test dataset
+                    test_dict = combination_dict.copy()
+                    test_dict.update(metrics)
+                    test_dict['weights'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}"
+                    test_dict['mil_params'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/mil_params.json"
+                    test_dict['bag_dir'] = bags
+                    test_dict['test_dataset'] = test_dataset['name']
+                    
+                    # Optionally add the tfrecord directory (depending on your config)
+                    if 'x' in str(combination_dict['tile_um']):
+                        test_dict['tfrecord_dir'] = f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}"
+                    else:
+                        test_dict['tfrecord_dir'] = f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}um"
+                    
+                    # Append this test result to the overall test results DataFrame
+                    test_df = test_df.append(test_dict, ignore_index=True)
+
+            # Visualize the top 5 tiles, if applicable
+            #Check if model supports attention
+            if 'top_tiles' in config['experiment']['visualization']:
+                #Select 10 random slides from train, val and test
+                train_slides = random.sample(train.slides(), 10)
+                val_slides = random.sample(val.slides(), 10)
+                test_slides = random.sample(test_set.slides(), 10)
+
+
+                os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations/top_tiles", exist_ok=True)
+                try:
+                    output_dir = f"experiments/{config['experiment']['project_name']}/visualizations/top_tiles"
+                    for slide_name in val_slides:
+                        attention = np.load(f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/attention/{slide_name}_att.npz")
+                        plot_top5_attended_tiles_per_class(slide_name,
+                                                            attention,
+                                                            test_dict['tfrecord_dir'],
+                                                            output_dir,
+                                                            annotation_df, target, "val", str(index), save_string)
+
+                    for slide_name in test_slides:
+                        attention = np.load(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}/00000-{model_string}/attention/{slide_name}_att.npz")
+                        plot_top5_attended_tiles_per_class(slide_name,
+                                                            attention,
+                                                            test_dict['tfrecord_dir'],
+                                                            output_dir,
+                                                            annotation_df, target, "test", str(index), save_string)
+                except:
+                    logging.warning("Could not plot top 5 attended tiles, attention is likely not available for this model")
 
             logging.info(f"Combination {save_string} finished...")
             # Save which combinations were finished
