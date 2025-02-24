@@ -93,6 +93,7 @@ class Experiment():
         # Set environment variables
         os.environ['TORCH_HOME'] = WEIGHTS_DIR
         os.environ['HF_HOME'] = WEIGHTS_DIR
+        os.environ['XDG_CACHE_HOME'] = WEIGHTS_DIR
 
     def run(self):
         if self.config['experiment']['mode'] == 'benchmark':
