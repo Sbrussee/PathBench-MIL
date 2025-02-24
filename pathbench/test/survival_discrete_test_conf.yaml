@@ -10,8 +10,8 @@ experiment:
   epochs: 50 # Number of epochs for training
   batch_size: 64 # Batch size for training
   bag_size: 512 # Bag size for MIL models
-  encoder_layers: 1 # Number of layers in the MIL encoder
-  z_dim: 256 # Dimension of the latent space in the MIL encoder
+  encoder_layers: 2 # Number of layers in the MIL encoder
+  z_dim: 512 # Dimension of the latent space in the MIL encoder
   dropout_p: 0.3 # Dropout probability for the MIL model
   num_workers: 4 # Number of workers for data loading, 0 for no parallelization.
   aggregation_level: patient # Aggregation level can be 'slide' or 'patient'
