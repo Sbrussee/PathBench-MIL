@@ -122,7 +122,7 @@ Navigate to the root of your repository (where the Dockerfile is located).
 Build the Docker image by running:
 
 ```bash
-docker build -t pathbench-gpu .
+docker build -f pathbench-gpu.Dockerfile -t pathbench-gpu .
 ```
 ### Running the Container Interactively
 To modify the configuration file (conf.yaml) without rebuilding the image, you can run the container interactively and mount your custom config.
