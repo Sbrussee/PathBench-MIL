@@ -46,7 +46,7 @@ If you use **PathBench-MIL** in your research or projects, please cite:
 1. **Clone the Repository:**
 
     ```bash
-    git clone --recurse_submodules https://github.com/sbrussee/PathBench-MIL.git
+    git clone --recurse-submodules https://github.com/sbrussee/PathBench-MIL.git
     cd PathBench-MIL
     ```
 
