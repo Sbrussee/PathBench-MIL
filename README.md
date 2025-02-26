@@ -651,6 +651,36 @@ In addition to a wide range of feature extractors, PathBench also includes a wid
 | Instance-Level (IL)-MIL | Supported | Supported | Supported | Supported | NA |
 
 
+## PathBench outputs
+PathBench-MIL outputs a variety of visualizations and output tables with the performance metrics on the specified validation and testing datasets. Additionally, pathbench will automatically select the best performing model for each benchmarking/optimization experiment and save it for later use. Inference on this saved model can be performed using the utils/inference.py function, as explained below:
+
+Make sure your model directory has the following structure (the critical file is mil_params.json):
+
+```
+experiments/{exp_name}/saved_models/best_test_model_{datetime}/
+    ├── attention/
+    ├── models/
+    ├── history.csv
+    ├── mil_params.json
+    ├── predictions.parquet
+    └── slide_manifest.csv
+```
+
+Run the Script:
+
+For a single slide:
+```bash
+python utils/inference.py --model_dir /experiments/some_exp/saved_models/best_test_model_2023-05-27_12-34-56 --slide /path/to/slide.svs
+```
+For a directory of slides (with attention scores):
+```bash
+python utils/inference.py --model_dir /experiments/some_exp/saved_models/best_test_model_2023-05-27_12-34-56 --slide_dir /path/to/slides/ --attention
+```
+
+The script will save the predictions (and optionally attention values) for each slide:
+- Predictions are saved as a .npy file (e.g., slide1_predictions.npy).
+- If the --attention flag is used and attention scores are returned, they are saved as a separate .npy file (e.g., slide1_attention.npy).
+
 ## Extending PathBench
 PathBench is designed such that it easy to add new feature extractors and MIL aggregation models. 
 1. **Custom Feature Extractors**
