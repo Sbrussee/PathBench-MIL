@@ -119,7 +119,7 @@ app.layout = dbc.Container([
         dbc.Col(
             html.Div([
                 html.Img(
-                    src='/assets/thumbnail_PathBench-logo-horizontaal.png',
+                    src='../../thumbnail_PathBench-logo-horizontaal.png',
                     height="100px",
                     style={'margin': '20px'}
                 ),
