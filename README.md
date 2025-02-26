@@ -315,6 +315,7 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 # - kaiko_b16
 # - kaiko_l14
 # - h_optimus_0
+# - h_optimus_1
 # - virchow
 # - virchow2
 # - exaone_path
@@ -410,7 +411,7 @@ PathBench inherits the project functionality from SlideFlow. PathBench allows cr
   
 ### General settings:
 
-- `task`: The task can be `classification`, `regression`, or `survival`.
+- `task`: The task can be `classification`, `regression`, `survival` or 'survival_discrete'.
 - `mode`: The mode can be either `benchmark` or `optimization`.
 - `num_workers` : Number of workers for parallelization, set to 0 to disable parallel processing.
 - `custom_metrics` : List of custom metrics to be used, which should be defined in metrics.py or as a fastai-metric: https://docs.fast.ai/metrics.html
@@ -531,7 +532,7 @@ CONFIG_FILE=conf.yaml
 python3 main.py $CONFIG_FILE
 ```
 # Features
-- Support for binary/multiclass classification, regression and time-to-event (e.g. survival prediction) problems.
+- Support for binary/multiclass classification, regression and continuous/discretized time-to-event (e.g. survival prediction) problems.
 - Benchmarking w.r.t.
     - Tile sizes, magnifications (e.g. 256px, 20x)
     - Normalization methods (e.g. Macenko, Reinhard)
@@ -544,7 +545,7 @@ python3 main.py $CONFIG_FILE
 - Interpretable visualizations of benchmark output
 - Plotly-based benchmark visualization tool
 - Efficient Tile processing and QC pipeline inherited by Slideflow
-- Optuna-based optimization w.r.t. the benchmark parameters, to quickly find good candidate solutions.
+- Optuna-based AutoML optimization w.r.t. the benchmark parameters, to quickly find good candidate solutions.
 
 # Package Structure
 
@@ -622,6 +623,7 @@ PathBench supports a wide range of different feature extractors, including SOTA 
 | Kaiko-B16 | Automatic | [Link](https://github.com/kaiko-ai/towards_large_pathology_fms) |
 | Kaiko-L14 | Automatic | [Link](https://github.com/kaiko-ai/towards_large_pathology_fms) |
 | H-Optimus-0 | Automatic | [Link](https://huggingface.co/bioptimus/H-optimus-0) |
+| H-Optimus-1 | Gated | [Link](https://huggingface.co/bioptimus/H-optimus-1)
 
 
 ## MIL aggregators
