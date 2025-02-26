@@ -1581,6 +1581,62 @@ class h_optimus_0(TorchFeatureExtractor):
 
 
 @register_torch
+class h_optimus_1(TorchFeatureExtractor):
+    """
+    H-Optimus-1 feature extractor, with large Vision Transformer backbone
+    
+    Parameters
+    ----------
+    tile_px : int
+        The size of the tile
+    
+    Attributes
+    ----------
+    model : VisionTransformer
+        The Vision Transformer model   
+
+    transform : torchvision.transforms.Compose
+        The transformation pipeline
+
+    preprocess_kwargs : dict
+        The preprocessing arguments
+    
+    Methods
+    -------
+    dump_config()
+        Dump the configuration of the feature extractor
+    """
+
+    tag = 'h_optimus_1'
+
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
+
+        self.model = timm.create_model(
+            "hf-hub:bioptimus/H-optimus-1", pretrained=True, init_values=1e-5, dynamic_img_size=False
+        )
+        self.model.to("cuda")
+        self.model.eval()
+
+        self.transform = transforms.Compose([
+            transforms.ConvertImageDtype(torch.float32),
+            transforms.Resize(224),
+            transforms.Normalize(
+                mean=(0.707223, 0.578729, 0.703617), 
+                std=(0.211883, 0.230117, 0.177517)
+            ),
+        ])
+        # Slideflow standardization
+        self.preprocess_kwargs = {'standardize': False}
+
+    def dump_config(self):
+        return {
+            'class': 'h_optimus_1',
+            'kwargs': {}
+        }
+        
+
+@register_torch
 class transpath_mocov3(TorchFeatureExtractor):
     """
     TransPath MoCoV3 feature extractor, with small Vision Transformer backbone
