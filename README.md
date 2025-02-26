@@ -683,6 +683,18 @@ The script will save the predictions (and optionally attention values) for each 
 - Predictions are saved as a .npy file (e.g., slide1_predictions.npy).
 - If the --attention flag is used and attention scores are returned, they are saved as a separate .npy file (e.g., slide1_attention.npy).
 
+## Interactive Visualization
+PathBench-MIL provides an interactive plotly-dash application that can be used to investigate benchmarking/optimization results. 
+By running:
+```bash
+python3 pathbench/visualization/vis_app.py --results /path/to/directory/with/results/
+```
+you can visualize PathBench's aggregated output files using the visualization application in your browser, which should look like this:
+
+<p align="center">
+  <img src="dashboard_screenshot.PNG" alt="Dashboard screenshot" width="700" height="400">
+</p>
+
 ## Extending PathBench
 PathBench is designed such that it easy to add new feature extractors and MIL aggregation models. 
 1. **Custom Feature Extractors**
