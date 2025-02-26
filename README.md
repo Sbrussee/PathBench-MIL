@@ -192,7 +192,7 @@ experiment:
   balancing: category # Training set balancing strategy, can be None, category, slide, patient or tile.
   class_weighting: False # Boolean denoting whether to weight instances based on class occurence during model training
   num_workers: 0 # Number of workers for data loading, 0 for no parallelization.
-  split_technique: k-fold # Splitting technique, can be k-fold or fixed
+  split_technique: k-fold # Splitting technique, can be k-fold, k-fold-stratied (stratifies folds across 'dataset' column) or fixed
   epochs: 5 # Number of training epoch
   best_epoch_based_on: val_loss # Metric to be used for selecting the best training epoch (e.g. val_loss, roc_auc_score, mae, concordance_index)
   batch_size: 32 # Batch size
