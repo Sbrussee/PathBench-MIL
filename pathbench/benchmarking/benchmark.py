@@ -100,6 +100,10 @@ def benchmark(config, project):
     logging.info(f"Using {project_directory} for project directory...")
     logging.info(f"Using {annotations} for annotations...")
 
+    #Create a dictionary mapping from the 'patient' column to 'dataset' column in annotations
+    annotation_df = pd.read_csv(annotations)
+    dataset_mapping = dict(zip(annotation_df['patient'], annotation_df['dataset']))
+
     #Determine splits file
     splits_file = determine_splits_file(config, project_directory)
     
@@ -187,7 +191,7 @@ def benchmark(config, project):
             logging.info(f"Test set #slides: {len(test_set.slides())}")
 
             logging.info("Splitting datasets...")
-            splits = split_datasets(config, project, splits_file, target, project_directory, train_set)
+            splits = split_datasets(config, project, splits_file, target, project_directory, train_set, dataset_mapping)
 
             save_string = "_".join([f"{value}" for value in combination_dict.values()])
             string_without_mil = "_".join([f"{value}" for key, value in combination_dict.items() if key != 'mil' and key != 'loss' and key != 'augmentation' and key != 'activation_function' and key != 'optimizer'])
@@ -415,6 +419,8 @@ def determine_splits_file(config: dict, project_directory: str) -> str:
         splits_file = f"{project_directory}/fixed_{task}_{splits}"
     elif config['experiment']['split_technique'] == 'k-fold':
         splits_file = f"{project_directory}/kfold_{task}_{splits}"
+    elif config['experiment']['split_technique'] == 'k-fold-stratified':
+        splits_file = f"{project_directory}/kfold_stratified_{task}_{splits}"
     else:
         logging.error("Invalid split technique. Please choose either 'fixed' or 'k-fold'.")
         sys.exit(1)
@@ -521,7 +527,8 @@ def balance_dataset(dataset: sf.Dataset, task: str, config: dict) -> sf.Dataset:
 
 
 def split_datasets(config: dict, project: sf.Project, splits_file: str, target: str,
-                   project_directory: str, train_set: sf.Dataset) -> list:
+                   project_directory: str, train_set: sf.Dataset, 
+                   dataset_mapping: dict = None) -> list:
     """
     Split the dataset into training and validation (or k-fold splits) based on configuration.
 
@@ -532,6 +539,7 @@ def split_datasets(config: dict, project: sf.Project, splits_file: str, target: 
         target (str): Target variable for splitting.
         project_directory (str): Project directory path.
         train_set (sf.Dataset): The training dataset.
+        dataset_mapping (dict): Mapping from patient to dataset (site).
 
     Returns:
         list: A list of tuples (train, val) for each split.
@@ -546,12 +554,20 @@ def split_datasets(config: dict, project: sf.Project, splits_file: str, target: 
         target = None
         model_type = 'linear'
 
-    if config['experiment']['split_technique'] == 'k-fold':
+    if config['experiment']['split_technique'] == 'k-fold' or config['experiment']['split_technique'] == 'k-fold-stratified':
         k = config['experiment']['k']
+
+        if 'stratified' in config['experiment']['split_technique']:
+            site_stratified = True
+        else:
+            site_stratified = False
+    
         if os.path.exists(f"{project_directory}/kfold_{splits_file}"):
             splits = train_set.kfold_split(k=k, labels=target, splits=splits_file, read_only=True)
+        elif os.path.exists(f"{project_directory}/kfold_stratified_{splits_file}"):
+            splits = train_set.kfold_split(k=k, labels=target, splits=splits_file, read_only=True, preserved_site=True)
         else:
-            splits = train_set.kfold_split(k=k, labels=target, splits=splits_file)
+            splits = train_set.kfold_split(k=k, labels=target, splits=splits_file, preserved_site=True, site_labels=dataset_mapping)
             logging.info(f"K-fold splits written to {project_directory}/kfold_{splits}")
     else:
         if os.path.exists(f"{project_directory}/fixed_{splits_file}"):

@@ -6,17 +6,17 @@ experiment:
   split_technique: k-fold # Split technique can be 'k-fold' or 'fixed' or 'k_fold_site_preserved'
   k: 3 # Number of folds for k-fold cross-validation
   val_fraction: 0.1 # Fraction of the training data to be used for validation
-  best_epoch_based_on: val_loss # Metric to be used for selecting the best epoch, can be val_loss or any metric in evaluation
+  best_epoch_based_on: roc_auc_score # Metric to be used for selecting the best epoch, can be val_loss or any metric in evaluation
   epochs: 25 # Number of epochs for training
   batch_size: 32 # Batch size for training
   bag_size: 512 # Bag size for MIL models
   encoder_layers: 1 # Number of layers in the MIL encoder
   z_dim: 256 # Dimension of the latent space in the MIL encoder
   dropout_p: 0.1 # Dropout probability for the MIL model
-  num_workers: 0 # Number of workers for data loading, 0 for no parallelization.
+  num_workers: 4 # Number of workers for data loading, 0 for no parallelization.
   aggregation_level: slide # Aggregation level can be 'slide' or 'patient'
   task: classification # Task can be 'classification', 'regression' or 'survival' or 'survival_discrete'
-  mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
+  mode: optimization # Mode can be either 'benchmark' or 'optimization'.
   custom_metrics: [RocAuc] # Custom metrics to be used, needs to be defined in metrics.py or as a fastai-metric: https://docs.fast.ai/metrics.html
   report: False # Whether to generate a tile extraction report
   feature_extraction_only: False
@@ -68,24 +68,31 @@ benchmark_parameters:
     - 256 
   tile_um: # Magnifications (e.g. 40x, 20x, 10x)
     - 20x
+    - 10x
   normalization: # Normalization methods, can be 'macenko', 'reinhard' or 'cyclegan'
     - macenko
+    - reinhard
 
   feature_extraction: # Feature extraction methods, as specified in feature_extractors.py
+    - resnet50_imagenet
     - h_optimus_0
+    - hibou_l
+    - virchow2
     - uni
+    - conch
 
   mil: # MIL models, as specified in aggregators.py
     - clam_mil
     - dsmil
     - varmil
     - attention_mil
+    - transmil
 
   loss: # Loss functions, as specified in losses.py
     - CrossEntropyLoss
 
   activation_function: # activation function for the MIL encoder, supports any pytorch.nn activation function.
-    - LeakyReLU
+    - ReLU
 
   optimizer: # Optimizers, can be any fastai optimizer (Default: Adam)
     - Adam

@@ -6,14 +6,14 @@ experiment:
   split_technique: k-fold # Split technique can be 'k-fold' or 'fixed' or 'k_fold_site_preserved'
   k: 3 # Number of folds for k-fold cross-validation
   val_fraction: 0.1 # Fraction of the training data to be used for validation
-  best_epoch_based_on: val_loss # Metric to be used for selecting the best epoch, can be val_loss or any metric in evaluation
+  best_epoch_based_on: roc_auc_score # Metric to be used for selecting the best epoch, can be val_loss or any metric in evaluation
   epochs: 25 # Number of epochs for training
   batch_size: 32 # Batch size for training
   bag_size: 512 # Bag size for MIL models
   encoder_layers: 1 # Number of layers in the MIL encoder
   z_dim: 256 # Dimension of the latent space in the MIL encoder
   dropout_p: 0.1 # Dropout probability for the MIL model
-  num_workers: 0 # Number of workers for data loading, 0 for no parallelization.
+  num_workers: 4 # Number of workers for data loading, 0 for no parallelization.
   aggregation_level: slide # Aggregation level can be 'slide' or 'patient'
   task: classification # Task can be 'classification', 'regression' or 'survival' or 'survival_discrete'
   mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
@@ -38,16 +38,8 @@ experiment:
   visualization: # Visualization methods to be used
     - confusion_matrix
     - roc_curve
-
-optimization: # Optimization parameters
-  study_name: Exp1 # Name of the optimization study
-  load_study: True # Whether to load an existing study, which continues the optimization from a checkpoint
-  objective_metric: balanced_accuracy # Objective metric to be optimized
-  objective_mode: max # Optimization mode, can be 'max' or 'min'
-  objective_dataset: test # Dataset to be used for the objective metric, can be 'val' or 'test'
-  sampler: TPESampler # Sampler to be used, inherets from optuna.samplers
-  pruner: HyperbandPruner # Pruner to be used, inherets from optuna.pruners
-  trials: 20 # Number of trials to be run
+    - top_tiles
+    - precision_recall_curve
 
 
 datasets: # List of datasets to be used
@@ -72,13 +64,12 @@ benchmark_parameters:
     - macenko
 
   feature_extraction: # Feature extraction methods, as specified in feature_extractors.py
-    - h_optimus_0
+    - resnet50_imagenet
     - uni
+    - h_optimus_0
 
   mil: # MIL models, as specified in aggregators.py
     - clam_mil
-    - dsmil
-    - varmil
     - attention_mil
 
   loss: # Loss functions, as specified in losses.py
