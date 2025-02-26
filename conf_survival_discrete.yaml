@@ -1,8 +1,8 @@
 experiment:
   project_name: Exp1 # Name of the project
   annotation_file: /path/to/your/annotations # Path to the annotation file
-  balancing: category # Balancing can be 'tile', 'slide', 'patient' or 'category'
-  class_weighting: True # Whether to use class weighting for imbalanced datasets
+  balancing: event # Balancing can be 'tile', 'slide', 'patient' or 'category'
+  class_weighting: False # Whether to use class weighting for imbalanced datasets  
   split_technique: k-fold # Split technique can be 'k-fold' or 'fixed' or 'k_fold_site_preserved'
   k: 3 # Number of folds for k-fold cross-validation
   val_fraction: 0.1 # Fraction of the training data to be used for validation
@@ -12,10 +12,10 @@ experiment:
   bag_size: 512 # Bag size for MIL models
   encoder_layers: 1 # Number of layers in the MIL encoder
   z_dim: 256 # Dimension of the latent space in the MIL encoder
-  dropout_p: 0.1 # Dropout probability for the MIL model
+  dropout_p: 0.25 # Dropout probability for the MIL model
   num_workers: 0 # Number of workers for data loading, 0 for no parallelization.
-  aggregation_level: slide # Aggregation level can be 'slide' or 'patient'
-  task: classification # Task can be 'classification', 'regression' or 'survival' or 'survival_discrete'
+  aggregation_level: patient # Aggregation level can be 'slide' or 'patient'
+  task: survival_discrete # Task can be 'classification', 'regression' or 'survival' or 'survival_discrete'
   mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
   custom_metrics: [RocAuc] # Custom metrics to be used, needs to be defined in metrics.py or as a fastai-metric: https://docs.fast.ai/metrics.html
   report: False # Whether to generate a tile extraction report
@@ -31,23 +31,14 @@ experiment:
     whitespace_threshold: 230 #Pixel intensities (0-255) above this value are considered white.
     whitespace_fraction: 1.0 # Image tiles with whitespace above this fraction are discarded.
 
-  evaluation: # Evaluation metrics to be used
-    - balanced_accuracy
-    - auc
+  evaluation:
+    - c_index
+    - brier_score
 
-  visualization: # Visualization methods to be used
-    - confusion_matrix
-    - roc_curve
-
-optimization: # Optimization parameters
-  study_name: Exp1 # Name of the optimization study
-  load_study: True # Whether to load an existing study, which continues the optimization from a checkpoint
-  objective_metric: balanced_accuracy # Objective metric to be optimized
-  objective_mode: max # Optimization mode, can be 'max' or 'min'
-  objective_dataset: test # Dataset to be used for the objective metric, can be 'val' or 'test'
-  sampler: TPESampler # Sampler to be used, inherets from optuna.samplers
-  pruner: HyperbandPruner # Pruner to be used, inherets from optuna.pruners
-  trials: 20 # Number of trials to be run
+  visualization:
+    - concordance_index
+    - kaplan_meier
+    - survival_roc
 
 
 datasets: # List of datasets to be used
@@ -73,7 +64,9 @@ benchmark_parameters:
 
   feature_extraction: # Feature extraction methods, as specified in feature_extractors.py
     - h_optimus_0
+    - virchow2
     - uni
+    - resnet50_imagenet
 
   mil: # MIL models, as specified in aggregators.py
     - clam_mil
@@ -85,7 +78,7 @@ benchmark_parameters:
     - CrossEntropyLoss
 
   activation_function: # activation function for the MIL encoder, supports any pytorch.nn activation function.
-    - LeakyReLU
+    - ReLU
 
   optimizer: # Optimizers, can be any fastai optimizer (Default: Adam)
     - Adam
