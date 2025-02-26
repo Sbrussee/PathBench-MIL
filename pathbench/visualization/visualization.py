@@ -12,7 +12,7 @@ from lifelines.statistics import logrank_test
 from sklearn.calibration import calibration_curve
 from sksurv.metrics import cumulative_dynamic_auc
 import scipy.stats as stats
-from sklearn.metrics import precision_recall_curve, average_precision_score, roc_curve, auc
+from sklearn.metrics import precision_recall_curve, average_precision_score, roc_curve, auc, roc_auc_score
 import seaborn as sns
 import logging
 import sys
@@ -53,48 +53,75 @@ def get_continuous_preds(predictions):
 
 
 
-def plot_roc_curve_across_splits(rates : list, save_string : str, dataset : str, config : dict):
+def plot_roc_curve_across_splits(rates: list, save_string: str, dataset: str, config: dict):
     """
-    Plot the ROC curve across splits based on the rates
+    Plot the ROC curve across splits based on the rates.
 
     Args:
-        rates: The rates
-        save_string: The save string
-        dataset: The dataset
-        config: The configuration dictionary
-    
+        rates: A list where each element is a tuple or list with [tpr, fpr] arrays.
+        save_string: A string used for saving the figure.
+        dataset: The dataset identifier.
+        config: Configuration dictionary containing experiment details.
+
     Returns:
         None
     """
+
+    # Extract FPR and TPR lists from the rates input
     fpr_list = [rate[1] for rate in rates]
     tpr_list = [rate[0] for rate in rates]
 
     mean_fpr = np.linspace(0, 1, 100)
-    tprs = []
+    tprs_interp = []
     aucs = []
 
     for i in range(len(fpr_list)):
-        fpr = fpr_list[i]
-        tpr = np.interp(mean_fpr, fpr, tpr_list[i])
-        tpr[0] = 0.0
-        tprs.append(tpr)
-        roc_auc = auc(fpr_list[i], tpr_list[i])
+        # Convert to numpy arrays, cast to float, and flatten to ensure they are 1D.
+        fpr = np.array(fpr_list[i], dtype=float).flatten()
+        tpr = np.array(tpr_list[i], dtype=float).flatten()
+        
+        # Sort the arrays to ensure monotonicity in fpr
+        sorted_indices = np.argsort(fpr)
+        fpr = fpr[sorted_indices]
+        tpr = tpr[sorted_indices]
+        
+        # Remove duplicate fpr values to guarantee strict monotonicity
+        unique_fpr, unique_indices = np.unique(fpr, return_index=True)
+        unique_tpr = tpr[unique_indices]
+
+        # (Optional) Debugging: Warn if fpr is not strictly increasing
+        if not np.all(np.diff(unique_fpr) > 0):
+            print(f"Warning: fpr for split {i} is not strictly increasing: {unique_fpr}")
+
+        # Calculate AUC for this split
+        roc_auc = auc(unique_fpr, unique_tpr)
         aucs.append(roc_auc)
 
-    mean_tpr = np.mean(tprs, axis=0)
-    mean_tpr[-1] = 1.0
-    std_tpr = np.std(tprs, axis=0)
+        # Interpolate TPR values on a common set of FPR points
+        tpr_interp = np.interp(mean_fpr, unique_fpr, unique_tpr)
+        tpr_interp[0] = 0.0  # Ensure the curve starts at 0
+        tprs_interp.append(tpr_interp)
 
+    # Compute the mean and standard deviation of the interpolated TPRs
+    mean_tpr = np.mean(tprs_interp, axis=0)
+    mean_tpr[-1] = 1.0  # Ensure the curve ends at 1
+    std_tpr = np.std(tprs_interp, axis=0)
+
+    # Compute mean AUC and its standard deviation
     mean_auc = auc(mean_fpr, mean_tpr)
     std_auc = np.std(aucs)
 
-    # Plot the ROC curve with shaded standard deviation area
+    # Create the ROC plot
     plt.figure()
-    plt.plot(mean_fpr, mean_tpr, color='b', label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, std_auc), lw=2, alpha=.8)
+    plt.plot(mean_fpr, mean_tpr, color='b',
+             label=r'Mean ROC (AUC = %0.2f ± %0.2f)' % (mean_auc, std_auc),
+             lw=2, alpha=0.8)
 
+    # Shade the standard deviation area
     tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
     tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
-    plt.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2, label=r'$\pm$ 1 std. dev.')
+    plt.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=0.2,
+                     label=r'± 1 std. dev.')
 
     plt.plot([0, 1], [0, 1], color='red', lw=2, linestyle='--', label='Random')
     plt.xlim([-0.05, 1.05])
@@ -103,15 +130,12 @@ def plot_roc_curve_across_splits(rates : list, save_string : str, dataset : str,
     plt.ylabel('True Positive Rate')
     plt.title('Receiver Operating Characteristic')
     plt.legend(loc="lower right")
-    os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations", exist_ok=True)
-    plt.savefig(f"experiments/{config['experiment']['project_name']}/visualizations/roc_auc_{save_string}_{dataset}.png")
+
+    # Save the figure to the specified directory
+    output_dir = f"experiments/{config['experiment']['project_name']}/visualizations"
+    os.makedirs(output_dir, exist_ok=True)
+    plt.savefig(f"{output_dir}/roc_auc_{save_string}_{dataset}.png")
     plt.close()
-    
-import os
-import numpy as np
-import matplotlib.pyplot as plt
-import logging
-from sklearn.metrics import roc_auc_score
 
 def plot_survival_auc_across_folds(results_per_split, save_string, dataset, config):
     """
