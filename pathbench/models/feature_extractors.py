@@ -1635,6 +1635,72 @@ class h_optimus_1(TorchFeatureExtractor):
             'kwargs': {}
         }
         
+@register_torch
+class h0_mini(TorchFeatureExtractor):
+    """
+    H0-mini feature extractor, with base Vision Transformer backbone. We use the cls_features here as the embeddings.
+    
+    Parameters
+    ----------
+    tile_px : int
+        The size of the tile
+    
+    Attributes
+    ----------
+    model : VisionTransformer
+        The Vision Transformer model   
+
+    transform : torchvision.transforms.Compose
+        The transformation pipeline
+
+    preprocess_kwargs : dict
+        The preprocessing arguments
+    
+    Methods
+    -------
+    dump_config()
+        Dump the configuration of the feature extractor
+    """
+
+    tag = 'h0_mini'
+
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
+
+        base_model = timm.create_model(
+            "hf-hub:bioptimus/H0-mini", pretrained=True, mlp_layer=timm.layers.SwiGLUPacked, act_layer=nn.SiLU
+        )
+
+        class H0_mini_embedder(nn.Module):
+            def __init__(self, model):
+                super(H0_mini_embedder, self).__init__()
+                self.model = model
+
+            def forward(self):
+                x = self.model(x)
+                cls_features = x[:, 0]
+                return cls_features
+
+        self.model = H0_mini_embedder(base_model)
+        self.model.to('cuda')
+        self.num_features = 768
+
+        self.transform = transforms.Compose([
+            transforms.ConvertImageDtype(torch.float32),
+            transforms.Resize(224),
+            transforms.Normalize(
+                mean=(0.707223, 0.578729, 0.703617), 
+                std=(0.211883, 0.230117, 0.177517)
+            ),
+        ])
+        # Slideflow standardization
+        self.preprocess_kwargs = {'standardize': False}
+
+    def dump_config(self):
+        return {
+            'class': 'h0_mini',
+            'kwargs': {}
+        }
 
 @register_torch
 class transpath_mocov3(TorchFeatureExtractor):

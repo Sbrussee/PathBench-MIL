@@ -567,8 +567,12 @@ def split_datasets(config: dict, project: sf.Project, splits_file: str, target: 
         elif os.path.exists(f"{project_directory}/kfold_stratified_{splits_file}"):
             splits = train_set.kfold_split(k=k, labels=target, splits=splits_file, read_only=True, preserved_site=True)
         else:
-            splits = train_set.kfold_split(k=k, labels=target, splits=splits_file, preserved_site=True, site_labels=dataset_mapping)
-            logging.info(f"K-fold splits written to {project_directory}/kfold_{splits}")
+            if 'stratified' in config['experiment']['split_technique']:
+                splits = train_set.kfold_split(k=k, labels=target, splits=splits_file, preserved_site=True, site_labels=dataset_mapping)
+                logging.info(f"Stratified K-fold splits written to {project_directory}/kfold_stratified_{splits}")
+            else:
+                splits = train_set.kfold_split(k=k, labels=target, splits=splits_file)
+                logging.info(f"K-fold splits written to {project_directory}/kfold_{splits}")
     else:
         if os.path.exists(f"{project_directory}/fixed_{splits_file}"):
             train, val = train_set.split(labels=target, model_type=model_type,
@@ -718,8 +722,10 @@ def build_aggregated_results(val_df: pd.DataFrame, test_df: pd.DataFrame, config
     Returns:
         tuple: Aggregated (and sorted) validation and test results dataframes.
     """
+
+    #Group by benchmark parameters and 'test_dataset' column in the test dataset
     val_df_grouped = val_df.groupby(list(benchmark_parameters.keys()))
-    test_df_grouped = test_df.groupby(list(benchmark_parameters.keys()))
+    test_df_grouped = test_df.groupby(list(benchmark_parameters.keys()) + ['test_dataset']) if 'test_dataset' in test_df.columns else list(benchmark_parameters.keys())
 
     val_df_agg = val_df_grouped.agg(aggregation_functions)
     test_df_agg = test_df_grouped.agg(aggregation_functions)
@@ -747,6 +753,7 @@ def build_aggregated_results(val_df: pd.DataFrame, test_df: pd.DataFrame, config
     test_df_agg.to_html(f"{results_dir}/test_results_agg.html")
 
     return val_df_agg, test_df_agg
+
 
 
 def save_best_model_weights(source_weights_dir: str, config: dict, model_tag: str) -> None:
