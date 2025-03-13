@@ -9,11 +9,6 @@ import logging
 from huggingface_hub import login
 import multiprocessing as mp
 
-#Set hf_hub and torch_home to local .cache
-os.makedirs('.cache', exist_ok=True)
-os.environ['HF_HOME'] = '.cache'
-os.environ['TORCH_HOME'] = '.cache'
-
 def read_config(config_file : str):
     """
     Read the configuration file for the experiment
@@ -85,8 +80,11 @@ class Experiment():
             if self.config['hf_key'] is not None:
                 HF_TOKEN = self.config['hf_key']
                 os.environ['HF_TOKEN'] = HF_TOKEN
-                login(token=HF_TOKEN)
-                logging.info("Logged in to Hugging Face")
+                if HF_TOKEN == 'None':
+                    logging.info("No Hugging Face token provided")
+                else:
+                    login(token=HF_TOKEN)
+                    logging.info("Logged in to Hugging Face")
 
         #Set pretrained weights directory
         WEIGHTS_DIR = self.config['weights_dir']
@@ -94,6 +92,8 @@ class Experiment():
         os.environ['TORCH_HOME'] = WEIGHTS_DIR
         os.environ['HF_HOME'] = WEIGHTS_DIR
         os.environ['XDG_CACHE_HOME'] = WEIGHTS_DIR
+        os.environ['TRANSFORMERS_CACHE'] = WEIGHTS_DIR
+        os.environ['HF_DATASETS_CACHE'] = WEIGHTS_DIR
 
     def run(self):
         if self.config['experiment']['mode'] == 'benchmark':

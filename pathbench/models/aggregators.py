@@ -57,8 +57,9 @@ def build_encoder(n_feats: int,
     Returns:
         nn.Sequential: The constructed encoder network.
     """
+    encoder_layers = int(encoder_layers)
     layers = []
-    for i in range(encoder_layers):
+    for i in range(int(encoder_layers)):
         in_features = n_feats if i == 0 else z_dim
         layers.append(nn.Linear(in_features, z_dim))
         if activation_function is not None:

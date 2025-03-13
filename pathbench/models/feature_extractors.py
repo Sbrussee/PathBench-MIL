@@ -28,6 +28,7 @@ from conch.open_clip_custom import create_model_from_pretrained
 WEIGHTS_DIR = "pretrained_weights"
 os.environ['TORCH_HOME'] = WEIGHTS_DIR
 os.environ['HF_HOME'] = WEIGHTS_DIR
+os.environ['HF_HUB_CACHE'] = WEIGHTS_DIR
 
 
 def get_pretrained_url_vit(key : str):
@@ -507,7 +508,7 @@ class uni_h(TorchFeatureExtractor):
                     'dynamic_img_size': True
                 }
         self.model = timm.create_model(
-            pretrained=False, **timm_kwargs
+            pretrained=False, **timm_kwargs,
         )
         self.model.load_state_dict(torch.load(os.path.join(local_dir, "uni_h.bin"), map_location="cpu"), strict=True)
         self.num_features = 1536
@@ -1557,7 +1558,7 @@ class h_optimus_0(TorchFeatureExtractor):
         super().__init__(**kwargs)
 
         self.model = timm.create_model(
-            "hf-hub:bioptimus/H-optimus-0", pretrained=True, init_values=1e-5, dynamic_img_size=False
+            "hf-hub:bioptimus/H-optimus-0", pretrained=True, init_values=1e-5, dynamic_img_size=False,
         )
         self.model.to("cuda")
         self.model.eval()
@@ -1613,7 +1614,7 @@ class h_optimus_1(TorchFeatureExtractor):
         super().__init__(**kwargs)
 
         self.model = timm.create_model(
-            "hf-hub:bioptimus/H-optimus-1", pretrained=True, init_values=1e-5, dynamic_img_size=False
+            "hf-hub:bioptimus/H-optimus-1", pretrained=True, init_values=1e-5, dynamic_img_size=False,
         )
         self.model.to("cuda")
         self.model.eval()
@@ -1668,7 +1669,7 @@ class h0_mini(TorchFeatureExtractor):
         super().__init__(**kwargs)
 
         base_model = timm.create_model(
-            "hf-hub:bioptimus/H0-mini", pretrained=True, mlp_layer=timm.layers.SwiGLUPacked, act_layer=nn.SiLU
+            "hf-hub:bioptimus/H0-mini", pretrained=True, mlp_layer=timm.layers.SwiGLUPacked, act_layer=nn.SiLU,
         )
 
         class H0_mini_embedder(nn.Module):

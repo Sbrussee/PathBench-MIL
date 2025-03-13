@@ -42,7 +42,7 @@ experiment:
 
 optimization:
   study_name: TCGA_LUSC
-  load_study: True
+  load_study: False
   objective_metric: balanced_accuracy
   objective_mode: max
   objective_dataset: test
@@ -80,7 +80,7 @@ benchmark_parameters:
     - h_optimus_0
     
   mil:
-    - CLAM_SB
+    - clam_mil
     - dsmil
     - varmil
     - attention_mil
