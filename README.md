@@ -107,81 +107,148 @@ If you use **PathBench-MIL** in your research or projects, please cite:
     pip install .
     ```
 
-# Running PathBench with Docker (GPU Support)
-
-This guide explains how to build and run the PathBench-MIL repository using Docker with GPU support. It also shows how to modify the configuration file (`conf.yaml`) interactively.
+# Running PathBench-MIL with Docker (with GPU Support)
+This guide explains how to build and run the PathBench-MIL repository using Docker with GPU support. It includes instructions for both command-line (CLI) users and those who prefer Docker Desktop's user interface (UI).
 
 ## Prerequisites
+Before using Docker with GPU support, ensure you have the following installed:
 
-- **Docker** installed
-- **NVIDIA Drivers** and [nvidia-container-toolkit](https://github.com/NVIDIA/nvidia-container-toolkit) installed (for GPU support)
+1. Install Docker
+### Docker Desktop (Windows/macOS):
+Download and install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+
+- Windows users: Enable WSL2-based engine in Docker settings.
+- macOS users: Ensure Rosetta is installed if using Apple Silicon.
+
+### Docker Engine (Linux):
+Install Docker using the following:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y docker.io
+```
+2. Install NVIDIA GPU Support (Linux Only)
+For GPU acceleration, install NVIDIA Drivers and nvidia-container-toolkit:
+
+```bash
+sudo apt-get install -y nvidia-container-toolkit
+sudo systemctl restart docker
+```
+More details: [NVIDIA Container Toolkit](https://developer.nvidia.com/cuda-toolkit)
 
 ## Building the Docker Image
 Navigate to the root of your repository (where the Dockerfile is located).
 
-Build the Docker image by running:
+### Command-Line (CLI) Method
+Run the following:
 
 ```bash
 docker build -f pathbench-gpu.Dockerfile -t pathbench-gpu .
 ```
-### Running the Container Interactively
-To modify the configuration file (conf.yaml) without rebuilding the image, you can run the container interactively and mount your custom config.
+### Docker Desktop (UI) Method
+1) Open Docker Desktop.
+2) Click on "Containers" > "Build a new image".
+3) Select the directory containing the Dockerfile.
+4) Set the image name to pathbench-gpu.
+5) Click "Build".
 
-### Option A: Mount a Custom Config File
-If you have a custom conf.yaml on your host (for example, located at /path/to/custom/conf.yaml), run:
+## Running the Container
+You can run the container either from the command line or using Docker Desktop.
+
+### Command-Line (CLI) Method
+Option A: Mount a Custom Config File
+If you want to override conf.yaml inside the container, run:
 
 ```bash
-
 docker run --gpus all -it --rm \
   -v /path/to/custom/conf.yaml:/app/PathBench-MIL/conf.yaml \
   pathbench-gpu bash
 ```
-This command does the following:
-
-- --gpus all: Enables GPU support.
-- -it: Runs the container interactively.
-- --rm: Automatically removes the container when it exits.
-- -v /path/to/custom/conf.yaml:/app/PathBench-MIL/conf.yaml: Mounts your local conf.yaml to override the one inside the container.
-- bash: Opens a bash shell in the container.
-
-### Option B: Mount the Entire Directory
-If you want the flexibility to modify any files in /app/PathBench-MIL, mount the whole directory:
+Option B: Mount the Entire Repository
+To modify all files in /app/PathBench-MIL:
 
 ```bash
 docker run --gpus all -it --rm \
   -v /path/to/local/PathBench-MIL:/app/PathBench-MIL \
   pathbench-gpu bash
 ```
-## Modifying the Config and Running PathBench
-Once inside the container's bash shell, you can:
+### Docker Desktop (UI) Method
+1) Open Docker Desktop.
+2) Click "Containers" > "Run New Container".
+3) Select the pathbench-gpu image.
+4) Under "Volumes", add:
+- Host path: /path/to/custom/conf.yaml
+- Container path: /app/PathBench-MIL/conf.yaml
+5) Under "Advanced settings":
+6) Enable GPU support.
+7) Set the mode to interactive.
+8) Click "Run".
 
-Edit the configuration file using an editor (e.g., nano or vim):
+## Mounting External Slide Directories & Annotation Files
+To work with external Whole Slide Images (WSIs) and annotation files, mount their directories:
+
+### Command-Line (CLI) Method
+```bash
+docker run --gpus all -it --rm \
+  -v /path/to/slides:/mnt/slides \
+  -v /path/to/annotations.csv:/mnt/annotations.csv \
+  pathbench-gpu bash
+```
+- /path/to/slides: Replace with the actual path to your WSI directory.
+- /path/to/annotations.csv: Path to the annotation file.
+
+Inside the container, access:
+```bash
+ls -lah /mnt/slides
+cat /mnt/annotations.csv
+```
+### Docker Desktop (UI) Method
+1) Open Docker Desktop.
+2) Click "Run New Container".
+3) Under "Volumes", add:
+- Host Path: /path/to/slides
+- Container Path: /mnt/slides
+- Host Path: /path/to/annotations.csv
+- Container Path: /mnt/annotations.csv
+4) Click "Run".
+
+## Modifying Config and Running PathBench
+Once inside the container, you can edit conf.yaml:
 
 ```bash
 nano conf.yaml
 ```
-Note: If an editor like nano is not installed, you can install it by running:
+If nano is not installed:
 
 ```bash
 apt-get update && apt-get install -y nano
 ```
-Run PathBench by executing:
-
+## Run PathBench
+Execute, inside the docker container:
 ```bash
 bash run_pathbench.sh
 ```
-This script will:
+This script:
 
-- Check for the virtual environment (already set up during build).
-- Source it and set the slideflow backend environment variables.
-- Execute main.py with your configuration file.
-## Docker TDLR:
-1) Build the image with docker build -t pathbench-gpu .
-2) Run interactively with GPU support and mount your custom config:
-- Option A: Mount just the config file.
-- Option B: Mount the entire /app/PathBench-MIL directory.
-3) Edit and run the application within the container shell.
+1) Activates the virtual environment.
+2) Sets SlideFlow backend variables.
+3) Runs main.py using conf.yaml.
 
+## Running Prebuilt Docker Image (Docker Hub)
+To skip building from scratch, pull and run the prebuilt image from Docker Hub.
+
+Pull Image:
+```bash
+docker pull sbrussee/pathbench-mil
+```
+
+### Run Container
+```bash
+docker run --gpus all -it --rm \
+  -v /path/to/slides:/mnt/slides \
+  -v /path/to/annotations.csv:/mnt/annotations.csv \
+  your-dockerhub-user/pathbench-gpu bash
+```
 # PathBench Configuration Example
 To use PathBench, you need to provide a configuration file in YAML format. Below is an example configuration file:
 
