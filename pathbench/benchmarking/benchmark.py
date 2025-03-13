@@ -1292,6 +1292,9 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
     opt_dir = f"{project_directory}/optimization"
     os.makedirs(opt_dir, exist_ok=True)
     study_name = config['optimization']['study_name']
+    #Get a date + time, timestamp
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    study_name = config['optimization']['study_name'] + "_" + timestamp
     storage_path = f"sqlite:///{opt_dir}/optuna_study.db"
     logging.info(f"Using storage at {storage_path} for study '{study_name}'.")
     if config['optimization'].get('load_study') and os.path.exists(storage_path):
@@ -1307,7 +1310,7 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
             sampler=sampler,
             pruner=pruner,
             storage=storage_path,
-            load_if_exists=True
+            load_if_exists=True if config['optimization'].get('load_study') else False
         )
     logging.info("Starting optimization...")
     study.optimize(objective, n_trials=config['optimization']['trials'])
