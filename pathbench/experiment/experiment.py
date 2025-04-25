@@ -2,7 +2,7 @@ import yaml
 import slideflow as sf
 import os
 import torch
-from ..benchmarking.benchmark import benchmark, optimize_parameters
+from ..benchmarking.benchmark import benchmark, optimize_parameters, extract_features
 import random
 import shutil
 import logging
@@ -94,6 +94,9 @@ class Experiment():
         os.environ['XDG_CACHE_HOME'] = WEIGHTS_DIR
         os.environ['TRANSFORMERS_CACHE'] = WEIGHTS_DIR
         os.environ['HF_DATASETS_CACHE'] = WEIGHTS_DIR
+        os.environ['WEIGHTS_DIR'] = WEIGHTS_DIR
+
+        logging.info(f"Set environment variables for pretrained weights directory: {WEIGHTS_DIR}")
 
     def run(self):
         if self.config['experiment']['mode'] == 'benchmark':
@@ -102,6 +105,9 @@ class Experiment():
         elif self.config['experiment']['mode'] == 'optimization':
             logging.info("Running optimization mode...")
             self.optimize_parameters()
+        elif self.config['experiment']['mode'] == "feature_extraction":
+            logging.info("Running feature extraction mode...")
+            self.extract_features()
         else:
             raise ValueError("Invalid mode. Mode must be either 'benchmark' or 'optimization'")
 
@@ -137,6 +143,8 @@ class Experiment():
             self.project = sf.create_project(
                 name=self.project_name,
                 root=f"experiments/{self.project_name}",
+                tiles=f"experiments/{first_dataset['tile_path']}",
+                tfrecords=f"experiments/{first_dataset['tfrecord_path']}",
                 annotations=self.config['experiment']['annotation_file'],
                 slides=first_dataset['slide_path'])
             
@@ -162,3 +170,7 @@ class Experiment():
     def optimize_parameters(self):
         #Optimize the MIL pipeline
         optimize_parameters(self.config, self.project)
+
+    def extract_features(self):
+        #Extract features from the dataset
+        extract_features(self.config, self.project)

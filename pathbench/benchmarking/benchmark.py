@@ -20,6 +20,7 @@ import datetime
 import logging
 import traceback
 import random
+import shutil
 from itertools import product
 
 import numpy as np
@@ -50,7 +51,7 @@ from slideflow.slide import qc
 
 # Import local modules (adjust the import paths if necessary)
 from ..models.feature_extractors import *
-from ..models import aggregators
+from ..models import aggregators, slide_level_predictors
 from ..utils.utils import *
 from ..visualization.visualization import *
 from ..utils.losses import *
@@ -79,8 +80,226 @@ ESSENTIAL_METRICS = {
 # Built-in MIL methods
 BUILT_IN_MIL = ['clam_sb', 'clam_mb', 'attention_mil', 'mil_fc', 'mil_fc_mc', 'transmil', 'bistro.transformer']
 
+"""
+Function that only performs the steps until feature extraction
+"""
+def extract_features(config : dict, project : sf.Project):
+    logging.info("Starting feature extraction...")
+    project_directory = f"experiments/{config['experiment']['project_name']}"
+    annotations = project.annotations
+    logging.info(f"Using {project_directory} for project directory...")
+    logging.info(f"Using {annotations} for annotations...")
 
-def benchmark(config, project):
+    annotation_df = pd.read_csv(annotations)
+    
+    #Caclulate combinations for which to extract features
+    all_combinations = calculate_combinations(config)
+    logging.info(f"Total number of combinations: {len(all_combinations)}")
+
+
+    # Iterate over combinations
+    for combination in all_combinations:
+        logging.info(f"Running combination: {combination}")
+        combination_dict = {}
+        for parameter_name, parameter_value in zip(config['benchmark_parameters'].keys(), combination):
+            combination_dict[parameter_name] = parameter_value
+        
+        try:
+
+            all_data = project.dataset(tile_px=combination_dict['tile_px'],
+                                       tile_um=combination_dict['tile_um'])
+            
+            logging.info("Extracting tiles...")
+            qc_list, qc_filters = build_qc_list(config)
+            all_data.extract_tiles(enable_downsample=True,
+                                      save_tiles=False,
+                                      qc=qc_list,
+                                      grayspace_fraction = float(qc_filters['grayspace_fraction']),
+                                      whitespace_fraction = float(qc_filters['whitespace_fraction']),
+                                      grayspace_threshold = float(qc_filters['grayspace_threshold']),
+                                      whitespace_threshold = int(qc_filters['whitespace_threshold']),
+                                      num_threads = config['experiment']['num_workers'] if 'num_workers' in config['experiment'] else 1,
+                                      report=config['experiment']['report'] if 'report' in config['experiment'] else False,)
+            
+            #Set save string
+            save_string, string_without_mil = get_save_strings(combination_dict)
+            #Define the feature extractor
+            feature_extractor = build_feature_extractor(combination_dict['feature_extraction'].lower(),
+                                                        tile_px=combination_dict['tile_px'])
+            logging.info("Feature extraction...")
+            bags = generate_bags(config, project, all_data, combination_dict, string_without_mil, feature_extractor)
+            logging.info(f"Feature extraction for combination {combination} finished...")
+        except:
+            logging.warning(f"Combination {combination} was not succesfully trained due to Error {e}")
+            logging.warning(traceback.format_exc())
+        
+    logging.info("Feature extraction finished...")
+
+
+
+def get_column_values(config):
+    """
+    Get all column values from the benchmark_parameters dictionary that will be used for the
+    results dataframes of pathbench.
+
+    Args:
+        config (dict): The configuration dictionary.
+
+    Returns:
+        list: List of all column values.
+    """
+    columns = list(config['benchmark_parameters'].keys())
+    columns.extend(list(config['experiment']['evaluation']))
+    val_df, test_df = pd.DataFrame(columns=columns, index=None), pd.DataFrame(columns=columns, index=None)
+    return val_df, test_df
+
+def configure_datasets(config : dict):
+    """
+    Configure datasets for the experiment based on the configuration.
+
+    Args:
+        config (dict): The configuration dictionary.
+
+    Returns:
+        list: List of datasets to be used.
+    """
+    #Select which datasets should be used for training and testing
+    datasets = config['datasets'] if 'datasets' in config else [{'name': 'all', 'used_for': 'training'}]
+
+    # Filter datasets for training
+    train_datasets = [d for d in datasets if d['used_for'] == 'training']
+
+    # Filter datasets for testing
+    test_datasets = [d for d in datasets if d['used_for'] == 'testing']
+    
+    return train_datasets, test_datasets
+
+
+def split_train_test(config: dict, all_data: sf.Dataset, task : str):
+    """
+    Split the dataset into training and testing sets based on the configuration.
+
+    Args:
+        config (dict): The configuration dictionary.
+        all_data (sf.Dataset): The dataset to be split.
+        task (str): The task type.
+
+    Returns:
+        tuple: A tuple containing the training and testing datasets.
+    """
+    train_datasets, test_datasets = configure_datasets(config)
+    
+    # Assume all_data contains all available datasets
+    train_set = all_data.filter(filters={'dataset': [d['name'] for d in train_datasets]})
+
+    # Balance the training dataset
+    train_set = balance_dataset(train_set, task, config)
+
+    # Filter test set
+    test_set = all_data.filter(filters={'dataset': [d['name'] for d in test_datasets]})
+    
+    logging.info(f"Train set #slides: {len(train_set.slides())}")
+    logging.info(f"Test set #slides: {len(test_set.slides())}")
+
+    return train_set, test_set
+
+
+def get_save_strings(combination_dict: dict) -> str:
+    """
+    Generate a save string based on the combination dictionary.
+
+    Args:
+        combination_dict (dict): The combination dictionary.
+
+    Returns:
+        save_string: The generated save string.
+        string_without_mil: The generated string without 'mil', 'loss', 'augmentation', 'activation_function', 'optimizer', 'dropout_p', 'encoder_layers', 'z_dim'.
+    """
+    save_string = "_".join([f"{value}" for key, value in combination_dict.items() if key != 'mil' and key != 'loss' and key != 'augmentation' and key != 'activation_function' and key != 'optimizer' and key != 'dropout_p' and key != 'encoder_layers' and key != 'z_dim'])
+    
+    string_without_mil = "_".join([f"{value}" for key, value in combination_dict.items() if key != 'mil' and key != 'loss' and key != 'augmentation' and key != 'activation_function' and key != 'optimizer' and key != 'dropout_p' and key != 'encoder_layers' and key != 'z_dim'])
+    
+    logging.debug(f"Save string: {save_string}")
+    logging.debug(f"String without MIL: {string_without_mil}")
+    return save_string, string_without_mil
+
+def get_model_string(combination_dict: dict, feature_extraction: str) -> str:
+    """
+    Generate a model string based on the combination dictionary and feature extraction method.
+
+    Args:
+        combination_dict (dict): The combination dictionary.
+        feature_extraction (str): The feature extraction method.
+
+    Returns:
+        str: The generated model string.
+    """
+    if combination_dict['mil'].lower() in BUILT_IN_MIL:
+        model_string = combination_dict['mil'].lower()
+    else:
+        if "slide" in feature_extraction.lower():
+            model_source_script = "slide_level_predictors"
+        else:
+            model_source_script = "aggregators"
+            
+        model_string = f"<class 'pathbench.models.{model_source_script}.{combination_dict['mil'].lower()}'>"
+    
+    return model_string
+
+def visualize_top5_tiles(config: dict,
+                         val: sf.Dataset,
+                         test_set: sf.Dataset,
+                         annotation_df: pd.DataFrame,
+                         target: str,
+                         index: int,
+                         number: str,
+                         save_string: str,
+                         model_string: str,
+                         test_dict: dict):
+    """
+    Visualize the top 5 tiles for a given slide based on attention weights.
+
+    Args:
+        config (dict): The configuration dictionary.
+        val (sf.Dataset): The validation dataset.
+        test_set (sf.Dataset): The test dataset.
+        annotation_df (pd.DataFrame): The annotation dataframe.
+        target (str): The target variable.
+        index (int): The index of the current split.
+        number (str): The number of the current model.
+        save_string (str): The save string for the current combination.
+        model_string (str): The model string for the current combination.
+
+    Returns:
+        None
+    """
+    #Select 10 random slides from val and test
+    val_slides = random.sample(val.slides(), 10)
+    test_slides = random.sample(test_set.slides(), 10)
+
+    os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations/top_tiles", exist_ok=True)
+    try:
+        output_dir = f"experiments/{config['experiment']['project_name']}/visualizations/top_tiles"
+        for slide_name in val_slides:
+            attention = np.load(f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/attention/{slide_name}_att.npz")
+            plot_top5_attended_tiles_per_class(slide_name,
+                                                attention,
+                                                test_dict['tfrecord_dir'],
+                                                output_dir,
+                                                annotation_df, target, "val", str(index), save_string)
+
+        for slide_name in test_slides:
+            attention = np.load(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}/00000-{model_string}/attention/{slide_name}_att.npz")
+            plot_top5_attended_tiles_per_class(slide_name,
+                                                attention,
+                                                test_dict['tfrecord_dir'],
+                                                output_dir,
+                                                annotation_df, target, "test", str(index), save_string)
+    except:
+        logging.warning("Could not plot top 5 attended tiles, attention is likely not available for this model")
+
+                
+def benchmark(config : dict, project : sf.Project):
     """
     Main benchmarking script, which runs the benchmarking based on the configuration
 
@@ -93,10 +312,16 @@ def benchmark(config, project):
     """
     
     logging.info("Starting benchmarking...")
-    task = config['experiment']['task']
-    benchmark_parameters = config['benchmark_parameters']
-    project_directory = f"experiments/{config['experiment']['project_name']}"
-    annotations = project.annotations
+    task = config['experiment']['task'] if 'task' in config['experiment'] else 'classification'
+    benchmark_parameters = config['benchmark_parameters'] if 'benchmark_parameters' in config else None
+    project_directory = f"experiments/{config['experiment']['project_name']}" if 'project_name' in config['experiment'] else "experiments/project"
+    annotations = project.annotations 
+    
+    z_dim = config['experiment']['z_dim'] if 'z_dim' in config['experiment'] else 512
+    encoder_layers = config['experiment']['encoder_layers'] if 'encoder_layers' in config['experiment'] else 1
+    dropout_p = config['experiment']['dropout_p'] if 'dropout_p' in config['experiment'] else 0.25
+    batch_size = config['experiment']['batch_size'] if 'batch_size' in config['experiment'] else 64
+    
     logging.info(f"Using {project_directory} for project directory...")
     logging.info(f"Using {annotations} for annotations...")
 
@@ -111,17 +336,10 @@ def benchmark(config, project):
     config, evaluation_metrics, aggregation_functions = set_metrics(config)
     logging.info(f"Using {splits_file} splits for benchmarking...")
 
-    #Get all column values
-    columns = list(config['benchmark_parameters'].keys())
-    columns.extend(list(config['experiment']['evaluation']))                   
-    val_df = pd.DataFrame(columns=columns, index=None)
-    test_df = pd.DataFrame(columns=columns, index=None)
+    val_df, test_df = get_column_values(config)
 
     all_combinations = calculate_combinations(config)
     logging.info(f"Total number of combinations: {len(all_combinations)}")
-
-    #Create a dictionary to keep track of finished combinations
-    finished_combination_dict = {combination: 0 for combination in all_combinations}
 
     # Iterate over combinations
     for combination in all_combinations:
@@ -143,73 +361,42 @@ def benchmark(config, project):
             logging.info(f"Datasets: {all_data}")
             logging.info("Extracting tiles...")
 
-            qc_methods = config['experiment']['qc']
-            qc_filters = config['experiment']['qc_filters']
-
-            qc_list = []
-            for qc_method in qc_methods:
-                #Retrieve the QC method by name from the qc module
-                if qc_method == 'Otsu-CLAHE':
-                    qc_method = getattr(qc, 'Otsu')(with_clahe=True)
-                else:
-                    qc_method = getattr(qc, qc_method)()
-                qc_list.append(qc_method)
+            qc_list, qc_filters = build_qc_list(config)
 
             logging.info(f"QC methods: {qc_list}")
-            logging.info(f"QC filter parameters: {qc_filters}")
 
             #Extract tiles with QC for all datasets
             all_data.extract_tiles(enable_downsample=True,
                                     save_tiles=False,
                                     qc=qc_list,
-                                    grayspace_fraction = float(config['experiment']['qc_filters']['grayspace_fraction']),
-                                    whitespace_fraction = float(config['experiment']['qc_filters']['whitespace_fraction']),
-                                    grayspace_threshold = float(config['experiment']['qc_filters']['grayspace_threshold']),
-                                    whitespace_threshold = int(config['experiment']['qc_filters']['whitespace_threshold']),
-                                    num_threads = config['experiment']['num_workers'],
-                                    report=config['experiment']['report'],)
+                                    grayspace_fraction = float(qc_filters['grayspace_fraction']),
+                                    whitespace_fraction = float(qc_filters['whitespace_fraction']),
+                                    grayspace_threshold = float(qc_filters['grayspace_threshold']),
+                                    whitespace_threshold = int(qc_filters['whitespace_threshold']),
+                                    num_threads = config['experiment']['num_workers'] if 'num_workers' in config['experiment'] else 1,
+                                    report=config['experiment']['report'] if 'report' in config['experiment'] else False,)
                                     
-            #Select which datasets should be used for training and testing
-            datasets = config['datasets']
+            train_datasets, test_datasets = configure_datasets(config)
 
-            # Filter datasets for training
-            train_datasets = [d for d in datasets if d['used_for'] == 'training']
-
-            # Filter datasets for testing
-            test_datasets = [d for d in datasets if d['used_for'] == 'testing']
-
-            # Assume all_data contains all available datasets
-            train_set = all_data.filter(filters={'dataset': [d['name'] for d in train_datasets]})
-
-            # Balance the training dataset
-            train_set = balance_dataset(train_set, task, config)
-
-            # Filter test set
-            test_set = all_data.filter(filters={'dataset': [d['name'] for d in test_datasets]})
-            
-            logging.info(f"Train set #slides: {len(train_set.slides())}")
-            logging.info(f"Test set #slides: {len(test_set.slides())}")
+            train_set, test_set = split_train_test(config, all_data, task)
 
             logging.info("Splitting datasets...")
             splits = split_datasets(config, project, splits_file, target, project_directory, train_set, dataset_mapping)
 
-            save_string = "_".join([f"{value}" for value in combination_dict.values()])
-            string_without_mil = "_".join([f"{value}" for key, value in combination_dict.items() if key != 'mil' and key != 'loss' and key != 'augmentation' and key != 'activation_function' and key != 'optimizer'])
-            
-            logging.debug(f"Save string: {save_string}") 
+            save_string, string_without_mil = get_save_strings(combination_dict)
             #Run with current parameters
             
             logging.info("Feature extraction...")
             feature_extractor = build_feature_extractor(combination_dict['feature_extraction'].lower(),
                                                         tile_px=combination_dict['tile_px'])
-            
-
 
             logging.info("Training MIL model...")
+
+            slide_level = True if "slide" in combination_dict['feature_extraction'].lower() else False
             #Generate bags
             bags = generate_bags(config, project, all_data, combination_dict, string_without_mil, feature_extractor)
             #Set MIL configuration
-            mil_conf = set_mil_config(config, combination_dict, task)
+            mil_conf, combination_dict = set_mil_config(config, combination_dict, task)
 
             #Create results directory
             os.makedirs(f"experiments/{config['experiment']['project_name']}/results", exist_ok=True)
@@ -226,6 +413,12 @@ def benchmark(config, project):
                 # Balance the train and val datasets
                 train = balance_dataset(train, task, config)
                 val = balance_dataset(val, task, config)
+
+                model_kwargs = {
+                    'pb_config' : config,
+                }
+                logging.info(f"Model kwargs before passing to slideflow: {model_kwargs}")
+
                 # Train the MIL model
                 val_result = project.train_mil(
                     config=mil_conf,
@@ -234,39 +427,40 @@ def benchmark(config, project):
                     val_dataset=val,
                     bags=bags,
                     exp_label=f"{save_string}_{index}",
-                    pb_config=config,
-                    loss = combination_dict['loss'] if 'loss' in combination_dict else None,
-                    augmentation = combination_dict['augmentation'] if 'augmentation' in combination_dict else None,
-                    activation_function = combination_dict['activation_function'] if 'activation_function' in combination_dict else None,
-                    optimizer = combination_dict['optimizer'] if 'optimizer' in combination_dict else None
-                )
-                #Get current newest MIL model number
-                number = get_highest_numbered_filename(f"experiments/{config['experiment']['project_name']}/mil/")
-                #Get the corresponding validation results
-                val_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/predictions.parquet")
-                #Print the unique values in y_pred0:
-                print(val_result)
-                if config['experiment']['task'] == 'survival' or config['experiment']['task'] == 'survival_discrete':	
-                    metrics, durations, events, predictions = calculate_survival_results(val_result)
-                    survival_results_per_split.append((durations, events, predictions))
-                elif config['experiment']['task'] == 'regression':
-                    metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, save_string, "val")
-                    y_true, y_pred = val_result['y_true'], val_result['y_pred0']
-                    val_results_per_split.append((y_true, y_pred))
-                else:
-                    metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, save_string, "val")
-                    val_results_per_split.append([tpr, fpr])
-                    val_pr_per_split.extend(val_pr_curves)
+                    **model_kwargs)
                 
+
+                number = get_highest_numbered_filename(f"experiments/{config['experiment']['project_name']}/mil/")
+
+                def get_validation_metrics(number: str):
+                    #Get current newest MIL model number
+                    number = get_highest_numbered_filename(f"experiments/{config['experiment']['project_name']}/mil/")
+                    #Get the corresponding validation results
+                    val_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/predictions.parquet")
+                    if task == 'survival' or task == 'survival_discrete':	
+                        metrics, durations, events, predictions = calculate_survival_results(val_result)
+                        survival_results_per_split.append((durations, events, predictions))
+                    elif task  == 'regression':
+                        metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, save_string, "val")
+                        y_true, y_pred = val_result['y_true'], val_result['y_pred0']
+                        val_results_per_split.append((y_true, y_pred))
+                    else:
+                        metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, save_string, "val")
+                        val_results_per_split.append([tpr, fpr])
+                        val_pr_per_split.extend(val_pr_curves)
+                    
+                    return metrics
+
+                metrics = get_validation_metrics(number)
                 val_dict = combination_dict.copy()
                 val_dict.update(metrics)
-
                 val_df = val_df.append(val_dict, ignore_index=True)
-
 
                 #Loop through the test datasets
                 for test_dataset in test_datasets:
+                    #Only select the test set at hand
                     individual_test_set = all_data.filter(filters={'dataset': [test_dataset['name']]})
+
                     # Define a unique output directory for this test dataset evaluation
                     test_outdir = (
                         f"experiments/{config['experiment']['project_name']}/mil_eval/"
@@ -281,35 +475,34 @@ def benchmark(config, project):
                         bags=bags,
                         config=mil_conf,
                         outdir=test_outdir,
-                        pb_config=config,
-                        activation_function=combination_dict.get('activation_function')
+                        **model_kwargs
                     )
 
-                    # Determine the model string used in the predictions file path
-                    if combination_dict['mil'].lower() in BUILT_IN_MIL:
-                        model_string = combination_dict['mil'].lower()
-                    else:
-                        model_string = f"<class 'pathbench.models.aggregators.{combination_dict['mil'].lower()}'>"
+                    model_string = get_model_string(combination_dict, combination_dict['feature_extraction'])
+
+                    def get_test_metrics(model_string: str, test_outdir: str):
+                        # Load the test predictions for this specific test dataset
+                        predictions_path = (
+                            f"{test_outdir}/00000-{model_string}/predictions.parquet"
+                        )
+                        test_result = pd.read_parquet(predictions_path)
+                        
+                        # Process the test_result based on task type
+                        if task in ['survival', 'survival_discrete']:
+                            metrics, durations, events, predictions = calculate_survival_results(test_result)
+                            test_survival_results_per_split.append((durations, events, predictions))
+                        elif task == 'regression':
+                            metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
+                            y_true, y_pred = test_result['y_true'], test_result['y_pred0']
+                            test_results_per_split.append((y_true, y_pred))
+                        else:
+                            metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
+                            test_results_per_split.append([tpr, fpr])
+                            test_pr_per_split.extend(test_pr_curves)
+    
+                        return metrics
                     
-                    # Load test predictions for this specific test dataset
-                    predictions_path = (
-                        f"{test_outdir}/00000-{model_string}/predictions.parquet"
-                    )
-                    test_result = pd.read_parquet(predictions_path)
-                    
-                    # Process the test_result based on task type
-                    if config['experiment']['task'] in ['survival', 'survival_discrete']:
-                        metrics, durations, events, predictions = calculate_survival_results(test_result)
-                        test_survival_results_per_split.append((durations, events, predictions))
-                    elif config['experiment']['task'] == 'regression':
-                        metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
-                        y_true, y_pred = test_result['y_true'], test_result['y_pred0']
-                        test_results_per_split.append((y_true, y_pred))
-                    else:
-                        metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
-                        test_results_per_split.append([tpr, fpr])
-                        test_pr_per_split.extend(test_pr_curves)
-                    
+                    metrics = get_test_metrics(model_string, test_outdir)
                     # Build a dictionary to record the test results for the current test dataset
                     test_dict = combination_dict.copy()
                     test_dict.update(metrics)
@@ -330,38 +523,9 @@ def benchmark(config, project):
             # Visualize the top 5 tiles, if applicable
             #Check if model supports attention
             if 'top_tiles' in config['experiment']['visualization']:
-                #Select 10 random slides from train, val and test
-                train_slides = random.sample(train.slides(), 10)
-                val_slides = random.sample(val.slides(), 10)
-                test_slides = random.sample(test_set.slides(), 10)
-
-
-                os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations/top_tiles", exist_ok=True)
-                try:
-                    output_dir = f"experiments/{config['experiment']['project_name']}/visualizations/top_tiles"
-                    for slide_name in val_slides:
-                        attention = np.load(f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/attention/{slide_name}_att.npz")
-                        plot_top5_attended_tiles_per_class(slide_name,
-                                                            attention,
-                                                            test_dict['tfrecord_dir'],
-                                                            output_dir,
-                                                            annotation_df, target, "val", str(index), save_string)
-
-                    for slide_name in test_slides:
-                        attention = np.load(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}/00000-{model_string}/attention/{slide_name}_att.npz")
-                        plot_top5_attended_tiles_per_class(slide_name,
-                                                            attention,
-                                                            test_dict['tfrecord_dir'],
-                                                            output_dir,
-                                                            annotation_df, target, "test", str(index), save_string)
-                except:
-                    logging.warning("Could not plot top 5 attended tiles, attention is likely not available for this model")
+                visualize_top5_tiles(config, val, test_set, annotation_df, target, index, number, save_string, model_string, test_dict)
 
             logging.info(f"Combination {save_string} finished...")
-            # Save which combinations were finished
-            finished_combination_dict[combination] = 1
-            with open(f"experiments/{config['experiment']['project_name']}/finished_combinations.pkl", 'wb') as f:
-                pickle.dump(finished_combination_dict, f)
 
             # Save the combination results up to this point, and mark it as finished
             val_df.to_csv(f"experiments/{config['experiment']['project_name']}/results/val_results.csv")
@@ -382,14 +546,12 @@ def benchmark(config, project):
     print(val_df, test_df)
     print(list(benchmark_parameters.keys()))
 
+    plot_benchmarking_output(config, val_df, test_df)
+
     val_df_agg, test_df_agg = build_aggregated_results(val_df, test_df, config, benchmark_parameters, aggregation_functions)
 
     find_and_apply_best_model(config, val_df_agg, test_df_agg, benchmark_parameters, val_df, test_df,
-                              val, test_set, target)
-    
-    # Remove the finished combinations
-    with open(f"experiments/{config['experiment']['project_name']}/finished_combinations.pkl", 'wb') as f:
-        pickle.dump({}, f)
+                              val, test_set, target, slide_level)
 
     # Empty the val and test results
     if os.path.exists(f"experiments/{config['experiment']['project_name']}/results/val_results.csv"):
@@ -397,6 +559,100 @@ def benchmark(config, project):
     if os.path.exists(f"experiments/{config['experiment']['project_name']}/results/test_results.csv"):
         os.remove(f"experiments/{config['experiment']['project_name']}/results/test_results.csv")
     logging.info("Benchmarking finished...")
+
+
+def plot_benchmarking_output(config: dict, val_df: pd.DataFrame, test_df: pd.DataFrame):
+    """
+    Plot boxplots of each evaluation metric for each parameter combination using
+    the unaggregated val_df and test_df.
+
+    For the validation set, one boxplot is generated per metric,
+    grouping by the parameter combination.
+
+    For the test set, separate boxplots are generated for each unique test_dataset
+    (as defined by the "test_dataset" column). The parameter combinations are used
+    to group the metric values.
+
+    A timestamp in the format "YYYY-MM-DD_HH-MM-SS" is appended to each filename.
+
+    Args:
+        config (dict): Configuration dictionary containing:
+                       - 'benchmark_parameters': dict of parameter lists.
+                       - 'experiment': dict with at least the keys 'evaluation' and 'project_name'.
+        val_df (pd.DataFrame): Unaggregated validation results.
+        test_df (pd.DataFrame): Unaggregated test results.
+    """
+    import os
+    import matplotlib.pyplot as plt
+    import datetime
+
+    # Create a timestamp string for filenames
+    current_date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    # Define output directory for the plots and create it if necessary
+    output_dir = f"experiments/{config['experiment']['project_name']}/visualizations/benchmarking"
+    os.makedirs(output_dir, exist_ok=True)
+
+    # --- Process Validation DataFrame ---
+    # Identify the parameter columns from the benchmark_parameters config
+    param_keys = list(config['benchmark_parameters'].keys())
+
+    # Work on a copy so as not to modify the original DataFrame
+    val_df = val_df.copy()
+    # Create a unique identifier for each combination by joining the parameter values
+    val_df['combination'] = val_df[param_keys].astype(str).agg('_'.join, axis=1)
+
+    # Get the list of evaluation metrics to plot (if not provided, default to empty list)
+    metrics = config['experiment'].get('evaluation', [])
+
+    # Loop over each metric for the validation dataframe
+    for metric in metrics:
+        if metric not in val_df.columns:
+            continue  # Skip if the metric column is not present
+
+        plt.figure(figsize=(10, 6))
+        # Group by the combination identifier
+        grouped = val_df.groupby('combination')[metric].apply(list)
+        data = grouped.tolist()
+        labels = grouped.index.tolist()
+
+        plt.boxplot(data, labels=labels, showfliers=True)
+        plt.xticks(rotation=45, ha='right')
+        plt.title(f"Validation {metric} Distribution by Parameter Combination")
+        plt.xlabel("Parameter Combination")
+        plt.ylabel(metric)
+        plt.tight_layout()
+        plt.savefig(f"{output_dir}/val_{metric}_boxplot_{current_date}.png")
+        plt.close()
+
+    # --- Process Test DataFrame ---
+    # Work on a copy of test_df
+    test_df = test_df.copy()
+    # Create the 'combination' identifier as before
+    test_df['combination'] = test_df[param_keys].astype(str).agg('_'.join, axis=1)
+
+    # Loop over each unique test dataset so that each gets its own plots
+    unique_datasets = test_df['test_dataset'].unique()
+    for ds in unique_datasets:
+        ds_subset = test_df[test_df['test_dataset'] == ds]
+        for metric in metrics:
+            if metric not in ds_subset.columns:
+                continue
+
+            plt.figure(figsize=(10, 6))
+            grouped = ds_subset.groupby('combination')[metric].apply(list)
+            data = grouped.tolist()
+            labels = grouped.index.tolist()
+
+            plt.boxplot(data, labels=labels, showfliers=True)
+            plt.xticks(rotation=45, ha='right')
+            plt.title(f"Test ({ds}) {metric} Distribution by Parameter Combination")
+            plt.xlabel("Parameter Combination")
+            plt.ylabel(metric)
+            plt.tight_layout()
+            plt.savefig(f"{output_dir}/test_{ds}_{metric}_boxplot_{current_date}.png")
+            plt.close()
+
 
 # =============================================================================
 # Dataset and Experiment Utility Functions
@@ -414,7 +670,7 @@ def determine_splits_file(config: dict, project_directory: str) -> str:
         str: The computed splits file path.
     """
     splits = config['experiment'].get('splits', ".json")
-    task = config['experiment']['task']
+    task = config['experiment'].get('task', 'classification')
     if config['experiment']['split_technique'] == 'fixed':
         splits_file = f"{project_directory}/fixed_{task}_{splits}"
     elif config['experiment']['split_technique'] == 'k-fold':
@@ -609,20 +865,55 @@ def generate_bags(config: dict, project: sf.Project, all_data: sf.Dataset,
     os.makedirs(outdir, exist_ok=True)
     bags_dir = f"{outdir}/{string_without_mil}"
 
+    logging.info(f"Creating bags in {bags_dir}...")
+
+    #Determine how many GPUs are available
+    num_gpus = get_available_gpus()
+    logging.info(f"Number of GPUs available for feature extraction: {num_gpus}")
+
     #If some bags are missing, recalculate them
     if "mixed_precision" in config['experiment']:
         bags = project.generate_feature_bags(model=feature_extractor, dataset=all_data,
                                             normalizer=combination_dict['normalization'],
                                             outdir=bags_dir,
-                                            mixed_precision=config['experiment']['mixed_precision'])
+                                            mixed_precision=config['experiment']['mixed_precision'],
+                                            num_gpus=num_gpus)
     else:
         bags = project.generate_feature_bags(model=feature_extractor, dataset=all_data,
                                             normalizer=combination_dict['normalization'],
-                                            outdir=bags_dir)
+                                            outdir=bags_dir,
+                                            num_gpus=num_gpus)
     return bags
 
 
-def set_mil_config(config: dict, combination_dict: dict, task: str) -> dict:
+def build_qc_list(config: dict):
+    """
+    Build a list of quality control methods based on the configuration.
+
+    Args:
+        config (dict): Experiment configuration dictionary.
+
+    Returns:
+        list: List of quality control methods.
+    """
+    #Set QC methods, if not present, set to None
+    qc_methods = config['experiment']['qc'] if 'qc' in config['experiment'] else []
+    #Set QC filters, if not present, set to slideflow defaults
+    qc_filters = config['experiment']['qc_filters'] if 'qc_filters' in config['experiment'] else {'whitespace_fraction' : 1,
+                                                                                                  'whitespace_threshold' : 230,
+                                                                                                  'grayspace_fraction' : 0.6,
+                                                                                                  'grayspace_threshold' : 0.05}
+    qc_list = []
+    for qc_method in qc_methods:
+        #Retrieve the QC method by name from the qc module
+        if qc_method == 'Otsu-CLAHE':
+            qc_method = getattr(qc, 'Otsu')(with_clahe=True)
+        else:
+            qc_method = getattr(qc, qc_method)()
+        qc_list.append(qc_method)
+    return qc_list, qc_filters
+
+def set_mil_config(config: dict, combination_dict: dict, task: str, slide_level: bool = False) -> dict:
     """
     Configure the MIL (Multiple Instance Learning) model based on the current combination.
 
@@ -634,20 +925,64 @@ def set_mil_config(config: dict, combination_dict: dict, task: str) -> dict:
     Returns:
         dict: MIL configuration parameters.
     """
-    mil_name = combination_dict['mil'].lower()
-    if mil_name not in BUILT_IN_MIL:
-        mil_method = get_model_class(aggregators, mil_name)
+    # Check for fallback to default MIL method
+    if 'mil' not in combination_dict or not combination_dict['mil']:
+        logging.warning("No MIL method specified. Using default attention MIL method.")
+        #Setting default attention_mil
+        mil_name = 'attention_mil'
+        combination_dict['mil'] = mil_name
     else:
-        mil_method = mil_name
-    mil_conf = mil_config(mil_method,
-                          aggregation_level=config['experiment']['aggregation_level'],
-                          trainer="fastai",
-                          epochs=config['experiment']['epochs'],
-                          drop_last=True,
-                          batch_size=config['experiment']['batch_size'],
-                          bag_size=config['experiment']['bag_size'],
-                          task=task)
-    return mil_conf
+        mil_name = combination_dict['mil'].lower()
+
+    # Check if the MIL method is slideflow built-in or external
+    if mil_name not in BUILT_IN_MIL:
+        #check if correct MIL methods chosen for slide-level. If not, will fall back to MLP classifier.
+        if slide_level:
+            try:
+                mil_method = get_model_class(slide_level_predictors, mil_name)
+            except:
+                logging.warning(f"You are either using an undefined slide predictor head or an MIL model: {mil_name}, Now falling back to Slide-level MLP classifier")
+                mil_method = get_model_class(slide_level_predictors, 'mlp_slide_classifier')
+                combination_dict['mil'] = 'mlp_slide_classifier'
+                pass
+        else:
+            mil_method = get_model_class(aggregators, mil_name)
+    else:
+        if slide_level:
+            logging.warning("You are using a bag-level model for slide-level predictions. Please use a slide-level model.")
+            mil_method = get_model_class(slide_level_predictors, 'mlp_slide_classifier')
+            combination_dict['mil'] = 'mlp_slide_classifier'
+        else:
+            mil_method = mil_name
+
+    if slide_level:
+        mil_conf = mil_config(mil_method,
+                            aggregation_level=config['experiment']['aggregation_level'] if 'aggregation_level' in config['experiment'] else 'slide',
+                            trainer="fastai",
+                            epochs=config['experiment']['epochs'] if 'epochs' in config['experiment'] else 50,
+                            batch_size=config['experiment']['batch_size'] if 'batch_size' in config['experiment'] else 64,
+                            bag_size=1,
+                            z_dim = config['experiment']['z_dim'] if 'bag_size' in config['experiment'] else 512,
+                            encoder_layers = config['experiment']['encoder_layers'] if 'encoder_layers' in config['experiment'] else 1,
+                            dropout_p = config['experiment']['dropout_p'] if 'dropout_p' in config['experiment'] else 0.25,
+                            activation_function = combination_dict['activation_function'] if 'activation_function' in combination_dict else 'ReLU',
+                            slide_level=True,
+                            task=task)
+    else:
+        mil_conf = mil_config(mil_method,
+                            aggregation_level=config['experiment']['aggregation_level'] if 'aggregation_level' in config['experiment'] else 'slide',   
+                            trainer="fastai",
+                            epochs=config['experiment']['epochs'] if 'epochs' in config['experiment'] else 50,
+                            drop_last=True,
+                            batch_size=config['experiment']['batch_size'] if 'batch_size' in config['experiment'] else 64,
+                            bag_size=config['experiment']['bag_size'] if 'bag_size' in config['experiment'] else 512,
+                            z_dim = config['experiment']['z_dim'] if 'z_dim' in config['experiment'] else 512,
+                            encoder_layers = config['experiment']['encoder_layers'] if 'encoder_layers' in config['experiment'] else 1,
+                            dropout_p = config['experiment']['dropout_p'] if 'encoder_layers' in config['experiment'] else 0.25,
+                            activation_function = combination_dict['activation_function'] if 'activation_function' in combination_dict else 'ReLU',
+                            slide_level=False,
+                            task=task)
+    return mil_conf, combination_dict
 
 
 # =============================================================================
@@ -756,7 +1091,7 @@ def build_aggregated_results(val_df: pd.DataFrame, test_df: pd.DataFrame, config
 
 
 
-def save_best_model_weights(source_weights_dir: str, config: dict, model_tag: str) -> None:
+def save_best_model_weights(source_weights_dir: str, config: dict, model_tag: str, model_config: dict) -> None:
     """
     Save (copy) the best model weights directory into the dedicated 'saved_models' folder.
 
@@ -764,6 +1099,7 @@ def save_best_model_weights(source_weights_dir: str, config: dict, model_tag: st
         source_weights_dir (str): Directory of the source model weights.
         config (dict): Experiment configuration dictionary.
         model_tag (str): A string tag to identify the best model (e.g., 'best_test_model_YYYY-MM-DD_HH-MM-SS').
+        model_config (dict): Model configuration dictionary.
 
     Returns:
         None
@@ -771,13 +1107,19 @@ def save_best_model_weights(source_weights_dir: str, config: dict, model_tag: st
     dest_dir = f"experiments/{config['experiment']['project_name']}/saved_models/{model_tag}"
     os.makedirs(dest_dir, exist_ok=True)
     # Use system command to copy the directory (or use shutil.copytree for a cross-platform solution)
-    os.system(f"cp -r {source_weights_dir} {dest_dir}")
+    shutil.copytree(source_weights_dir, dest_dir)
+    #Save model configuration as well
+    with open(f"{dest_dir}/model_config.json", 'w') as f:
+        json.dump(model_config, f, indent=4)
+
     logging.info(f"Saved best model weights from {source_weights_dir} to {dest_dir}.")
+    logging.info(f"Saved best model configuration to {dest_dir}/model_config.json.")
 
 
 def find_and_apply_best_model(config: dict, val_df_agg: pd.DataFrame, test_df_agg: pd.DataFrame,
                               benchmark_parameters: dict, val_df: pd.DataFrame, test_df: pd.DataFrame,
-                              val_dataset: sf.Dataset, test_dataset: sf.Dataset, target: str) -> None:
+                              val_dataset: sf.Dataset, test_dataset: sf.Dataset, target: str,
+                              slide_level: bool) -> None:
     """
     Identify the best performing model based on validation and test metrics,
     save its configuration and weights, and then run it on the test set.
@@ -792,6 +1134,7 @@ def find_and_apply_best_model(config: dict, val_df_agg: pd.DataFrame, test_df_ag
         val_dataset (sf.Dataset): Validation dataset.
         test_dataset (sf.Dataset): Test dataset.
         target (str): Target variable.
+        slide_level (bool): Flag indicating if the model is slide-level.
 
     Returns:
         None
@@ -829,7 +1172,10 @@ def find_and_apply_best_model(config: dict, val_df_agg: pd.DataFrame, test_df_ag
         del best_test_model_dict['task']
 
     if best_test_model_dict['params']['model'].lower() not in BUILT_IN_MIL:
-        best_test_model_dict['params']['model'] = getattr(aggregators, best_test_model_dict['params']['model'])
+        if not slide_level:
+            best_test_model_dict['params']['model'] = getattr(aggregators, best_test_model_dict['params']['model'])
+        else:
+            best_test_model_dict['params']['model'] = getattr(slide_level_predictors, best_test_model_dict['params']['model'])
         best_test_model_config = sf.mil.mil_config(trainer=best_test_model_dict['trainer'], **best_test_model_dict['params'])
     else:
         best_test_model_config = None
@@ -845,7 +1191,7 @@ def find_and_apply_best_model(config: dict, val_df_agg: pd.DataFrame, test_df_ag
     best_model_pickle = f"{saved_models_dir}/best_test_model_{now}.pkl"
     with open(best_model_pickle, 'wb') as f:
         pickle.dump(best_test_model_dict, f)
-    save_best_model_weights(best_test_weights, config, f"best_test_model_{now}")
+    save_best_model_weights(best_test_weights, config, f"best_test_model_{now}", best_test_model_dict)
 
 
 def load_class(module_name: str, class_name: str):
@@ -882,14 +1228,13 @@ def run_best_model(config: dict, split: int, dataset: sf.Dataset, bags: str,
         bags (str): Directory containing feature bags.
         mil_conf (dict): MIL configuration dictionary.
         target (str): Target variable.
-        model_weights (str): Path to the saved model weights.
-
     Returns:
         None
     """
     logging.info("Running the best model for evaluation...")
     date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     eval_outdir = f"experiments/{config['experiment']['project_name']}/best_model_eval_{split}_{date}"
+    
     result = eval_mil(
         weights=model_weights,
         outcomes=target,
@@ -899,8 +1244,7 @@ def run_best_model(config: dict, split: int, dataset: sf.Dataset, bags: str,
         outdir=eval_outdir,
         attention_heatmaps=True,
         cmap="jet",
-        norm="linear",
-        pb_config=config
+        norm="linear"
     )
     logging.info(f"Best model evaluation completed. Results saved in {eval_outdir}.")
 
@@ -1104,10 +1448,32 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
         """
         logging.info(f"Starting trial {trial.number}...")
         # Sample hyperparameters
-        epochs = trial.suggest_int('epochs', 10, 50)
-        batch_size = trial.suggest_int('batch_size', 8, 64)
-        z_dim = trial.suggest_int('z_dim', 128, 512)
-        encoder_layers = trial.suggest_int('encoder_layers', 1, 3)
+
+        #Get the dict of additional search parameters e.g. {'epochs' : [10, 50]}
+        additional_hyperparameters = config['optimization']['search_parameters']
+        if 'epochs' in additional_hyperparameters:
+            epochs = trial.suggest_int('epochs', additional_hyperparameters['epochs'][0], additional_hyperparameters['epochs'][1])
+        else:
+            epochs = config['experiment']['epochs'] if 'epochs' in config['experiment'] else 50
+        if 'batch_size' in additional_hyperparameters:
+            batch_size = trial.suggest_int('batch_size', additional_hyperparameters['batch_size'][0], additional_hyperparameters['batch_size'][1])
+        else:
+            batch_size = config['experiment']['batch_size'] if 'batch_size' in config['experiment'] else 32
+        if 'z_dim' in additional_hyperparameters:
+            z_dim = trial.suggest_int('z_dim', additional_hyperparameters['z_dim'][0], additional_hyperparameters['z_dim'][1])
+        else:
+            z_dim = config['experiment']['z_dim'] if 'z_dim' in config['experiment'] else 256
+        
+        if 'encoder_layers' in additional_hyperparameters:
+            encoder_layers = trial.suggest_int('encoder_layers', additional_hyperparameters['encoder_layers'][0], additional_hyperparameters['encoder_layers'][1])
+        else:
+            encoder_layers = config['experiment']['encoder_layers'] if 'encoder_layers' in config['experiment'] else 2
+        
+        if 'dropout_p' in additional_hyperparameters:
+            dropout_p = trial.suggest_float('dropout_p', additional_hyperparameters['dropout_p'][0], additional_hyperparameters['dropout_p'][1])
+        else:
+            dropout_p = config['experiment']['dropout_p'] if 'dropout_p' in config['experiment'] else 0.25
+
         tile_px = trial.suggest_categorical('tile_px', tile_px_choices)
         tile_um = trial.suggest_categorical('tile_um', tile_um_choices)
         normalization = trial.suggest_categorical('normalization', normalization_choices)
@@ -1124,8 +1490,7 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
         config['experiment']['batch_size'] = batch_size
         config['experiment']['z_dim'] = z_dim
         config['experiment']['encoder_layers'] = encoder_layers
-        config['experiment']['balancing'] = balancing
-        config['experiment']['class_weighting'] = class_weighting
+        config['experiment']['dropout_p'] = dropout_p
 
         combination_dict = {
             'tile_px': tile_px,
@@ -1136,14 +1501,11 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
             'loss': loss,
             'augmentation': augmentation,
             'activation_function': activation_function,
-            'optimizer': optimizer
+            'optimizer': optimizer,
         }
 
-        # Initialize dataframes to record results (could be expanded if needed)
-        columns = list(config['benchmark_parameters'].keys())
-        columns.extend(list(config['experiment']['evaluation']))
-        val_df = pd.DataFrame(columns=columns)
-        test_df = pd.DataFrame(columns=columns)
+        # Initialize dataframes to record results 
+        val_df, test_df = get_column_values(config)
 
         target = determine_target_variable(task, config)
         annotation_df = pd.read_csv(project.annotations)
@@ -1152,14 +1514,9 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
         all_data = project.dataset(tile_px=combination_dict['tile_px'],
                                    tile_um=combination_dict['tile_um'])
         logging.info("Extracting tiles with quality control...")
-        qc_methods = config['experiment']['qc']
-        qc_filters = config['experiment']['qc_filters']
-        qc_list = []
-        for qc_method in qc_methods:
-            if qc_method == 'Otsu-CLAHE':
-                qc_list.append(getattr(qc, 'Otsu')(with_clahe=True))
-            else:
-                qc_list.append(getattr(qc, qc_method)())
+        
+        qc_list, qc_filters = build_qc_list(config)
+
         all_data.extract_tiles(enable_downsample=False, save_tiles=False,
                                qc=qc_list,
                                grayspace_fraction=float(qc_filters['grayspace_fraction']),
@@ -1169,17 +1526,16 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
                                num_threads=config['experiment']['num_workers'],
                                report=config['experiment']['report'])
 
-        datasets = config['datasets']
-        train_datasets = [d for d in datasets if d['used_for'] == 'training']
-        test_datasets = [d for d in datasets if d['used_for'] == 'testing']
-        train_set = all_data.filter(filters={'dataset': [d['name'] for d in train_datasets]})
-        train_set = balance_dataset(train_set, task, config)
-        test_set = all_data.filter(filters={'dataset': [d['name'] for d in test_datasets]})
+
+        train_datasets, test_datasets = configure_datasets(config)
+
+        train_set, test_set = split_train_test(config, all_data, task)
 
         splits_file = determine_splits_file(config, project_directory)
         splits = split_datasets(config, project, splits_file, target, project_directory, train_set)
-        save_string = "_".join([str(value) for value in combination_dict.values()])
-        string_without_mil = "_".join([str(value) for key, value in combination_dict.items() if key not in ['mil', 'loss', 'augmentation', 'activation_function']])
+        
+        save_string, string_without_mil = get_save_strings(combination_dict)
+
         logging.debug(f"Save string: {save_string}")
 
         logging.info("Starting feature extraction...")
@@ -1188,7 +1544,7 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
                                                     tile_px=combination_dict['tile_px'])
         logging.info("Generating feature bags...")
         bags = generate_bags(config, project, all_data, combination_dict, string_without_mil, feature_extractor)
-        mil_conf = set_mil_config(config, combination_dict, task)
+        mil_conf, combination_dict = set_mil_config(config, combination_dict, task, slide_level=True if "slide" in combination_dict['feature_extraction'].lower() else False)
         os.makedirs(f"experiments/{config['experiment']['project_name']}/results", exist_ok=True)
         os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations", exist_ok=True)
 
@@ -1201,6 +1557,10 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
             logging.info(f"Trial {trial.number} - Split {index} started...")
             train = balance_dataset(train, task, config)
             val = balance_dataset(val, task, config)
+
+            model_kwargs = {
+                'pb_config': config,
+            }
             # Train the model on the current split
             _ = project.train_mil(
                 config=mil_conf,
@@ -1209,28 +1569,33 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
                 val_dataset=val,
                 bags=bags,
                 exp_label=f"{save_string}_{index}",
-                pb_config=config,
-                loss=combination_dict.get('loss'),
-                augmentation=combination_dict.get('augmentation'),
-                activation_function=combination_dict.get('activation_function'),
-                optimizer=combination_dict.get('optimizer')
+                **model_kwargs
             )
+
             number = get_highest_numbered_filename(f"experiments/{config['experiment']['project_name']}/mil/")
-            val_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/predictions.parquet")
-            if task in ['survival', 'survival_discrete']:
-                metrics, durations, events, predictions = calculate_survival_results(val_result)
-                survival_results_per_split.append((durations, events, predictions))
-            elif task == 'regression':
-                metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, save_string, "val")
-                y_true, y_pred = val_result['y_true'], val_result['y_pred0']
-                val_results_per_split.append((y_true, y_pred))
-            else:
-                metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, save_string, "val")
-                val_results_per_split.append([tpr, fpr])
-                val_pr_per_split.extend(val_pr_curves)
+            def get_validation_metrics(number: str):
+                #Get the corresponding validation results
+                val_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/predictions.parquet")
+                if task == 'survival' or task == 'survival_discrete':	
+                    metrics, durations, events, predictions = calculate_survival_results(val_result)
+                    survival_results_per_split.append((durations, events, predictions))
+                elif task  == 'regression':
+                    metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, save_string, "val")
+                    y_true, y_pred = val_result['y_true'], val_result['y_pred0']
+                    val_results_per_split.append((y_true, y_pred))
+                else:
+                    metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, save_string, "val")
+                    val_results_per_split.append([tpr, fpr])
+                    val_pr_per_split.extend(val_pr_curves)
+                
+                return metrics
+
+            metrics = get_validation_metrics(number)
+
             val_dict = combination_dict.copy()
             val_dict.update(metrics)
             val_df = val_df.append(val_dict, ignore_index=True)
+
             # Evaluate the model on the test set
             test_result = eval_mil(
                 weights=f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}",
@@ -1239,25 +1604,29 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
                 bags=bags,
                 config=mil_conf,
                 outdir=f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}",
-                pb_config=config,
-                activation_function=combination_dict.get('activation_function')
+                **model_kwargs
             )
-            if combination_dict['mil'].lower() in BUILT_IN_MIL:
-                model_string = combination_dict['mil'].lower()
-            else:
-                model_string = f"<class 'pathbench.models.aggregators.{combination_dict['mil'].lower()}'>"
+
+
+            model_string = get_model_string(combination_dict, feature_extraction)
             test_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}/00000-{model_string}/predictions.parquet")
-            if task in ['survival', 'survival_discrete']:
-                metrics, durations, events, predictions = calculate_survival_results(test_result)
-                test_survival_results_per_split.append((durations, events, predictions))
-            elif task == 'regression':
-                metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
-                y_true, y_pred = test_result['y_true'], test_result['y_pred0']
-                test_results_per_split.append((y_true, y_pred))
-            else:
-                metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
-                test_results_per_split.append([tpr, fpr])
-                test_pr_per_split.extend(test_pr_curves)
+            
+            def get_test_metrics():
+                if task in ['survival', 'survival_discrete']:
+                    metrics, durations, events, predictions = calculate_survival_results(test_result)
+                    test_survival_results_per_split.append((durations, events, predictions))
+                elif task == 'regression':
+                    metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
+                    y_true, y_pred = test_result['y_true'], test_result['y_pred0']
+                    test_results_per_split.append((y_true, y_pred))
+                else:
+                    metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
+                    test_results_per_split.append([tpr, fpr])
+                    test_pr_per_split.extend(test_pr_curves)
+
+                return metrics
+
+            metrics = get_test_metrics()
             test_dict = combination_dict.copy()
             test_dict.update(metrics)
             test_dict['weights'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}"
@@ -1270,6 +1639,7 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
         plot_across_splits(config, survival_results_per_split, test_survival_results_per_split,
                            val_results_per_split, test_results_per_split, val_pr_per_split, test_pr_per_split,
                            save_string)
+
         # Report progress to the trial
         if config['optimization'].get('pruner'):
             trial.report(np.mean(test_df[objective_metric]), index)
@@ -1285,6 +1655,9 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
             raise ValueError("Objective dataset must be 'test' or 'val'.")
         # Save the weights directory for this trial as a user attribute for later retrieval
         trial.set_user_attr("weights_path", test_dict['weights'])
+        #Save the model configuration as well
+        trial.set_user_attr("mil_params", mil_conf.json_dump())
+
         logging.info(f"Trial {trial.number} completed with {objective_metric}: {np.mean(measure_df[objective_metric])}")
         return np.mean(measure_df[objective_metric])
 
@@ -1315,27 +1688,54 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
     logging.info("Starting optimization...")
     study.optimize(objective, n_trials=config['optimization']['trials'])
 
-    # Visualize and save optimization results
+    # Save the study results
+    plot_optimization_output(project_directory, study)
+    #Save best parameters
+    best_params = study.best_params
+    with open(f"{opt_dir}/best_params.json", 'w') as f:
+        json.dump(best_params, f)
+
+    logging.info(f"Best parameters: {best_params} found in trial {study.best_trial.number} with value: {study.best_value}")
+
+    #Save best model weights
+    # Retrieve and save the best model weights from the best trial
+    best_weights = study.best_trial.user_attrs.get("weights_path", None)
+    best_conf = study.best_trial.user_attrs.get("mil_params", None)
+    #get current date
     current_date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    if best_weights:
+        save_best_model_weights(best_weights, config, f"best_optimized_model_{current_date}", best_conf)
+    logging.info("Optimization finished.")
+
+
+def plot_optimization_output(project_directory, study):
+    """
+    Plot the optimization output (parameter importances and optimization history).
+
+    Args:
+        project_directory (str): Directory for the experiment.
+        study (optuna.Study): The Optuna study object.
+
+    Returns:
+        None
+    """
+    opt_dir = f"{project_directory}/optimization"
+    os.makedirs(opt_dir, exist_ok=True)
+    current_date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    
+    # Reset plot
+    plt.close()
+    # Plot parameter importances
     fig = opt_vis.plot_param_importances(study)
     plt.title("Parameter Importances")
     plt.savefig(f"{opt_dir}/parameter_importances_{current_date}.png")
     plt.close()
+
+    # Plot optimization history
     fig = opt_vis.plot_optimization_history(study)
     plt.title("Optimization History")
     plt.savefig(f"{opt_dir}/optimization_history_{current_date}.png")
     plt.close()
-    best_params = study.best_params
-    with open(f"{opt_dir}/best_params.json", 'w') as f:
-        json.dump(best_params, f)
-    logging.info(f"Best parameters: {best_params} found in trial {study.best_trial.number} with value: {study.best_value}")
-
-    # Retrieve and save the best model weights from the best trial
-    best_weights = study.best_trial.user_attrs.get("weights_path", None)
-    if best_weights:
-        save_best_model_weights(best_weights, config, f"best_optimized_model_{current_date}")
-    logging.info("Optimization finished.")
-
 
 # =============================================================================
 # End of Module

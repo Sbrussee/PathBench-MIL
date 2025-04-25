@@ -2,22 +2,33 @@
 import argparse
 import os
 import sys
-import json
-import numpy as np
 import logging
-import slideflow.mil as mil
+import json
+import yaml
+import numpy as np
+from slideflow import Dataset
+from slideflow.mil import predict_slide
+from slideflow.util import location_heatmap
+from pathbench.models import feature_extractors, slide_level_predictors
 
 logging.basicConfig(level=logging.INFO)
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Run inference using a saved MIL model directory on a slide or all slides in a directory, and save results."
+        description="Run inference with a MIL model and optionally generate attention heatmaps."
     )
     parser.add_argument(
         "--model_dir",
         type=str,
         required=True,
-        help="Path to the saved model directory (should contain mil_params.json, models/, etc.)"
+        help="Path to the saved MIL model directory (must contain mil_params.json, models/, etc.)"
+    )
+
+    parser.add_argument(
+        "--config",
+        type=str,
+        required=True,
+        help="Path to the PathBench configuration file (e.g., config.yaml)."
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
@@ -31,78 +42,144 @@ def parse_args():
         help="Path to a directory containing slide files"
     )
     parser.add_argument(
-        "--attention",
+        "--heatmap",
         action="store_true",
-        help="If provided, saves attention scores along with predictions."
+        help="If set, also saves attention heatmap images."
+    )
+    parser.add_argument(
+        "--interpolation",
+        type=str,
+        default="bicubic",
+        help="Interpolation strategy for smoothing heatmap."
+    )
+    parser.add_argument(
+        "--cmap",
+        type=str,
+        default="inferno",
+        help="Matplotlib colormap for heatmap."
+    )
+    parser.add_argument(
+        "--norm",
+        choices=["two_slope", None],
+        default=None,
+        help="Normalization: 'two_slope' centers at zero; None for linear."
     )
     return parser.parse_args()
 
-def process_slide(model_dir, slide_path, output_dir, attention=False):
-    logging.info(f"\nProcessing slide: {slide_path}")
-    try:
-        # Run prediction using the MIL model
-        predictions, attn = mil.predict_slide(
-            model=model_dir,
-            slide=slide_path,
-            attention=attention
-        )
+def get_extractor_class(extractor_name):
+    """
+    Get the class of the extractor based on its name.
+    """
+    if extractor_name in feature_extractors.__dict__:
+        return feature_extractors.__dict__[extractor_name]
+    elif extractor_name in slide_level_predictors.__dict__:
+        return slide_level_predictors.__dict__[extractor_name]
+    else:
+        raise ValueError(f"Unknown extractor: {extractor_name}")
 
-        #Print the predictions
-        logging.info(f"Predictions:\n{predictions}")
-        
-        # Determine the base name for output files
-        base_name = os.path.splitext(os.path.basename(slide_path))[0]
-        pred_file = os.path.join(output_dir, f"{base_name}_predictions.npy")
-        np.save(pred_file, predictions)
-        logging.info(f"Saved predictions to: {pred_file}")
-        
-        # If attention is requested and returned, save it
-        if attention:
-            if attn is not None:
-                attn_file = os.path.join(output_dir, f"{base_name}_attention.npy")
-                np.save(attn_file, attn)
-                logging.info(f"Saved attention scores to: {attn_file}")
-            else:
-                logging.warning("No attention scores returned.")
-    except Exception as e:
-        logging.warning(f"Error processing slide {slide_path}: {e}")
+def process_slide(args, slide_path, output_dir):
+    logging.info(f"\nProcessing slide: {slide_path}")
+    base = os.path.splitext(os.path.basename(slide_path))[0]
+    with open(os.path.join(args.model_dir, "mil_params.json"), "r") as f:
+        # Load model parameters
+        try:
+            model_dict = json.load(f)
+        except json.JSONDecodeError as e:
+            logging.error(f"Error loading JSON: {e}")
+            sys.exit(1)
+    logging.info(f"Model parameters: {model_dict}")
+
+    with open(args.config, "r") as f:
+        try:
+            config = yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            logging.error(f"Error loading YAML: {e}")
+            sys.exit(1)
+
+    #Login using hf_token
+    token = config['hf_key']
+    if token:
+        from huggingface_hub import login
+        login(token=token)
+    logging.info(f"Logged in to Hugging Face with token: {token}")
+
+    #Set pretrained weights directory
+    WEIGHTS_DIR = config['weights_dir']
+    # Set environment variables
+    os.environ['TORCH_HOME'] = WEIGHTS_DIR
+    os.environ['HF_HOME'] = WEIGHTS_DIR
+    os.environ['XDG_CACHE_HOME'] = WEIGHTS_DIR
+    os.environ['TRANSFORMERS_CACHE'] = WEIGHTS_DIR
+    os.environ['HF_DATASETS_CACHE'] = WEIGHTS_DIR
+    os.environ['WEIGHTS_DIR'] = WEIGHTS_DIR
+
+    logging.info(f"Set environment variables for pretrained weights directory: {WEIGHTS_DIR}")
+    
+    extractor_name = model_dict['bags_extractor']['extractor']['class']
+    extractor_class = get_extractor_class(extractor_name)
+
+    normalizer = model_dict['bags_extractor']['normalizer']['method']
+    logging.info(f"Normalizer: {normalizer}")
+
+    mil_model = model_dict['params']['model']
+    logging.info(f"MIL model: {mil_model}")
+
+    tile_px, tile_um = model_dict['bags_extractor']['tile_px'], model_dict['bags_extractor']['tile_um']
+
+    heatmap_kwargs = {
+        "interpolation": args.interpolation,
+        "cmap": args.cmap,
+        "norm": args.norm,
+    }
+    # 1) Run inference (and get 2D attention heatmap if requested)
+    preds, attn_2d = predict_slide(
+        model=args.model_dir,
+        slide=slide_path,
+        attention=args.heatmap,
+        heatmap_kwargs=heatmap_kwargs
+    )
+
+    # 2) Save predictions
+    pred_file = os.path.join(output_dir, f"{base}_preds.npy")
+    np.save(pred_file, preds)
+    logging.info(f"Saved predictions: {pred_file}, shape: {preds.shape}")
+
+
+
 
 def main():
     args = parse_args()
 
-    # Verify that the model directory exists
-    if not os.path.exists(args.model_dir):
-        logging.warning(f"Error: model_dir '{args.model_dir}' does not exist.")
+    if not os.path.isdir(args.model_dir):
+        logging.error(f"Error: model_dir '{args.model_dir}' does not exist.")
         sys.exit(1)
 
-    # Prepare the output directory for inference results
     output_dir = "inference_results"
     os.makedirs(output_dir, exist_ok=True)
 
-    # Collect slide paths based on provided arguments
-    slide_paths = []
+    # Collect slides
     if args.slide:
         if not os.path.isfile(args.slide):
-            logging.warning(f"Error: slide '{args.slide}' is not a valid file.")
+            logging.error(f"Error: slide '{args.slide}' not found.")
             sys.exit(1)
-        slide_paths.append(args.slide)
-    elif args.slide_dir:
+        slides = [args.slide]
+    else:
         if not os.path.isdir(args.slide_dir):
-            logging.warning(f"Error: slide_dir '{args.slide_dir}' is not a valid directory.")
+            logging.error(f"Error: slide_dir '{args.slide_dir}' not found.")
             sys.exit(1)
-        # Optionally, filter by slide file extension (e.g., .svs)
-        for file in os.listdir(args.slide_dir):
-            file_path = os.path.join(args.slide_dir, file)
-            if os.path.isfile(file_path):
-                slide_paths.append(file_path)
+        slides = [
+            os.path.join(args.slide_dir, f)
+            for f in os.listdir(args.slide_dir)
+            if os.path.isfile(os.path.join(args.slide_dir, f))
+        ]
 
-    if not slide_paths:
-        logging.warning("No slides found to process.")
+    if not slides:
+        logging.error("No slides to process.")
         sys.exit(1)
 
-    # Process each slide and save the inference results
-    for slide_path in slide_paths:
-        process_slide(args.model_dir, slide_path, output_dir, attention=args.attention)
+    for slide_path in slides:
+        process_slide(args, slide_path, output_dir)
+
 
 if __name__ == "__main__":
     main()
