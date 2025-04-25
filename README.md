@@ -341,9 +341,6 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
   loss: # Loss functions, as specified in losses.py
     - CrossEntropyLoss
 
-  augmentation: # MIL-friendly augmentations, as specified in augmentations.py
-    - patch_mixing
-
   activation_function: # activation function for the MIL encoder, supports any pytorch.nn activation function.
     - ReLU
 
@@ -434,17 +431,6 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
      # - MSELossReg
      # - L1LossReg
      # - HuberLossReg
-
-#Available MIL-friendly augmentations:
-  # - patch_dropout
-  # - add_gaussian_noise
-  # - random_scaling
-  # - feature_masking
-  # - feature_dropout
-  # - patchwise_scaling
-  # - feature_permutation
-  # - patch_mixing
-  # - cutmix
 
 weights_dir : ./pretrained_weights # Path to the model weights, and where newly retrieved model weights will be saved, defaults to the pretrained_weights directory in the PathBench directory.
 hf_key: YOUR_HUGGINGFACE_TOKEN # Token for Hugging Face model hub to access gated models, if you do not have one, just set to None
