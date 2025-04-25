@@ -23,13 +23,8 @@ from functools import reduce
 from operator import mul
 from conch.open_clip_custom import create_model_from_pretrained
 
-
-# Directory to save pretrained weights
-WEIGHTS_DIR = "pretrained_weights"
-os.environ['TORCH_HOME'] = WEIGHTS_DIR
-os.environ['HF_HOME'] = WEIGHTS_DIR
-os.environ['HF_HUB_CACHE'] = WEIGHTS_DIR
-
+#Set weights dir based on the $WEIGHTS_DIR environment variable
+WEIGHTS_DIR = os.environ.get('WEIGHTS_DIR', "./pretrained_weights")
 
 def get_pretrained_url_vit(key : str):
     """
@@ -636,20 +631,38 @@ class gigapath(TorchFeatureExtractor):
         model_name = "gigapath.bin"
         if not os.path.exists(local_dir):
             os.makedirs(local_dir, exist_ok=True)
+
+        self.model = timm.create_model("hf_hub:prov-gigapath/prov-gigapath", pretrained=False)
         
         model_path = os.path.join(local_dir, model_name)
 
-        if not os.path.exists(model_path):
-            self.model = timm.create_model(
-                "hf_hub:prov-gigapath/prov-gigapath", pretrained=True)
-            torch.save(self.model.state_dict(), model_path)
-        else:
-            self.model = timm.create_model(
-                "hf_hub:prov-gigapath/prov-gigapath", pretrained=False)
-            self.model.load_state_dict(torch.load(model_path, map_location="cpu"), strict=True)
+        from huggingface_hub import hf_hub_download
+        model_path = hf_hub_download(
+            repo_id="prov-gigapath/prov-gigapath", 
+            filename="pytorch_model.bin", 
+            local_dir=local_dir, 
+            cache_dir=local_dir,
+            force_download=False
+        )
+        state_dict = torch.load(model_path, map_location="cpu", weights_only=False)
+
+        # Remap keys to fix mismatches in LayerScale parameters.
+        def remap_swiglu_keys(state_dict):
+            new_state_dict = {}
+            for key, value in state_dict.items():
+                new_key = key.replace("ls1.gamma", "ls1.weight").replace("ls2.gamma", "ls2.weight")
+                new_state_dict[new_key] = value
+            return new_state_dict
+
+        #check if 'gamma' in state_dict
+        if 'gamma' in state_dict:
+            #REmap keys
+            state_dict = remap_swiglu_keys(state_dict)
+
+        self.model.load_state_dict(state_dict, strict=True)
 
         self.model.to('cuda')
-        self.num_features = 1024
+        self.num_features = 1536
         self.transform = transforms.Compose(
             [
                 transforms.Resize(224),
@@ -1374,7 +1387,6 @@ class hibou_l(TorchFeatureExtractor):
             'class': 'hibou_l',
             'kwargs': {}
         }
-#GATED
 @register_torch
 class virchow(TorchFeatureExtractor):
     """
@@ -1402,20 +1414,49 @@ class virchow(TorchFeatureExtractor):
     tag = 'virchow'
 
     def __init__(self, tile_px=256, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__()
         local_dir = WEIGHTS_DIR
-        base_model = timm.create_model("hf-hub:paige-ai/Virchow", pretrained=True,
-                                        mlp_layer=SwiGLUPacked, act_layer=nn.SiLU)
+        
+        # Create the model without auto-loading pretrained weights.
+        base_model = timm.create_model(
+            "hf-hub:paige-ai/Virchow",
+            pretrained=False,  # disable auto-loading
+            mlp_layer=SwiGLUPacked,
+            act_layer=nn.SiLU,
+        )
+        
+        # Download the pretrained weights (safe tensor format) from the Hugging Face hub.
+        from huggingface_hub import hf_hub_download
+        model_path = hf_hub_download(
+            repo_id="paige-ai/Virchow", 
+            filename="model.safetensors", 
+            local_dir=local_dir, 
+            cache_dir=local_dir,
+            force_download=False
+        )
+        
+        # Load weights using safetensors.
+        from safetensors.torch import load_file
+        state_dict = load_file(model_path)
 
-        # Modify the classifier to output the concatenated embeddings
+        # Helper to remap keys: convert ls1.gamma/ls2.gamma -> ls1.weight/ls2.weight.
+        def remap_swiglu_keys(state_dict):
+            new_state_dict = {}
+            for key, value in state_dict.items():
+                new_key = key.replace("ls1.gamma", "ls1.weight").replace("ls2.gamma", "ls2.weight")
+                new_state_dict[new_key] = value
+            return new_state_dict
+
+        state_dict = remap_swiglu_keys(state_dict)
+        base_model.load_state_dict(state_dict, strict=False)
+        
+        # Determine the mode from kwargs (default is "full").
+        mode = kwargs.get('mode', "full")
+
+        # Modify the classifier to output concatenated embeddings.
         class VirchowEmbedder(nn.Module):
             """
             Virchow Embedder model, which concatenates the class token and average pool of patch tokens.
-
-            Methods
-            -------
-            forward(x)
-                Forward pass of the model
             """
             def __init__(self):
                 super(VirchowEmbedder, self).__init__()
@@ -1426,14 +1467,15 @@ class virchow(TorchFeatureExtractor):
                 cls_token = x[:, 0]
                 patch_tokens = x[:, 1:]
                 avg_pool = patch_tokens.mean(dim=1)
-                # Concatenate class token and average pool of patch tokens
-                embedding = torch.cat((cls_token, avg_pool), dim=-1)
+                if mode == 'full':
+                    embedding = torch.cat((cls_token, avg_pool), dim=-1)
+                else:
+                    embedding = cls_token
                 return embedding
 
         self.model = VirchowEmbedder()
-
         self.model.to('cuda')
-        self.num_features = 2560  # Update the number of features to reflect the new embedding size
+        self.num_features = 2560  # Update to reflect the concatenated embedding size
         self.transform = transforms.Compose(
             [
                 transforms.Resize(224),
@@ -1441,7 +1483,6 @@ class virchow(TorchFeatureExtractor):
                 transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             ]
         )
-
         self.model.eval()
         # Slideflow standardization
         self.preprocess_kwargs = {'standardize': False}
@@ -1475,25 +1516,52 @@ class virchow2(TorchFeatureExtractor):
     -------
     dump_config()
         Dump the configuration of the feature extractor
-    
     """
     tag = 'virchow2'
 
     def __init__(self, tile_px=256, **kwargs):
         super().__init__(**kwargs)
         local_dir = WEIGHTS_DIR
-        base_model = timm.create_model("hf-hub:paige-ai/Virchow2", pretrained=True,
-                                        mlp_layer=SwiGLUPacked, act_layer=nn.SiLU)
+        
+        # Create the model without auto-loading pretrained weights.
+        base_model = timm.create_model(
+            "hf-hub:paige-ai/Virchow2",
+            pretrained=False,  # disable auto-loading
+            mlp_layer=SwiGLUPacked,
+            act_layer=nn.SiLU,
+        )
+        
+        # Download the pretrained weights (safe tensor file) from the Hugging Face hub.
+        from huggingface_hub import hf_hub_download
+        model_path = hf_hub_download(
+            repo_id="paige-ai/Virchow2", 
+            filename="model.safetensors", 
+            local_dir=local_dir, 
+            cache_dir=local_dir,
+            force_download=False
+        )
+        
+        from safetensors.torch import load_file
+        state_dict = load_file(model_path)
 
-        # Modify the classifier to output the concatenated embeddings
+        # Remap keys to fix mismatches in LayerScale parameters.
+        def remap_swiglu_keys(state_dict):
+            new_state_dict = {}
+            for key, value in state_dict.items():
+                new_key = key.replace("ls1.gamma", "ls1.weight").replace("ls2.gamma", "ls2.weight")
+                new_state_dict[new_key] = value
+            return new_state_dict
+
+        state_dict = remap_swiglu_keys(state_dict)
+        base_model.load_state_dict(state_dict, strict=False)
+        
+        # Determine the mode (default "full").
+        mode = kwargs.get('mode', "full")
+        
+        # Modify the classifier to output the desired embeddings.
         class VirchowEmbedder(nn.Module):
             """
             Virchow Embedder model, which concatenates the class token and average pool of patch tokens.
-
-            Methods
-            -------
-            forward(x)
-                Forward pass of the model
             """
             def __init__(self):
                 super(VirchowEmbedder, self).__init__()
@@ -1504,8 +1572,10 @@ class virchow2(TorchFeatureExtractor):
                 cls_token = x[:, 0]
                 patch_tokens = x[:, 5:]
                 avg_pool = patch_tokens.mean(dim=1)
-                # Concatenate class token and average pool of patch tokens
-                embedding = torch.cat((cls_token, avg_pool), dim=-1)
+                if mode == "full":
+                    embedding = torch.cat((cls_token, avg_pool), dim=-1)
+                elif mode == "cls":
+                    embedding = cls_token
                 return embedding
 
         self.model = VirchowEmbedder()
@@ -1514,7 +1584,7 @@ class virchow2(TorchFeatureExtractor):
                 transforms.Resize(224),
                 transforms.ConvertImageDtype(torch.float32),
                 transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-            ]  
+            ]
         )
         self.model.to('cuda')
         self.num_features = 1280
@@ -1557,9 +1627,50 @@ class h_optimus_0(TorchFeatureExtractor):
     def __init__(self, tile_px=256, **kwargs):
         super().__init__(**kwargs)
 
-        self.model = timm.create_model(
-            "hf-hub:bioptimus/H-optimus-0", pretrained=True, init_values=1e-5, dynamic_img_size=False,
+        self.num_features = 1536
+
+        base_model = timm.create_model(
+            "hf-hub:bioptimus/H-optimus-0",
+            pretrained=False,  # disable auto-loading
+            init_values=1e-5,
+            dynamic_img_size=False,
         )
+
+        # Helper function to remap keys: Replace "ls1.gamma" and "ls2.gamma" with "ls1.weight" and "ls2.weight".
+        def remap_swiglu_keys(state_dict):
+            new_state_dict = {}
+            for key, value in state_dict.items():
+                new_key = key.replace("ls1.gamma", "ls1.weight").replace("ls2.gamma", "ls2.weight")
+                new_state_dict[new_key] = value
+            return new_state_dict
+
+        # Download the pretrained weights (in safetensors format) from Hugging Face.
+        from huggingface_hub import hf_hub_download
+        model_path = hf_hub_download(
+            repo_id="bioptimus/H-optimus-0",
+            filename="pytorch_model.bin",
+            local_dir=WEIGHTS_DIR,
+            cache_dir=WEIGHTS_DIR,
+            force_download=False,
+        )
+        # Load the weights using torch
+        state_dict = torch.load(model_path, map_location="cpu", weights_only=False)
+        # Remap the keys to match the model's expected parameter names.
+        state_dict = remap_swiglu_keys(state_dict)
+        # Load the modified state dict into the model.
+        base_model.load_state_dict(state_dict, strict=False)
+
+        # Define an inner embedder that returns patch token features only.
+        class H_optimus_0_embedder(nn.Module):
+            def __init__(self, model):
+                super(H_optimus_0_embedder, self).__init__()
+                self.model = model
+
+            def forward(self, x):
+                return self.model(x)
+
+        # Wrap the base model with the embedder.
+        self.model = H_optimus_0_embedder(base_model)
         self.model.to("cuda")
         self.model.eval()
 
@@ -1584,50 +1695,97 @@ class h_optimus_0(TorchFeatureExtractor):
 @register_torch
 class h_optimus_1(TorchFeatureExtractor):
     """
-    H-Optimus-1 feature extractor, with large Vision Transformer backbone
+    H-Optimus-1 feature extractor with a large Vision Transformer backbone.
+    
+    This implementation downloads the model weights manually and remaps SwiGLU keys 
+    (replacing "ls1.gamma" with "ls1.weight" and "ls2.gamma" with "ls2.weight").
+    It extracts and returns patch token features only, without concatenating the CLS token.
     
     Parameters
     ----------
     tile_px : int
-        The size of the tile
+        The size of the tile.
     
     Attributes
     ----------
     model : VisionTransformer
-        The Vision Transformer model   
-
+        The wrapped Vision Transformer model which returns patch features.
+    
     transform : torchvision.transforms.Compose
-        The transformation pipeline
-
+        The transformation pipeline.
+    
     preprocess_kwargs : dict
-        The preprocessing arguments
+        The preprocessing keyword arguments.
     
     Methods
     -------
     dump_config()
-        Dump the configuration of the feature extractor
+        Dump the configuration of the feature extractor.
     """
-
     tag = 'h_optimus_1'
 
     def __init__(self, tile_px=256, **kwargs):
         super().__init__(**kwargs)
 
-        self.model = timm.create_model(
-            "hf-hub:bioptimus/H-optimus-1", pretrained=True, init_values=1e-5, dynamic_img_size=False,
+        # Create the base model without automatically loading pretrained weights.
+        base_model = timm.create_model(
+            "hf-hub:bioptimus/H-optimus-1",
+            pretrained=False,  # disable auto-loading
+            init_values=1e-5,
+            dynamic_img_size=False,
         )
+
+        # Helper function to remap keys: Replace "ls1.gamma" and "ls2.gamma" with "ls1.weight" and "ls2.weight".
+        def remap_swiglu_keys(state_dict):
+            new_state_dict = {}
+            for key, value in state_dict.items():
+                new_key = key.replace("ls1.gamma", "ls1.weight").replace("ls2.gamma", "ls2.weight")
+                new_state_dict[new_key] = value
+            return new_state_dict
+
+        # Download the pretrained weights (in safetensors format) from Hugging Face.
+        from huggingface_hub import hf_hub_download
+        model_path = hf_hub_download(
+            repo_id="bioptimus/H-optimus-1",
+            filename="model.safetensors",
+            local_dir=WEIGHTS_DIR,
+            cache_dir=WEIGHTS_DIR,
+            force_download=False,
+        )
+        # Load the weights using safetensors.
+        from safetensors.torch import load_file
+        state_dict = load_file(model_path)
+        # Remap the keys to match the model's expected parameter names.
+        state_dict = remap_swiglu_keys(state_dict)
+        # Load the modified state dict into the model.
+        base_model.load_state_dict(state_dict, strict=False)
+
+        # Define an inner embedder that returns patch token features only.
+        class H_optimus_1_embedder(nn.Module):
+            def __init__(self, model):
+                super(H_optimus_1_embedder, self).__init__()
+                self.model = model
+
+            def forward(self, x):
+                return self.model(x)
+
+        # Wrap the base model with the embedder.
+        self.model = H_optimus_1_embedder(base_model)
         self.model.to("cuda")
         self.model.eval()
+
+        # Each patch feature vector is expected to have 768 dimensions.
+        self.num_features = 1536
 
         self.transform = transforms.Compose([
             transforms.ConvertImageDtype(torch.float32),
             transforms.Resize(224),
             transforms.Normalize(
-                mean=(0.707223, 0.578729, 0.703617), 
+                mean=(0.707223, 0.578729, 0.703617),
                 std=(0.211883, 0.230117, 0.177517)
             ),
         ])
-        # Slideflow standardization
+        # Slideflow standardization settings.
         self.preprocess_kwargs = {'standardize': False}
 
     def dump_config(self):
@@ -1662,29 +1820,70 @@ class h0_mini(TorchFeatureExtractor):
     dump_config()
         Dump the configuration of the feature extractor
     """
-
     tag = 'h0_mini'
 
     def __init__(self, tile_px=256, **kwargs):
         super().__init__(**kwargs)
 
+        # Create the model without automatically loading pretrained weights.
         base_model = timm.create_model(
-            "hf-hub:bioptimus/H0-mini", pretrained=True, mlp_layer=timm.layers.SwiGLUPacked, act_layer=nn.SiLU,
+            "hf-hub:bioptimus/H0-mini",
+            pretrained=False,  # disable auto-loading
+            mlp_layer=timm.layers.SwiGLUPacked,
+            act_layer=nn.SiLU,
         )
 
+        # Define a helper function to remap keys.
+        def remap_swiglu_keys(state_dict):
+            """
+            Remap keys in the state dict:
+            Replace occurrences of "ls1.gamma" with "ls1.weight" and "ls2.gamma" with "ls2.weight".
+            """
+            new_state_dict = {}
+            for key, value in state_dict.items():
+                new_key = key.replace("ls1.gamma", "ls1.weight").replace("ls2.gamma", "ls2.weight")
+                new_state_dict[new_key] = value
+            return new_state_dict
+
+        # Download the pretrained weights from Hugging Face; note this will be in the safetensors format.
+        from huggingface_hub import hf_hub_download
+        model_path = hf_hub_download(
+            repo_id="bioptimus/H0-mini", filename="model.safetensors", local_dir=WEIGHTS_DIR, cache_dir=WEIGHTS_DIR,
+            force_download=False
+        )
+        # Load weights using safetensors.
+        from safetensors.torch import load_file
+        state_dict = load_file(model_path)
+        # Remap the keys to match the model's expected parameter names.
+        state_dict = remap_swiglu_keys(state_dict)
+        # Load the modified state dict into the model.
+        base_model.load_state_dict(state_dict, strict=False)
+
+        # Define an inner embedder that uses the model to produce concatenated features.
         class H0_mini_embedder(nn.Module):
             def __init__(self, model):
                 super(H0_mini_embedder, self).__init__()
                 self.model = model
 
-            def forward(self):
+            def forward(self, x):
                 x = self.model(x)
                 cls_features = x[:, 0]
-                return cls_features
+                # Expected shape: (batch_size, 768)
+                assert cls_features.shape == (x.shape[0], 768), f"Expected shape (batch_size, 768), got {cls_features.shape}"
+                # Retrieve patch tokens (assuming the model has a num_prefix_tokens attribute)
+                patch_token_features = x[:, self.model.num_prefix_tokens :]
+                # Expected shape: (batch_size, 256, 768)
+                assert patch_token_features.shape == (x.shape[0], 256, 768), f"Expected shape (batch_size,256,768), got {patch_token_features.shape}" 
+                # Average pooling of patch tokens and concatenation with cls token
+                concatenated_features = torch.cat([cls_features, patch_token_features.mean(1)], dim=-1)
+                # Expected shape: (batch_size, 1536)
+                assert concatenated_features.shape == (x.shape[0], 1536), f"Expected shape (batch_size, 1536), got {concatenated_features.shape}"
+                return concatenated_features
 
+        # Use the embedder wrapper and set up the rest of the extractor.
         self.model = H0_mini_embedder(base_model)
         self.model.to('cuda')
-        self.num_features = 768
+        self.num_features = 768  # (or update if the downstream embedding size differs)
 
         self.transform = transforms.Compose([
             transforms.ConvertImageDtype(torch.float32),
@@ -1757,7 +1956,7 @@ class transpath_mocov3(TorchFeatureExtractor):
         
 @register_torch
 class conch(TorchFeatureExtractor):
-    
+    tag = 'conch'
     def __init__(self, tile_px=256, **kwargs):
         super().__init__(**kwargs)
         model, preprocess = create_model_from_pretrained("conch_ViT-B-16", "hf_hub:MahmoodLab/conch")
@@ -1771,6 +1970,9 @@ class conch(TorchFeatureExtractor):
 
             def forward(self, x):
                 x = self.model.encode_image(x, proj_contrast=False, normalize=False)
+                #Flag if not 1D tensor
+                if len(x.shape) > 1:
+                    print("Warning: Conch model output is not 1D tensor")
                 return x
         
         self.model = ConchEmbedder(model)
@@ -1794,6 +1996,49 @@ class conch(TorchFeatureExtractor):
             'kwargs': {}
         }
 
+
+@register_torch
+class keep(TorchFeatureExtractor):
+    """
+    KEEP VLM feature extractor, with Vit-L/16 backbone and BERT text encoder.
+    """
+
+    tag = "keep"
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
+
+        class KeepEmbedder(nn.Module):
+            def __init__(self, model):
+                super(KeepEmbedder, self).__init__()
+                self.model = model
+
+            def forward(self, x):
+                x = self.model.encode_image(x)
+                return x
+
+        model = AutoModel.from_pretrained("Astaxanthin/KEEP", trust_remote_code=True)
+        self.model = KeepEmbedder(model)
+        self.model.to('cuda')
+        self.model.eval()
+
+        self.transform = transforms.Compose([
+            transforms.Resize(224, interpolation=transforms.InterpolationMode.BICUBIC),
+            transforms.CenterCrop(size=(224, 224)),
+            transforms.ConvertImageDtype(torch.float32),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            ])
+
+
+    def dump_config(self):
+        return {
+            'class': 'keep',
+            'kwargs': {}
+        }
+
+
+
+
+        
 @register_torch
 class exaone_path(TorchFeatureExtractor):
     """
@@ -2172,11 +2417,10 @@ class phikon_v2(TorchFeatureExtractor):
         }
 
 
-#TO BE TESTED
 @register_torch
-class musk(TorchFeatureExtractor):
+class midnight(TorchFeatureExtractor):
     """
-    Musk feature extractor, with Vision Transformer backbone
+    Kaiko-AI's Midnight-12k model.
 
     Parameters
     ----------
@@ -2197,175 +2441,351 @@ class musk(TorchFeatureExtractor):
     dump_config()
         Dump the configuration of the feature extractor
     """
-    tag = 'musk'
+    tag = 'midnight'
 
     def __init__(self, tile_px=256, **kwargs):
         super().__init__(**kwargs)
-        model = timm.create_model("musk_large_patch16_384")
-        utils.load_model_and_may_interpolate("hf_hub:xiangjx/musk", model, 'model|moduke', '')
+        self.tile_px = tile_px
+        self.num_features = 3072
+        model = AutoModel.from_pretrained("kaiko-ai/midnight", cache_dir=WEIGHTS_DIR)
 
-        self.model = MuskEmbedder(model)
 
-        if self.mixed_precision:
-            self.model.to(device='cuda', dtype=torch.float16)
-        else:
-            self.model.to(device='cuda')
-        
-        self.transforms = transforms.Compose([
-            torchvision.transforms.Resize(384, interpolation=3, antialias=True),
-            torchvision.transforms.CenterCrop((384, 384)),
-            torchvision.transforms.ToTensor(),
-            torchvision.transforms.Normalize(mean=timm.data.constants.IMAGENET_INCEPTION_MEAN,
-                                             std=timm.data.constants.IMAGENET_INCEPTION_STD)
-            ])
-        self.model.eval()
-
-        class MuskEmbedder(nn.Module):
+        class MidnightEmbedder(nn.Module):
             def __init__(self, model):
-                super(MuskEmbedder, self).__init__()
+                super(MidnightEmbedder, self).__init__()
                 self.model = model
 
             def forward(self, x):
-                features = self.model(image=x,
-                with_head=False,
-                out_norm=False,
-                ms_aug=True,
-                return_global=True)[0]
-                return features
+                # Get features from the base model
+                outputs = self.model(x).last_hidden_state
+                cls_embedding, patch_embeddings = outputs[:, 0, :], outputs[:, 1:, :]
+                return torch.cat((cls_embedding, patch_embeddings.mean(1)), dim=-1)
 
-    def load_state_dict(model, state_dict, prefix='', ignore_missing="relative_position_index"):
-        missing_keys = []
-        unexpected_keys = []
-        error_msgs = []
-        # copy state_dict so _load_from_state_dict can modify it
-        metadata = getattr(state_dict, '_metadata', None)
-        state_dict = state_dict.copy()
-        if metadata is not None:
-            state_dict._metadata = metadata
+        self.model = MidnightEmbedder(model)
 
-        def load(module, prefix=''):
-            local_metadata = {} if metadata is None else metadata.get(
-                prefix[:-1], {})
-            module._load_from_state_dict(
-                state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
-            for name, child in module._modules.items():
-                if child is not None:
-                    load(child, prefix + name + '.')
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize(224),
+                transforms.CenterCrop(224),
+                transforms.ConvertImageDtype(torch.float32),
+                transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
+            ]
+        )
+        self.model.to('cuda')
+        self.preprocess_kwargs = {'standardize': False}
 
-        load(model, prefix=prefix)
+    def dump_config(self):
+        return {
+            'class': 'midnight',
+            'kwargs': {}
+        }
 
-        warn_missing_keys = []
-        ignore_missing_keys = []
-        for key in missing_keys:
-            keep_flag = True
-            for ignore_key in ignore_missing.split('|'):
-                if ignore_key in key:
-                    keep_flag = False
-                    break
-            if keep_flag:
-                warn_missing_keys.append(key)
-            else:
-                ignore_missing_keys.append(key)
+@register_torch
+class mstar(TorchFeatureExtractor):
+    """
+    MSTAR feature extractor, with ViT-Large backbone
 
-        missing_keys = warn_missing_keys
+    Parameters
+    ----------
+    tile_px : int
+        The size of the tile
+    
+    Attributes
+    ----------
+    model : VisionTransformer
+        The Vision Transformer model
+    transform : torchvision.transforms.Compose
+        The transformation pipeline
+    preprocess_kwargs : dict
+        The preprocessing arguments
+    
+    Methods
+    -------
+    dump_config()
+        Dump the configuration of the feature extractor
+    """
+    
+    tag = 'mstar'
+    
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
+        self.tile_px = tile_px
+        self.num_features = 1024
 
-        if len(missing_keys) > 0:
-            print("Weights of {} not initialized from pretrained model: {}".format(
-                model.__class__.__name__, missing_keys))
-        if len(unexpected_keys) > 0:
-            print("Weights from pretrained model not used in {}: {}".format(
-                model.__class__.__name__, unexpected_keys))
-        if len(ignore_missing_keys) > 0:
-            print("Ignored weights of {} not initialized from pretrained model: {}".format(
-                model.__class__.__name__, ignore_missing_keys))
-        if len(error_msgs) > 0:
-            print('\n'.join(error_msgs))
+        self.model = timm.create_model(
+            'hf-hub:Wangyh/mSTAR',
+            pretrained=True,
+            init_values=1e-5, dynamic_img_size=True
+            )
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize(224),
+                transforms.ConvertImageDtype(torch.float32),
+                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+            ]
+        )
 
+        self.model.to('cuda')
+        # Slideflow standardization
+        self.preprocess_kwargs = {'standardize': False}
 
+    def dump_config(self):
+        return {
+            'class': 'mstar',
+            'kwargs': {}
+        }
 
-    # The implementation code is modified from DeiT (https://github.com/facebookresearch/deit.git)
-    def load_model_and_may_interpolate(
-            ckpt_path, 
-            model,
-            model_key, 
-            model_prefix, 
-            local_dir: str = os.path.join(os.path.expanduser("~"), ".cache/")
-            ):
-        
-        if ckpt_path.startswith("hf_hub:"):
-            local_path = os.path.join(local_dir, "model.safetensors")
-            if not os.path.exists(local_path):    
-                hub_name = ckpt_path.split(":")[1]
-                huggingface_hub.hf_hub_download(
-                    hub_name, 
-                    filename="model.safetensors", 
-                    local_dir=local_dir, 
-                    force_download=True
-                    )
-            
+@register_torch
+class lunit_onco_fm(TorchFeatureExtractor):
+    """
+    Lunit Onco FM feature extractor, with Vision Transformer Huge backbone
+
+    Parameters
+    ----------
+    tile_px : int
+        The size of the tile
+    
+    Attributes
+    ----------
+    model : VisionTransformer
+        The Vision Transformer model
+    transform : torchvision.transforms.Compose
+        The transformation pipeline
+    preprocess_kwargs : dict
+        The preprocessing arguments
+    
+    Methods
+    -------
+    dump_config()
+        Dump the configuration of the feature extractor
+    """
+    
+    tag = 'lunit_onco_fm'
+    
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
+        self.tile_px = tile_px
+        self.num_features = 1280
+
+        base_model = timm.create_model(
+                "hf_hub:jeffkang-lunit/lunit-onco-fm",
+                pretrained=True,
+                num_classes=0,
+                mlp_ratio=5.3375,
+                reg_tokens=4,
+                init_values=1e-5,
+                act_layer=torch.nn.SiLU,
+                mlp_layer=timm.layers.SwiGLUPacked,
+                norm_layer=functools.partial(torch.nn.RMSNorm, eps=1e-6),
+                dynamic_img_size=True,
+        )
+
+        class LunitOncoFMEmbedder(nn.Module):
+            def __init__(self, model):
+                super(LunitOncoFMEmbedder, self).__init__()
+                self.model = model
+
+            def forward(self, x):
+                x = self.model(x)
+                cls_features = x[:, 0]
+                # Expected shape: (batch_size, 768)
+                assert cls_features.shape == (x.shape[0], 1280), f"Expected shape (batch_size, 1280), got {cls_features.shape}"
+                return cls_features
+
+        self.model = LunitOncoFMEmbedder(base_model)
+        self.model.to('cuda')
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize(224),
+                transforms.ConvertImageDtype(torch.float32),
+                transforms.Normalize(mean=(0.7401, 0.6559, 0.7649), std=(0.2115, 0.2564, 0.1988)),
+            ]
+        )
+        self.model.eval()
+
+        # Slideflow standardization
+        self.preprocess_kwargs = {'standardize': False}
+
+    def dump_config(self):
+        return {
+            'class': 'lunit_onco_fm',
+            'kwargs': {}
+        }	
+"""
+------------------------------
+Slide-level feature extractors
+------------------------------
+"""
+class SlideFeatureExtractor(TorchFeatureExtractor):
+    def __init__(self, tile_px: int = 224, **kwargs):
+        super().__init__(**kwargs)
+        self.tile_px = tile_px
+
+    def build_encoders(self):
+        self.tile_encoder = None
+
+    def set_device(self):
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
         else:
-            local_path = ckpt_path
+            self.device = torch.device("cpu")
+
+    def forward(self, x):
+        return self.tile_encoder(x)
+
+    def forward_slide(self, tile_features, tile_coordiantes, **kwargs):
+        return self.tile_encoder.forward_slide(tile_features, tile_coordiantes, **kwargs)
+
+
+@register_torch
+class gigapath_slide(SlideFeatureExtractor):
+    """
+    ProvGigaPathSlide feature extractor, with Vision Transformer backbone
+    """
+
+    tag = "gigapath_slide"
+
+    def __init__(
+        self,
+        tile_px: int = 256,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+
+        self.build_encoders()
+        self.num_features = self.tile_encoder.num_features
+        self.model = self.tile_encoder
+
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize(256, interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.CenterCrop(224),
+                transforms.ConvertImageDtype(torch.float32),
+                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+            ]
+        )
+        self.preprocess_kwargs = {'standardize': False}
+
+
+    def build_encoders(self):
+        import gigapath.slide_encoder as sd
+
+        self.tile_encoder = gigapath()
+        self.slide_encoder = sd.create_model(
+            "hf_hub:prov-gigapath/prov-gigapath",
+            "gigapath_slide_enc12l768d",
+            self.tile_encoder.num_features,
+            global_pool=True
+        )
+
+        self.slide_encoder.to('cuda')
+        self.slide_encoder.eval()
+
+    def forward_slide(self, tile_features, tile_coordinates, **kwargs):
+        tile_features = tile_features.unsqueeze(0)
+        output = self.slide_encoder(tile_features, tile_coordinates)
+        output = output[0].squeeze()
+        return output
+
+    def dump_config(self):
+        return {
+            'class': 'ProvGigaPathSlide',
+            'kwargs': {}
+        }
+
+@register_torch
+class titan_slide(SlideFeatureExtractor):
+    """
+    TITAN slide-level feature extractor, with Vision Transformer backbone
+    """
+
+    tag = 'titan_slide'
+    def __init__(self, tile_px: 256, **kwargs):
+        super().__init__(**kwargs)
+        self.build_encoders()
+        self.tile_px = tile_px
+        self.model = self.tile_encoder
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize(224),
+                # Transform to float tensor
+                transforms.ConvertImageDtype(torch.float32),
+                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+            ]
+        )
+        self.num_features = 768
+
+        self.preprocess_kwargs = {'standardize': False}
+
+    def build_encoders(self):
+        self.slide_encoder = AutoModel.from_pretrained(
+            "MahmoodLab/TITAN", trust_remote_code=True
+        )
+        self.slide_encoder.to('cuda')
+        self.slide_encoder.eval()
+
+        self.tile_encoder, self.eval_transform = self.slide_encoder.return_conch()
+        self.tile_encoder.to('cuda')
+        self.tile_encoder.eval()
         
-        checkpoint = load_file(local_path)
+        #Add transform to 
+        self.eval_transform
 
-        print("Load ckpt from %s" % ckpt_path)
-        checkpoint_model = None
-        for model_key in model_key.split('|'):
-            if model_key in checkpoint:
-                checkpoint_model = checkpoint[model_key]
-                print("Load state_dict by model_key = %s" % model_key)
-                break
+    def forward_slide(self, tile_features, tile_coordinates, **kwargs):
+        tile_features = tile_features.unsqueeze(0)
+        tile_coordinates = tile_coordinates.unsqueeze(0)
+        output = self.slide_encoder.encode_slide_from_patch_features(
+            tile_features, tile_coordinates, self.tile_px
+        )
+        return output
 
-        if checkpoint_model is None:
-            checkpoint_model = checkpoint
+    def dump_config(self):
+        return {
+            'class': 'TITAN',
+            'kwargs': {}
+        }
 
-        state_dict = model.state_dict()
-        for k in ['head.weight', 'head.bias']:
-            if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
-                print(f"Removing key {k} from pretrained checkpoint")
-                del checkpoint_model[k]
+@register_torch
+class prism_slide(SlideFeatureExtractor):
+    """
+    PRISM feature extractor, with Vision Transformer backbone
+    """
+    tag = 'prism_slide'
+    def __init__(self, tile_px: int = 256, **kwargs):
+        super().__init__()
+        self.build_encoders()
+        self.tile_px = tile_px
+        self.model = self.tile_encoder
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize(224),
+                transforms.ConvertImageDtype(torch.float32),
+                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+            ]
+        )
+        self.num_features = 1280
+        self.preprocess_kwargs = {'standardize': False}
 
-        # interpolate position embedding
-        for pos_embed_key in ("vision_pos_embed", "pos_embed", "beit3.encoder.embed_positions.A.weight"):
-            if pos_embed_key in checkpoint_model:
-                pos_embed_checkpoint = checkpoint_model[pos_embed_key]
-                embedding_size = pos_embed_checkpoint.shape[-1]
-                if pos_embed_key == "beit3.encoder.embed_positions.A.weight":
-                    # being consistent with Fairseq, which starts from 2 for position embedding
-                    torchscale_model = True
-                    num_patches = model.beit3.vision_embed.num_patches
-                    num_extra_tokens = model.beit3.vision_embed.num_position_embeddings() + 2 - num_patches
-                else:
-                    torchscale_model = False
-                    num_patches = model.patch_embed.num_patches
-                    num_extra_tokens = getattr(model, pos_embed_key).shape[-2] - num_patches
-                # height (== width) for the checkpoint position embedding
-                orig_size = int((pos_embed_checkpoint.shape[-2] - num_extra_tokens) ** 0.5)
-                # height (== width) for the new position embedding
-                new_size = int(num_patches ** 0.5)
-                # class_token and dist_token are kept unchanged
-                if orig_size != new_size:
-                    print("Position interpolate from %dx%d to %dx%d" % (orig_size, orig_size, new_size, new_size))
-                    if torchscale_model:
-                        extra_tokens = pos_embed_checkpoint[:num_extra_tokens].unsqueeze(0)
-                        # only the position tokens are interpolated
-                        pos_tokens = pos_embed_checkpoint[num_extra_tokens:]
-                    else:
-                        extra_tokens = pos_embed_checkpoint[:, :num_extra_tokens]
-                        # only the position tokens are interpolated
-                        pos_tokens = pos_embed_checkpoint[:, num_extra_tokens:]
-                    pos_tokens = pos_tokens.reshape(-1, orig_size, orig_size, embedding_size).permute(0, 3, 1, 2)
 
-                    # interpolate must be carried out on float
-                    pos_token_type = pos_tokens.dtype
-                    pos_tokens = torch.nn.functional.interpolate(
-                        pos_tokens.float(), size=(new_size, new_size), mode='bicubic', align_corners=False).to(
-                        dtype=pos_token_type)
+    def build_encoders(self):
+        self.slide_encoder = AutoModel.from_pretrained(
+            "paige-ai/PRISM", trust_remote_code=True
+        )
+        self.slide_encoder.to('cuda')
+        self.slide_encoder.eval()
 
-                    pos_tokens = pos_tokens.permute(0, 2, 3, 1).flatten(1, 2)
-                    new_pos_embed = torch.cat((extra_tokens, pos_tokens), dim=1)
-                    if torchscale_model:
-                        new_pos_embed = new_pos_embed.squeeze(0)
-                    checkpoint_model[pos_embed_key] = new_pos_embed
+        self.tile_encoder = virchow(tile_px=self.tile_px, mode="full")
 
-        load_state_dict(model, checkpoint_model, prefix=model_prefix)
+
+    def forward_slide(self, tile_features, tile_coordinates, **kwargs):
+        tile_features = tile_features.unsqueeze(0)
+        reprs = self.slide_encoder.slide_representations(tile_features)
+        output = reprs["image_embedding"]  # [1, 1280]
+        return output
+
+
+    def dump_config(self):
+        return {
+            'class': 'PRISM',
+            'kwargs': {}
+        }

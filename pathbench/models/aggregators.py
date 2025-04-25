@@ -1128,10 +1128,7 @@ class topk_mil(nn.Module):
 
 class air_mil(nn.Module):
     """
-    air_mil (Adaptive Instance Ranking MIL Model)
-
-    This model introduces a learnable parameter 'k' which determines how many top instances
-    to consider. The aggregation follows a similar approach to topk_mil.
+    AIR-MIL (Adaptive Instance Ranking) that returns full attention weights when requested.
     """
     def __init__(self,
                  n_feats: int,
@@ -1142,24 +1139,12 @@ class air_mil(nn.Module):
                  activation_function: str = 'ReLU',
                  encoder_layers: int = 1,
                  goal: str = 'classification'):
-        """
-        Initialize the air_mil model.
-
-        Args:
-            n_feats (int): Input feature dimension.
-            n_out (int): Number of outputs.
-            z_dim (int): Latent space dimension.
-            initial_k (int): Initial value for k (learnable).
-            dropout_p (float): Dropout probability.
-            activation_function (str): Activation function.
-            encoder_layers (int): Number of encoder layers.
-            goal (str): The task goal.
-        """
         super().__init__()
         use_bn = (goal == 'classification')
         self.encoder = build_encoder(n_feats, z_dim, encoder_layers,
                                      activation_function, dropout_p, use_bn)
         self.attention = nn.Linear(z_dim, 1)
+        # Head definition unchanged
         if goal == 'classification':
             self.head = nn.Sequential(
                 nn.BatchNorm1d(z_dim),
@@ -1172,63 +1157,53 @@ class air_mil(nn.Module):
             self.head = nn.Linear(z_dim, n_out)
         else:
             raise ValueError(f"Unsupported goal: {goal}")
+        # k param no longer used for attention heatmap, but kept for backward compatibility
         self.k_param = nn.Parameter(torch.tensor(float(initial_k)), requires_grad=True)
         self.goal = goal
-        self._initialize_weights()
-
-    def _initialize_weights(self):
-        """Initialize weights for air_mil."""
         initialize_weights(self, self.goal)
 
-    def forward(self, bags: torch.Tensor, return_attention: bool = False):
+    def forward(self,
+                bags: torch.Tensor,
+                return_attention: bool = False) -> torch.Tensor:
         """
-        Forward pass for air_mil.
-
+        Forward pass. If return_attention=True, also returns full-instance attention weights.
         Args:
-            bags (torch.Tensor): Input tensor with shape [B, N, n_feats].
-            return_attention (bool): If True, also return the attention weights.
-
+            bags: Tensor of shape [B, N, n_feats]
+            return_attention: whether to return attention map of shape [B, N]
         Returns:
-            torch.Tensor or tuple: Output scores, and optionally attention weights.
+            out: model output [B, n_out]
+            attention_weights (optional): [B, N]
         """
-        batch_size, n_patches, n_feats = bags.shape
-        embeddings = self.encoder(bags.view(-1, n_feats))
-        embeddings = embeddings.view(batch_size, n_patches, -1)
-        scores_ = self.attention(embeddings).squeeze(-1)
-        k_ = torch.clamp(self.k_param, 1, n_patches).int()
-        topk_scores, topk_indices = torch.topk(scores_, k_, dim=1)
-        topk_embeddings = torch.gather(
-            embeddings, 1,
-            topk_indices.unsqueeze(-1).expand(-1, -1, embeddings.size(-1))
-        )
-        topk_attention_weights = F.softmax(topk_scores, dim=1)
-        weighted_sum = torch.sum(topk_embeddings * topk_attention_weights.unsqueeze(-1), dim=1)
-        weighted_mean = weighted_sum / torch.sum(topk_attention_weights, dim=1, keepdim=True)
-        out = self.head(weighted_mean)
+        B, N, feats = bags.shape
+        # Flatten and encode
+        embeddings = self.encoder(bags.view(-1, feats))
+        embeddings = embeddings.view(B, N, -1)
+        # Raw scores per instance
+        scores = self.attention(embeddings).squeeze(-1)  # [B, N]
+        # Attention weights over all N instances
+        attn_weights = F.softmax(scores, dim=1)  # [B, N]
+        # Weighted mean of embeddings
+        weighted = torch.sum(embeddings * attn_weights.unsqueeze(-1), dim=1)
+        out = self.head(weighted)
+
         if return_attention:
-            return out, topk_attention_weights
-        else:
-            return out
+            # Return both prediction and full attention map
+            return out, attn_weights
+        return out
 
-    def calculate_attention(self, bags: torch.Tensor, lens=None, apply_softmax: bool = False):
+    def calculate_attention(self,
+                            bags: torch.Tensor,
+                            apply_softmax: bool = True) -> torch.Tensor:
         """
-        Calculate attention scores for air_mil.
-
-        Args:
-            bags (torch.Tensor): Input tensor with shape [B, N, n_feats].
-            lens: Unused.
-            apply_softmax (bool): If True, apply softmax.
-
-        Returns:
-            torch.Tensor: Attention scores.
+        Return raw or softmax-normalized attention scores for all instances.
         """
-        batch_size, n_patches, n_feats = bags.shape
-        embeddings = self.encoder(bags.view(-1, n_feats))
-        embeddings = embeddings.view(batch_size, n_patches, -1)
-        scores_ = self.attention(embeddings).squeeze(-1)
+        B, N, feats = bags.shape
+        embeddings = self.encoder(bags.view(-1, feats))
+        embeddings = embeddings.view(B, N, -1)
+        scores = self.attention(embeddings).squeeze(-1)
         if apply_softmax:
-            scores_ = F.softmax(scores_, dim=1)
-        return scores_
+            return F.softmax(scores, dim=1)
+        return scores
 
 
 class il_mil(nn.Module):

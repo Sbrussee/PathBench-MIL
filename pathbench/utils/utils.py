@@ -11,6 +11,26 @@ import torch
 
 CURRENT_OPEN_FILES = []
 
+def get_available_gpus():
+    """
+    Retrieves the number of available GPUs, prioritizing SLURM environment variables
+    if running in a SLURM job. Falls back to PyTorch if SLURM variables are not found.
+
+    Returns:
+        int: Number of GPUs available.
+    """
+    # Check SLURM variables
+    slurm_gpus = os.getenv("SLURM_GPUS_ON_NODE")
+    if slurm_gpus:
+        return int(slurm_gpus)
+
+    slurm_job_gpus = os.getenv("SLURM_JOB_GPUS")
+    if slurm_job_gpus:
+        return len(slurm_job_gpus.split(","))
+
+    # Fallback to PyTorch
+    return torch.cuda.device_count()
+    
 def calculate_entropy(row : pd.Series):
     """
     Calculate the entropy based on the row (instance prediction).
@@ -50,12 +70,12 @@ def list_open_files():
 
     #Print all newly opened files (not in current open files)
     for file in open_files:
-        logging.info("Number of open files:", len(open_files))
+        logging.debug("Number of open files:", len(open_files))
         if file not in CURRENT_OPEN_FILES:
             CURRENT_OPEN_FILES.append(file)
-            logging.info("Newly opened file:", file.path)
-            logging.info("File descriptor:", file.fd)
-            logging.info("File mode:", file.mode)
+            logging.debug("Newly opened file:", file.path)
+            logging.debug("File descriptor:", file.fd)
+            logging.debug("File mode:", file.mode)
 
     
 
