@@ -7,6 +7,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import transforms
 
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 import timm
 from timm.data import resolve_data_config
 from timm.data.transforms_factory import create_transform

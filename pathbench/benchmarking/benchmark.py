@@ -213,9 +213,9 @@ def get_save_strings(combination_dict: dict) -> str:
 
     Returns:
         save_string: The generated save string.
-        string_without_mil: The generated string without 'mil', 'loss', 'augmentation', 'activation_function', 'optimizer', 'dropout_p', 'encoder_layers', 'z_dim'.
+        string_without_mil: The generated string without 'mil', 'loss', 'activation_function', 'optimizer', 'dropout_p', 'encoder_layers', 'z_dim'.
     """
-    save_string = "_".join([f"{value}" for key, value in combination_dict.items() if key != 'mil' and key != 'loss' and key != 'augmentation' and key != 'activation_function' and key != 'optimizer' and key != 'dropout_p' and key != 'encoder_layers' and key != 'z_dim'])
+    save_string = "_".join([f"{value}" for key, value in combination_dict.items()])
     
     string_without_mil = "_".join([f"{value}" for key, value in combination_dict.items() if key != 'mil' and key != 'loss' and key != 'augmentation' and key != 'activation_function' and key != 'optimizer' and key != 'dropout_p' and key != 'encoder_layers' and key != 'z_dim'])
     
@@ -800,12 +800,15 @@ def split_datasets(config: dict, project: sf.Project, splits_file: str, target: 
     Returns:
         list: A list of tuples (train, val) for each split.
     """
+    #Split by category when task is classification
     if config['experiment']['task'] == 'classification':
         target = "category"
         model_type = 'categorical'
+    #Split by event when task is survival
     elif config['experiment']['task'] in ['survival', 'survival_discrete']:
         target = "event"
         model_type = 'categorical'
+    #Do not split by category when task is regression
     elif config['experiment']['task'] == 'regression':
         target = None
         model_type = 'linear'
@@ -1104,13 +1107,15 @@ def save_best_model_weights(source_weights_dir: str, config: dict, model_tag: st
     Returns:
         None
     """
+    #Print the type of the model_config
+    logging.info(f"Model configuration type: {type(model_config)}")
     dest_dir = f"experiments/{config['experiment']['project_name']}/saved_models/{model_tag}"
     os.makedirs(dest_dir, exist_ok=True)
     # Use system command to copy the directory (or use shutil.copytree for a cross-platform solution)
-    shutil.copytree(source_weights_dir, dest_dir)
+    shutil.copytree(source_weights_dir, dest_dir, dirs_exist_ok=True)
     #Save model configuration as well
     with open(f"{dest_dir}/model_config.json", 'w') as f:
-        json.dump(model_config, f, indent=4)
+        json.dump(model_config.to_dict(), f, indent=4)
 
     logging.info(f"Saved best model weights from {source_weights_dir} to {dest_dir}.")
     logging.info(f"Saved best model configuration to {dest_dir}/model_config.json.")
