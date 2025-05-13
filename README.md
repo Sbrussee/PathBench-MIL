@@ -341,9 +341,6 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
   loss: # Loss functions, as specified in losses.py
     - CrossEntropyLoss
 
-  augmentation: # MIL-friendly augmentations, as specified in augmentations.py
-    - patch_mixing
-
   activation_function: # activation function for the MIL encoder, supports any pytorch.nn activation function.
     - ReLU
 
@@ -434,17 +431,6 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
      # - MSELossReg
      # - L1LossReg
      # - HuberLossReg
-
-#Available MIL-friendly augmentations:
-  # - patch_dropout
-  # - add_gaussian_noise
-  # - random_scaling
-  # - feature_masking
-  # - feature_dropout
-  # - patchwise_scaling
-  # - feature_permutation
-  # - patch_mixing
-  # - cutmix
 
 weights_dir : ./pretrained_weights # Path to the model weights, and where newly retrieved model weights will be saved, defaults to the pretrained_weights directory in the PathBench directory.
 hf_key: YOUR_HUGGINGFACE_TOKEN # Token for Hugging Face model hub to access gated models, if you do not have one, just set to None
@@ -762,6 +748,38 @@ you can visualize PathBench's aggregated output files using the visualization ap
   <img src="dashboard_screenshot.PNG" alt="Dashboard screenshot" width="700" height="400">
 </p>
 
+## Inference
+PathBench-MIL allows you to run inference on new Whole Slide Images (WSIs) using any previously trained model stored under:
+```experiments/{experiment_name}/mil```
+Running inference will output:
+- preds.npy: The prediction for the slide.
+- attn.npy (optional): The attention scores if the MIL model supports attention.
+- Slide heatmap (optional): A visual overlay of attention scores across the slide.
+You can run inference for either a single slide or a directory of slides.
+Example: Single Slide with Attention Heatmap
+```
+python3 pathbench/utils/inference.py \
+    --slide path/to/slide.tiff \
+    --model_dir experiments/exp1/mil/00217-256_128_macenko_h_optimus_0_1 \
+    --cmap bwr \
+    --heatmap \
+    --config /path/to/conf.yaml
+```
+Example: Directory of Slides
+```
+python3 pathbench/utils/inference.py \
+    --slide_dir /path/to/slides/ \
+    --model_dir /path/to/experiment/mil/best_model/ \
+    --config /path/to/conf.yaml \
+    --heatmap
+```
+The script supports customizable heatmap visualization with options:
+- --interpolation: e.g., bicubic, bilinear
+- --cmap: Matplotlib colormap, e.g., inferno, bwr
+- --norm: Use two_slope for diverging heatmaps centered at 0
+
+The results are saved in the inference_results folder, including prediction vectors and heatmaps.
+
 ## Extending PathBench
 PathBench is designed such that it easy to add new feature extractors and MIL aggregation models. 
 1. **Custom Feature Extractors**
@@ -819,6 +837,40 @@ class kaiko_s8(TorchFeatureExtractor):
         }
 ```
 Feature extractor models require a @register_torch descriptor to be recognizable by PathBench as a specifiable feature extractor. Furthermore, the class requires a model to be specified, the embedding size to be specified and a transformation pipeline. For more information, please see the [slideflow documentation](https://slideflow.dev/).
+
+### Slide-Level Feature Extractors
+In addition to patch-level MIL pipelines, PathBench supports slide-level feature extractors, designed for encoding entire slides directly from tile embeddings and their coordinates.
+To define a slide-level extractor, add 'slide' to its class name and inherit from SlideFeatureExtractor.
+Example:
+```
+@register_torch
+class titan_slide(SlideFeatureExtractor):
+    tag = 'titan_slide'
+
+    def __init__(self, tile_px: 256, **kwargs):
+        ...
+        self.build_encoders()
+        self.tile_px = tile_px
+        self.model = self.tile_encoder
+        self.num_features = 768
+        ...
+```
+Such extractors must implement a forward_slide method:
+```
+def forward_slide(self, tile_features, tile_coordinates, **kwargs):
+    ...
+    return slide_embedding
+```
+These do not use MIL aggregators. Instead, they require slide-level prediction heads, defined in slide_level_predictors.py. PathBench will automatically fall back to mlp_slide_classifier if a MIL aggregator is incorrectly paired with a slide-level extractor.
+Slide-Level Head Model Example
+```
+class mlp_slide_classifier(nn.Module):
+    def __init__(self, n_feats, n_out, encoder_layers, z_dim, ...):
+        ...
+    def forward(self, x):
+        latent = self.encoder(x)
+        return self.head(latent)
+```
 2. **Custom MIL aggregators**
 Adding MIL aggregation methods is done similarly, but in the pathbench/models/aggregators.py script:
 ```python
@@ -949,29 +1001,8 @@ class AttentionEntropyMinimizedCrossEntropyLoss(nn.Module):
         loss = ce_loss + self.entropy_lambda * entropy_min_reg
         return loss
 ```
-4.   **Custom Augmentations**
-Custom augmentations are added to augmentations.py and expect the input to be bags of shape (tiles, features). An example:
-```python
 
-def patch_mixing(bag: torch.Tensor, mixing_rate: float = 0.5) -> torch.Tensor:
-    """
-    Randomly selects and mixes two instances within the same bag based on a given mixing rate.
-
-    Parameters:
-    bag (torch.Tensor): A 2D tensor of shape (num_instances, num_features) representing a bag of instances.
-    mixing_rate (float): The probability of selecting features from one instance over another during mixing.
-
-    Returns:
-    torch.Tensor: A new bag where one instance is replaced by a mix of two randomly selected instances.
-    """
-    indices = torch.randperm(bag.size(0))[:2]
-    instance1, instance2 = bag[indices]
-    mask = torch.from_numpy(np.random.binomial(1, mixing_rate, size=instance1.shape)).bool()
-    mixed_instance = torch.where(mask, instance1, instance2)
-    bag[indices[0]] = mixed_instance
-    return bag
-```
-6.   **Custom Training Metrics**
+5.   **Custom Training Metrics**
 Similarly, one can add custom training metrics which will be measured during training. The metrics needs to inheret from fastai's Metric class and have the methods as given down below:
 ```python
 class ConcordanceIndex(Metric):
