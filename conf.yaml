@@ -16,11 +16,14 @@ experiment:
   num_workers: 0 # Number of workers for data loading, 0 for no parallelization.
   aggregation_level: slide # Aggregation level can be 'slide' or 'patient'
   task: classification # Task can be 'classification', 'regression' or 'survival' or 'survival_discrete'
-  mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
+  mode: benchmark # Mode can be either 'benchmark', 'optimization' or 'feature_extraction'.
   custom_metrics: [RocAuc] # Custom metrics to be used, needs to be defined in metrics.py or as a fastai-metric: https://docs.fast.ai/metrics.html
   report: False # Whether to generate a tile extraction report
-  feature_extraction_only: False
-  
+  skip_extracted: True # Whether to skip the tile extraction step if tiles already exist
+  skip_feature_extraction: True # Whether to skip the feature extraction step if features already exist
+  save_tiles: False # Whether to save the extracted tile images as .jpg files in addition to the .tfrecords
+  mixed_precision: True # Whether to use mixed precision feature extraction
+
   qc: # List of quality control methods to be used
     - GaussianV2
     - Otsu-CLAHE

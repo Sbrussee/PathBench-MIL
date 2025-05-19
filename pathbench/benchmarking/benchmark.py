@@ -61,6 +61,10 @@ from conch.open_clip_custom import create_model_from_pretrained
 # Set logging level for the pipeline
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+#Turn off future warnings
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 # Default evaluation metrics for different tasks
 DEFAULT_METRICS = {
     'classification': ['balanced_accuracy', 'mean_uncertainty', 'auc', 'mean_average_precision', 'mean_average_recall'],
@@ -112,14 +116,15 @@ def extract_features(config : dict, project : sf.Project):
             logging.info("Extracting tiles...")
             qc_list, qc_filters = build_qc_list(config)
             all_data.extract_tiles(enable_downsample=True,
-                                      save_tiles=False,
+                                      save_tiles=config['experiment']['save_tiles'] if 'save_tiles' in config['experiment'] else False,
                                       qc=qc_list,
                                       grayspace_fraction = float(qc_filters['grayspace_fraction']),
                                       whitespace_fraction = float(qc_filters['whitespace_fraction']),
                                       grayspace_threshold = float(qc_filters['grayspace_threshold']),
                                       whitespace_threshold = int(qc_filters['whitespace_threshold']),
                                       num_threads = config['experiment']['num_workers'] if 'num_workers' in config['experiment'] else 1,
-                                      report=config['experiment']['report'] if 'report' in config['experiment'] else False,)
+                                      report=config['experiment']['report'] if 'report' in config['experiment'] else False,
+                                      skip_extracted=config['experiment']['skip_extracted'] if 'skip_extracted' in config['experiment'] else True,)
             
             #Set save string
             save_string, string_without_mil = get_save_strings(combination_dict)
@@ -317,11 +322,6 @@ def benchmark(config : dict, project : sf.Project):
     project_directory = f"experiments/{config['experiment']['project_name']}" if 'project_name' in config['experiment'] else "experiments/project"
     annotations = project.annotations 
     
-    z_dim = config['experiment']['z_dim'] if 'z_dim' in config['experiment'] else 512
-    encoder_layers = config['experiment']['encoder_layers'] if 'encoder_layers' in config['experiment'] else 1
-    dropout_p = config['experiment']['dropout_p'] if 'dropout_p' in config['experiment'] else 0.25
-    batch_size = config['experiment']['batch_size'] if 'batch_size' in config['experiment'] else 64
-    
     logging.info(f"Using {project_directory} for project directory...")
     logging.info(f"Using {annotations} for annotations...")
 
@@ -352,7 +352,6 @@ def benchmark(config : dict, project : sf.Project):
         try:
             target = determine_target_variable(task, config)
             logging.info(f"Target variable: {target}")
-            annotation_df = pd.read_csv(project.annotations)
 
             #Split datasets into train, val and test
             all_data = project.dataset(tile_px=combination_dict['tile_px'],
@@ -374,8 +373,9 @@ def benchmark(config : dict, project : sf.Project):
                                     grayspace_threshold = float(qc_filters['grayspace_threshold']),
                                     whitespace_threshold = int(qc_filters['whitespace_threshold']),
                                     num_threads = config['experiment']['num_workers'] if 'num_workers' in config['experiment'] else 1,
-                                    report=config['experiment']['report'] if 'report' in config['experiment'] else False,)
-                                    
+                                    report=config['experiment']['report'] if 'report' in config['experiment'] else False,
+                                    skip_extracted=config['experiment']['skip_extracted'] if 'skip_extracted' in config['experiment'] else True,
+            )
             train_datasets, test_datasets = configure_datasets(config)
 
             train_set, test_set = split_train_test(config, all_data, task)
@@ -669,14 +669,15 @@ def determine_splits_file(config: dict, project_directory: str) -> str:
     Returns:
         str: The computed splits file path.
     """
+    #Splits can be given as a hyperparameter, otherwise defaults to {method}_{task}.json
     splits = config['experiment'].get('splits', ".json")
     task = config['experiment'].get('task', 'classification')
     if config['experiment']['split_technique'] == 'fixed':
-        splits_file = f"{project_directory}/fixed_{task}_{splits}"
+        splits_file = f"{project_directory}/fixed_{task}{splits}"
     elif config['experiment']['split_technique'] == 'k-fold':
-        splits_file = f"{project_directory}/kfold_{task}_{splits}"
+        splits_file = f"{project_directory}/kfold_{task}{splits}"
     elif config['experiment']['split_technique'] == 'k-fold-stratified':
-        splits_file = f"{project_directory}/kfold_stratified_{task}_{splits}"
+        splits_file = f"{project_directory}/kfold_stratified_{task}{splits}"
     else:
         logging.error("Invalid split technique. Please choose either 'fixed' or 'k-fold'.")
         sys.exit(1)
@@ -880,12 +881,14 @@ def generate_bags(config: dict, project: sf.Project, all_data: sf.Dataset,
                                             normalizer=combination_dict['normalization'],
                                             outdir=bags_dir,
                                             mixed_precision=config['experiment']['mixed_precision'],
-                                            num_gpus=num_gpus)
+                                            num_gpus=num_gpus,
+                                            force_regenerate=config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else False)
     else:
         bags = project.generate_feature_bags(model=feature_extractor, dataset=all_data,
                                             normalizer=combination_dict['normalization'],
                                             outdir=bags_dir,
-                                            num_gpus=num_gpus)
+                                            num_gpus=num_gpus,
+                                            force_regenerate=config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else False)
     return bags
 
 
@@ -904,9 +907,16 @@ def build_qc_list(config: dict):
     #Set QC filters, if not present, set to slideflow defaults
     qc_filters = config['experiment']['qc_filters'] if 'qc_filters' in config['experiment'] else {'whitespace_fraction' : 1,
                                                                                                   'whitespace_threshold' : 230,
-                                                                                                  'grayspace_fraction' : 0.6,
-                                                                                                  'grayspace_threshold' : 0.05}
+                                                                                                  'grayspace_fraction' : 1,
+                                                                                                  'grayspace_threshold' : 0.01}
+    logging.debug(f"QC filters set: {qc_filters}")
+    #Skip QC if no methods are specified
     qc_list = []
+    if qc_methods is None:
+        logging.warning("No QC methods specified, not applying any QC algorithms.")
+        return None, qc_filters
+
+    logging.debug(f"QC methods set: {qc_methods}")
     for qc_method in qc_methods:
         #Retrieve the QC method by name from the qc module
         if qc_method == 'Otsu-CLAHE':
@@ -914,6 +924,7 @@ def build_qc_list(config: dict):
         else:
             qc_method = getattr(qc, qc_method)()
         qc_list.append(qc_method)
+
     return qc_list, qc_filters
 
 def set_mil_config(config: dict, combination_dict: dict, task: str, slide_level: bool = False) -> dict:
@@ -1114,9 +1125,15 @@ def save_best_model_weights(source_weights_dir: str, config: dict, model_tag: st
     # Use system command to copy the directory (or use shutil.copytree for a cross-platform solution)
     shutil.copytree(source_weights_dir, dest_dir, dirs_exist_ok=True)
     #Save model configuration as well
-    with open(f"{dest_dir}/model_config.json", 'w') as f:
-        json.dump(model_config.to_dict(), f, indent=4)
-
+    try:
+        with open(f"{dest_dir}/model_config.json", 'w') as f:
+            json.dump(model_config, f, indent=4)
+    except:
+        logging.error(f"Failed to save model configuration to {dest_dir}/model_config.json")
+        # If the model_config is not serializable, you can use pickle instead
+        with open(f"{dest_dir}/model_config.pkl", 'wb') as f:
+            pickle.dump(model_config, f)
+        logging.warning(f"Saved model configuration as pickle to {dest_dir}/model_config.pkl")
     logging.info(f"Saved best model weights from {source_weights_dir} to {dest_dir}.")
     logging.info(f"Saved best model configuration to {dest_dir}/model_config.json.")
 
@@ -1522,14 +1539,15 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
         
         qc_list, qc_filters = build_qc_list(config)
 
-        all_data.extract_tiles(enable_downsample=False, save_tiles=False,
+        all_data.extract_tiles(enable_downsample=False, save_tiles=config['experiment']['save_tiles'] if 'save_tiles' in config['experiment'] else False,
                                qc=qc_list,
                                grayspace_fraction=float(qc_filters['grayspace_fraction']),
                                whitespace_fraction=float(qc_filters['whitespace_fraction']),
                                grayspace_threshold=float(qc_filters['grayspace_threshold']),
                                whitespace_threshold=int(qc_filters['whitespace_threshold']),
-                               num_threads=config['experiment']['num_workers'],
-                               report=config['experiment']['report'])
+                               num_threads=config['experiment']['num_workers'] if 'num_workers' in config['experiment'] else 1,
+                               report=config['experiment']['report'] if 'report' in config['experiment'] else False,
+                               skip_extracted=config['experiment']['skip_extracted'] if 'skip_extracted' in config['experiment'] else True,)
 
 
         train_datasets, test_datasets = configure_datasets(config)

@@ -2486,7 +2486,7 @@ class midnight(TorchFeatureExtractor):
 @register_torch
 class mstar(TorchFeatureExtractor):
     """
-    MSTAR feature extractor, with ViT-Large backbone
+    MSTAR feature extractor, with ViT-Large backbone.
 
     Parameters
     ----------
@@ -2495,8 +2495,8 @@ class mstar(TorchFeatureExtractor):
     
     Attributes
     ----------
-    model : VisionTransformer
-        The Vision Transformer model
+    model : nn.Module
+        A small wrapper that returns concatenated [CLS, mean(patch_tokens)] embeddings.
     transform : torchvision.transforms.Compose
         The transformation pipeline
     preprocess_kwargs : dict
@@ -2507,29 +2507,55 @@ class mstar(TorchFeatureExtractor):
     dump_config()
         Dump the configuration of the feature extractor
     """
-    
     tag = 'mstar'
-    
+
     def __init__(self, tile_px=256, **kwargs):
         super().__init__(**kwargs)
         self.tile_px = tile_px
-        self.num_features = 1024
+        self.num_features = 1024  # CLS dimension for ViT-Large
 
-        self.model = timm.create_model(
+        # 1. Build the raw model (no weights yet)
+        base_model = timm.create_model(
             'hf-hub:Wangyh/mSTAR',
-            pretrained=True,
-            init_values=1e-5, dynamic_img_size=True
-            )
-        self.transform = transforms.Compose(
-            [
-                transforms.Resize(224),
-                transforms.ConvertImageDtype(torch.float32),
-                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-            ]
+            pretrained=False,           # disable auto-loading
+            init_values=1e-5,
+            dynamic_img_size=True,
         )
 
-        self.model.to('cuda')
-        # Slideflow standardization
+        # 2. Key-remapping for SwiGLU layers (if present)
+        def remap_swiglu_keys(state_dict):
+            new_sd = {}
+            for k, v in state_dict.items():
+                nk = k.replace('ls1.gamma', 'ls1.weight').replace('ls2.gamma', 'ls2.weight')
+                new_sd[nk] = v
+            return new_sd
+
+        # 3. Download & load safetensors weights
+        from huggingface_hub import hf_hub_download
+        from safetensors.torch import load_file
+
+        model_path = hf_hub_download(
+            repo_id="Wangyh/mSTAR",
+            filename="model.safetensors",
+            local_dir=WEIGHTS_DIR,
+            cache_dir=WEIGHTS_DIR,
+            force_download=False
+        )
+        state_dict = load_file(model_path)
+        state_dict = remap_swiglu_keys(state_dict)
+        base_model.load_state_dict(state_dict, strict=False)
+
+        self.model = base_model
+
+        # 5. Transforms & preprocessing
+        self.transform = transforms.Compose([
+            transforms.Resize(224),
+            transforms.ConvertImageDtype(torch.float32),
+            transforms.Normalize(
+                mean=(0.485, 0.456, 0.406),
+                std=(0.229, 0.224, 0.225)
+            ),
+        ])
         self.preprocess_kwargs = {'standardize': False}
 
     def dump_config(self):

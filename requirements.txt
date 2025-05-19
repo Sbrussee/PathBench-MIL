@@ -126,7 +126,7 @@ packaging==24.0
 pandas==1.5.3
 parameterized==0.9.0
 partd==1.4.1
--e git+https://github.com/Sbrussee/Pathdev.git@f591d4c1a338ae65292be6481163c07d1642dc0a#egg=pathbench
+git+https://github.com/Sbrussee/Pathdev.git@f591d4c1a338ae65292be6481163c07d1642dc0a#egg=pathbench
 pillow==10.3.0
 plotly==5.24.1
 preshed==3.0.9
@@ -170,7 +170,7 @@ scipy==1.13.0
 seaborn==0.11.2
 shapely==2.0.4
 six==1.16.0
--e git+https://github.com/Sbrussee/slideflow_fork.git@92049fac675a636a2f3b8b48bc71c0157381161d#egg=slideflow
+git+https://github.com/Sbrussee/slideflow_fork.git@92049fac675a636a2f3b8b48bc71c0157381161d#egg=slideflow
 smac==1.4.0
 smart-open==6.4.0
 snowballstemmer==2.2.0
@@ -216,7 +216,7 @@ triton==2.2.0
 typer==0.9.4
 typing_extensions==4.11.0
 umap-learn==0.5.6
-urllib3==2.2.1
+urllib3
 versioneer==0.29
 wasabi==1.1.2
 wcwidth==0.2.13
