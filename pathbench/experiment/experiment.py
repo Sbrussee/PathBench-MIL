@@ -8,6 +8,8 @@ import shutil
 import logging
 from huggingface_hub import login
 import multiprocessing as mp
+import torch.multiprocessing as torch_mp
+torch_mp.set_sharing_strategy('file_system')
 
 def read_config(config_file : str):
     """
@@ -92,7 +94,6 @@ class Experiment():
         os.environ['TORCH_HOME'] = WEIGHTS_DIR
         os.environ['HF_HOME'] = WEIGHTS_DIR
         os.environ['XDG_CACHE_HOME'] = WEIGHTS_DIR
-        os.environ['TRANSFORMERS_CACHE'] = WEIGHTS_DIR
         os.environ['HF_DATASETS_CACHE'] = WEIGHTS_DIR
         os.environ['WEIGHTS_DIR'] = WEIGHTS_DIR
 
@@ -143,13 +144,16 @@ class Experiment():
             self.project = sf.create_project(
                 name=self.project_name,
                 root=f"experiments/{self.project_name}",
-                tiles=f"experiments/{first_dataset['tile_path']}",
-                tfrecords=f"experiments/{first_dataset['tfrecord_path']}",
+                tiles=f"{first_dataset['tile_path']}",
+                tfrecords=f"{first_dataset['tfrecord_path']}",
                 annotations=self.config['experiment']['annotation_file'],
                 slides=first_dataset['slide_path'])
             
             logging.info(f"Project {self.project_name} created")
             logging.info(f"Annotations in project: {self.project.annotations}")
+            logging.debug(f"Slides in project: {first_dataset['slide_path']}")
+            logging.debug(f"Tiles in project: {first_dataset['tile_path']}")
+            logging.debug(f"TFRecords in project: {first_dataset['tfrecord_path']}")
 
         #Add additional datasets to the project
         if len(self.config['datasets']) > 1:
@@ -157,11 +161,14 @@ class Experiment():
                 self.project.add_source(
                     name=source['name'],
                     slides=source['slide_path'],
-                    tfrecords=f'experiments/{source["tfrecord_path"]}',
-                    tiles=f'experiments/{source["tile_path"]}',
+                    tfrecords=f'{source["tfrecord_path"]}',
+                    tiles=f'{source["tile_path"]}',
                 )
                 logging.info(f"Added source {source['name']} to project {self.project_name}")
                 logging.info(f"Slides in source: {source['slide_path']}")
+                logging.debug(f"Tiles in source: {source['tile_path']}")
+                logging.debug(f"TFRecords in source: {source['tfrecord_path']}")
+
         
     def benchmark(self):
         #Iterate over all possible combinations of hyperparameters

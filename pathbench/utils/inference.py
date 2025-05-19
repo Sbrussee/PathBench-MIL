@@ -60,7 +60,6 @@ def parse_args():
     )
     parser.add_argument(
         "--norm",
-        choices=["two_slope", None],
         default=None,
         help="Normalization: 'two_slope' centers at zero; None for linear."
     )
@@ -76,6 +75,7 @@ def get_extractor_class(extractor_name):
         return slide_level_predictors.__dict__[extractor_name]
     else:
         raise ValueError(f"Unknown extractor: {extractor_name}")
+
 
 def process_slide(args, slide_path, output_dir):
     logging.info(f"\nProcessing slide: {slide_path}")
@@ -109,7 +109,6 @@ def process_slide(args, slide_path, output_dir):
     os.environ['TORCH_HOME'] = WEIGHTS_DIR
     os.environ['HF_HOME'] = WEIGHTS_DIR
     os.environ['XDG_CACHE_HOME'] = WEIGHTS_DIR
-    os.environ['TRANSFORMERS_CACHE'] = WEIGHTS_DIR
     os.environ['HF_DATASETS_CACHE'] = WEIGHTS_DIR
     os.environ['WEIGHTS_DIR'] = WEIGHTS_DIR
 
