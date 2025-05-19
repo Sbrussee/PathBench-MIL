@@ -42,6 +42,7 @@ If you use **PathBench-MIL** in your research or projects, please cite:
 - [Running PathBench](#running-pathbench)
 - [Features](#features)
 - [Extending PathBench](#extending-pathbench)
+- [FAQ](#frequently-asked-questions)
 
 
 ## Directory Structure
@@ -1138,6 +1139,8 @@ For more fundamental changes, and adding new normalization methods, one needs to
 
 ## Developing PathBench
 PathBench is currently in its early development stages, but we welcome collaboration on the development of PathBench. Please use pull requests to add new features or open issues if you encounter bugs or would like to see certain features. When encountering bugs, please provide your pathbench configuration along with information on your python environment and OS, this aids in solving the problem in a correct and timely manner.
+
+# Frequently Asked Questions
 
 <p align="center">
   <img src="PathBench-logo-gecentreerd.png" alt="PathBench Logo" width="550" height="400">
