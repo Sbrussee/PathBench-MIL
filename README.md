@@ -1137,10 +1137,15 @@ class ConcordanceIndex(Metric):
 ## Futher extension
 For more fundamental changes, and adding new normalization methods, one needs to change the underlying slideflow code. PathBench uses a [forked version](https://github.com/Sbrussee/slideflow_fork) of the slideflow code, which is added as a submodule in PathBench's repository.
 
-## Developing PathBench
-PathBench is currently in its early development stages, but we welcome collaboration on the development of PathBench. Please use pull requests to add new features or open issues if you encounter bugs or would like to see certain features. When encountering bugs, please provide your pathbench configuration along with information on your python environment and OS, this aids in solving the problem in a correct and timely manner.
-
 # Frequently Asked Questions
+1. **I encountered a bug / problem**
+When encountering bugs, please provide your pathbench configuration along with information on your python environment and OS, this aids in solving the problem in a correct and timely manner. Some issues encountered might be part of the original SlideFlow codebase, please refer to [Link](https://github.com/slideflow/slideflow) for these problems.
+
+2. **I want to share a new feature / fix i added to PathBench**
+Of course, we welcome collaboration on PathBench by the community. Feel free to open a pull request, after some stress-testing your new feature can be made available to all users of PathBench.
+
+3. **Am i allowed to use PathBench for my own research purposes**
+PathBench is available under the open source GPL-3 license. This means it is freely usable and modifyable, but can only be redistributed under the same GPL-3 license, and thus, should stay in the open source domain. Please consider adding features as a pull request to PathBench if you think your own projects might help the community of PathBench users.
 
 <p align="center">
   <img src="PathBench-logo-gecentreerd.png" alt="PathBench Logo" width="550" height="400">
