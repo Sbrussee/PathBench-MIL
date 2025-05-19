@@ -34,6 +34,51 @@ If you use **PathBench-MIL** in your research or projects, please cite:
 }
 ```
 
+## Table of Contents
+- [Local Installation](#installation-guide-for-pathbench)
+- [Docker Installation](#running-pathbench-mil-with-docker-with-gpu-support)
+- [Setting up a Project](#setting-up-a-project)
+- [Configuring PathBench](#pathbench-configuration-example)
+- [Running PathBench](#running-pathbench)
+- [Features](#features)
+- [Extending PathBench](#extending-pathbench)
+
+
+## Directory Structure
+- pathbench/
+  - pathbench/ 
+    - benchmarking/
+      - benchmark.py # Main benchmarking script
+    - experiment/
+      - experiment.py # Initialization of experiments
+    - models/
+      - aggregators.py # MIL aggregation methods
+      - feature_extractors.py # Feature extractors
+      - slide_level_predictors.py # Slide-level 'aggregators'.
+    - utils
+      - calculate_feature_similarity.py # Calculate feature extractor similarity
+      - utils.py # Util functions
+      - losses.py # Houses custom losses for training models
+      - metrics.py # Houses custom metrics to calculate during training
+    - visualization
+      - visualization.py # Houses visualization functions
+    - test
+      - test.py # Calls testing functions
+      - binary_test_conf.yaml # tests binary classification
+      - classification_test_conf.yaml # tests multiclass classification
+      - opt_test_conf.yaml # tests optimization mode
+      - regression_test_conf.yaml # tests regresison
+      - survival_test_conf.yaml # tests survival prediciton
+  - slideflow_fork # Forked Slideflow package
+    - ...
+  - requirements.txt
+  - README.md
+  - LICENSE
+  - setup.py # Main setup script for pip
+  - setup_pathbench.py # Script to setup a virtual environment and install base packages
+  - run_pathbench.sh # Bash script to run pathbench
+  - conf.yaml # Default configuration
+
 # Installation Guide for PathBench
 
 ## Prerequisites
@@ -249,6 +294,129 @@ docker run --gpus all -it --rm \
   -v /path/to/annotations.csv:/mnt/annotations.csv \
   your-dockerhub-user/pathbench-gpu bash
 ```
+
+# Setting up a Project
+PathBench inherits the project functionality from SlideFlow. PathBench allows creating projects through the configuration file. In the configuration, project-specific settings can be specified in the `experiment` section. The `experiment` section also saves several other important settings:
+
+### Project-related settings:
+
+- `project_name`: The name of the project.
+- `annotation_file`: The path to the annotation file.
+
+
+### Training-related settings:
+
+- `balancing`: The balancing technique to be used. This can be `tile`, `slide`, `patient`, or `category`. Balancing is used to construct training batches with a balanced distribution of classes/patients/slides/tiles.
+- `split_technique`: The split technique to be used. This can be `k-fold` or `fixed`.
+- `k`: The number of folds for k-fold cross-validation.
+- `val_fraction`: The fraction of the training data to be used for validation.
+- `best_epoch_based_on` : measure to base the epoch selection for selecting the optimal model state on. Can be 'val_loss', any of the task default metrics (roc_auc_score, c_index, r2_score), or any of the custom metrics defined.
+- `epochs`: The number of epochs for training.
+- `batch_size`: The batch size for training.
+- `bag_size`: The bag size for MIL models.
+- `aggregation_level`: The aggregation level can be `slide` or `patient`. This specifies at which levels bags are aggregated, effectively creating slide-level or patient-level predictions.
+- `encoder_layers` : The number of layers used for the encoder in the MIL aggregator
+- `z_dim` : The dimensionality of the latent space in the MIL encoder.
+- `dropout_p` : The dropout probability in the MIL model.
+- `class_weighting`: Whether to weight the instances for each class during training based on occurence.
+  
+### General settings:
+
+- `task`: The task can be `classification`, `regression`, `survival` or 'survival_discrete'.
+- `mode`: The mode can be either `benchmark` or `optimization`.
+- `num_workers` : Number of workers for parallelization, set to 0 to disable parallel processing.
+- `custom_metrics` : List of custom metrics to be used, which should be defined in metrics.py or as a fastai-metric: https://docs.fast.ai/metrics.html
+- `report` : Whether to output a slide processing report (see Slideflow documentation). Reports will be saved in the tfrecords directory of the corresponding tiles in PDF format.
+- `mixed_precision` : Whether to extract features in mixed precision (fp16) mode, reducing GPU requirements.
+- `skip_extracted` : Whether to force re-extraction of tiles from WSIs, even if already available. If set to True, will skip re-extraction if tiles are available.
+- `skip_feature_extraction`: Whether to force re-extraction of features from tfrecord tiles. If set to True, will skip re-extraction if features are available.
+- `save_tiles`: Whether to save .jpg images of each tile in addition to the .tfrecord formatted tiles.
+
+# Datasets
+The datasets to be used in the project can be specified in the datasets section. One can add any arbitrary number of data sources to a project and specify whether these should be used for training/validation or as testing datasets:
+```yaml
+datasets:  # List of datasets to be used
+  - name: dataset1  # Name of the dataset
+    slide_path: path/to/your/slides  # Path to the slide data
+    tfrecord_path: path/to/save/tfrecords  # Path to save tfrecords
+    tile_path: path/to/save/tiles  # Path to save tiles
+    used_for: training  # Whether the dataset is used for training or testing
+
+  - name: dataset2
+    slide_path: path/to/your/other/slides
+    tfrecord_path: path/to/other/tfrecords
+    tile_path: path/to/other/tiles
+    used_for: testing
+```
+
+# Annotations
+The annotation file should be a CSV file with the following columns:
+
+- slide: The name/identifier of the slide, **without the file extension (e.g. .svs, .tiff)**.
+- patient: The name/identifier of the patient to which the slide corresponds.
+- dataset: The name of the dataset to which the slide belongs.
+For classification tasks, the annotation file should also contain a column with the target labels. This column should be named category. For regression tasks, the annotation file should contain a column with the target values. This column should be named value. For survival tasks, the annotation file should contain columns with the survival time and event status. These columns should be named time and event, respectively.
+
+Example of a valid annotation file for a classification task, assuming we use two datasets: dataset1 and dataset2:
+```csv
+slide,patient,dataset,category
+slide1,patient1,dataset1,0
+slide2,patient1,dataset1,1
+slide3,patient2,dataset1,0
+slide4,patient2,dataset1,1
+slide5,patient3,dataset1,0
+slide6,patient3,dataset1,1
+slide7,patient4,dataset2,0
+slide8,patient4,dataset2,1
+slide9,patient5,dataset2,0
+slide10,patient5,dataset2,1
+```
+
+For a regression task:
+```csv
+slide,patient,dataset,value
+slide1,patient1,dataset1,0.1
+slide2,patient1,dataset1,0.2
+slide3,patient2,dataset1,0.3
+slide4,patient2,dataset1,0.4
+slide5,patient3,dataset1,0.5
+slide6,patient3,dataset1,0.6
+slide7,patient4,dataset2,0.7
+slide8,patient4,dataset2,0.8
+slide9,patient5,dataset2,0.9
+slide10,patient5,dataset2,1.0
+```
+
+For a continuous survival task, where time is a number of days/weeks/months/years and event expects 1 for patient which are dead (event occured) and 0 for those that are alive (event not occured).:
+```csv
+slide,patient,dataset,time,event
+slide1,patient1,dataset1,26,1
+slide2,patient1,dataset1,15,1
+slide3,patient2,dataset1,16,1
+slide4,patient2,dataset1,42,0
+slide5,patient3,dataset1,13,1
+slide6,patient3,dataset1,11,1
+slide7,patient4,dataset2,6,0
+slide8,patient4,dataset2,5,1
+slide9,patient5,dataset2,84,1
+slide10,patient5,dataset2,43,1
+```
+
+For a discrete survival task, we bin the time column into bins (e.g. quantiles):
+```csv
+slide,patient,dataset,time,event
+slide1,patient1,dataset1,3,1
+slide2,patient1,dataset1,2,1
+slide3,patient2,dataset1,2,1
+slide4,patient2,dataset1,3,0
+slide5,patient3,dataset1,2,1
+slide6,patient3,dataset1,2,1
+slide7,patient4,dataset2,1,0
+slide8,patient4,dataset2,1,1
+slide9,patient5,dataset2,1,1
+slide10,patient5,dataset2,3,1
+```
+
 # PathBench Configuration Example
 To use PathBench, you need to provide a configuration file in YAML format. Below is an example configuration file:
 
@@ -450,127 +618,6 @@ hf_key: YOUR_HUGGINGFACE_TOKEN # Token for Hugging Face model hub to access gate
 
 ```
 
-# Setting up a Project
-PathBench inherits the project functionality from SlideFlow. PathBench allows creating projects through the configuration file. In the configuration, project-specific settings can be specified in the `experiment` section. The `experiment` section also saves several other important settings:
-
-### Project-related settings:
-
-- `project_name`: The name of the project.
-- `annotation_file`: The path to the annotation file.
-
-
-### Training-related settings:
-
-- `balancing`: The balancing technique to be used. This can be `tile`, `slide`, `patient`, or `category`. Balancing is used to construct training batches with a balanced distribution of classes/patients/slides/tiles.
-- `split_technique`: The split technique to be used. This can be `k-fold` or `fixed`.
-- `k`: The number of folds for k-fold cross-validation.
-- `val_fraction`: The fraction of the training data to be used for validation.
-- `best_epoch_based_on` : measure to base the epoch selection for selecting the optimal model state on. Can be 'val_loss', any of the task default metrics (roc_auc_score, c_index, r2_score), or any of the custom metrics defined.
-- `epochs`: The number of epochs for training.
-- `batch_size`: The batch size for training.
-- `bag_size`: The bag size for MIL models.
-- `aggregation_level`: The aggregation level can be `slide` or `patient`. This specifies at which levels bags are aggregated, effectively creating slide-level or patient-level predictions.
-- `encoder_layers` : The number of layers used for the encoder in the MIL aggregator
-- `z_dim` : The dimensionality of the latent space in the MIL encoder.
-- `dropout_p` : The dropout probability in the MIL model.
-- `class_weighting`: Whether to weight the instances for each class during training based on occurence.
-  
-### General settings:
-
-- `task`: The task can be `classification`, `regression`, `survival` or 'survival_discrete'.
-- `mode`: The mode can be either `benchmark` or `optimization`.
-- `num_workers` : Number of workers for parallelization, set to 0 to disable parallel processing.
-- `custom_metrics` : List of custom metrics to be used, which should be defined in metrics.py or as a fastai-metric: https://docs.fast.ai/metrics.html
-- `report` : Whether to output a slide processing report (see Slideflow documentation). Reports will be saved in the tfrecords directory of the corresponding tiles in PDF format.
-- `mixed_precision` : Whether to extract features in mixed precision (fp16) mode, reducing GPU requirements.
-- `skip_extracted` : Whether to force re-extraction of tiles from WSIs, even if already available. If set to True, will skip re-extraction if tiles are available.
-- `skip_feature_extraction`: Whether to force re-extraction of features from tfrecord tiles. If set to True, will skip re-extraction if features are available.
-- `save_tiles`: Whether to save .jpg images of each tile in addition to the .tfrecord formatted tiles.
-
-# Datasets
-The datasets to be used in the project can be specified in the datasets section. One can add any arbitrary number of data sources to a project and specify whether these should be used for training/validation or as testing datasets:
-```yaml
-datasets:  # List of datasets to be used
-  - name: dataset1  # Name of the dataset
-    slide_path: path/to/your/slides  # Path to the slide data
-    tfrecord_path: path/to/save/tfrecords  # Path to save tfrecords
-    tile_path: path/to/save/tiles  # Path to save tiles
-    used_for: training  # Whether the dataset is used for training or testing
-
-  - name: dataset2
-    slide_path: path/to/your/other/slides
-    tfrecord_path: path/to/other/tfrecords
-    tile_path: path/to/other/tiles
-    used_for: testing
-```
-
-# Annotations
-The annotation file should be a CSV file with the following columns:
-
-- slide: The name/identifier of the slide, **without the file extension (e.g. .svs, .tiff)**.
-- patient: The name/identifier of the patient to which the slide corresponds.
-- dataset: The name of the dataset to which the slide belongs.
-For classification tasks, the annotation file should also contain a column with the target labels. This column should be named category. For regression tasks, the annotation file should contain a column with the target values. This column should be named value. For survival tasks, the annotation file should contain columns with the survival time and event status. These columns should be named time and event, respectively.
-
-Example of a valid annotation file for a classification task, assuming we use two datasets: dataset1 and dataset2:
-```csv
-slide,patient,dataset,category
-slide1,patient1,dataset1,0
-slide2,patient1,dataset1,1
-slide3,patient2,dataset1,0
-slide4,patient2,dataset1,1
-slide5,patient3,dataset1,0
-slide6,patient3,dataset1,1
-slide7,patient4,dataset2,0
-slide8,patient4,dataset2,1
-slide9,patient5,dataset2,0
-slide10,patient5,dataset2,1
-```
-
-For a regression task:
-```csv
-slide,patient,dataset,value
-slide1,patient1,dataset1,0.1
-slide2,patient1,dataset1,0.2
-slide3,patient2,dataset1,0.3
-slide4,patient2,dataset1,0.4
-slide5,patient3,dataset1,0.5
-slide6,patient3,dataset1,0.6
-slide7,patient4,dataset2,0.7
-slide8,patient4,dataset2,0.8
-slide9,patient5,dataset2,0.9
-slide10,patient5,dataset2,1.0
-```
-
-For a continuous survival task, where time is a number of days/weeks/months/years and event expects 1 for patient which are dead (event occured) and 0 for those that are alive (event not occured).:
-```csv
-slide,patient,dataset,time,event
-slide1,patient1,dataset1,26,1
-slide2,patient1,dataset1,15,1
-slide3,patient2,dataset1,16,1
-slide4,patient2,dataset1,42,0
-slide5,patient3,dataset1,13,1
-slide6,patient3,dataset1,11,1
-slide7,patient4,dataset2,6,0
-slide8,patient4,dataset2,5,1
-slide9,patient5,dataset2,84,1
-slide10,patient5,dataset2,43,1
-```
-
-For a discrete survival task, we bin the time column into bins (e.g. quantiles):
-```csv
-slide,patient,dataset,time,event
-slide1,patient1,dataset1,3,1
-slide2,patient1,dataset1,2,1
-slide3,patient2,dataset1,2,1
-slide4,patient2,dataset1,3,0
-slide5,patient3,dataset1,2,1
-slide6,patient3,dataset1,2,1
-slide7,patient4,dataset2,1,0
-slide8,patient4,dataset2,1,1
-slide9,patient5,dataset2,1,1
-slide10,patient5,dataset2,3,1
-```
 # Running PathBench
 To run pathbench once installed using default setting, one can simply run
 ```bash
@@ -614,42 +661,6 @@ python3 main.py $CONFIG_FILE
 - Plotly-based benchmark visualization tool
 - Efficient Tile processing and QC pipeline inherited by Slideflow
 - Optuna-based AutoML optimization w.r.t. the benchmark parameters, to quickly find good candidate solutions.
-
-# Package Structure
-
-- pathbench/
-  - pathbench/ 
-    - benchmarking/
-      - benchmark.py # Main benchmarking script
-    - experiment/
-      - experiment.py # Initialization of experiments
-    - models/
-      - aggregators.py # MIL aggregation methods
-      - feature_extractors.py # Feature extractors
-      - slide_level_predictors.py # Slide-level 'aggregators'.
-    - utils
-      - calculate_feature_similarity.py # Calculate feature extractor similarity
-      - utils.py # Util functions
-      - losses.py # Houses custom losses for training models
-      - metrics.py # Houses custom metrics to calculate during training
-    - visualization
-      - visualization.py # Houses visualization functions
-    - test
-      - test.py # Calls testing functions
-      - binary_test_conf.yaml # tests binary classification
-      - classification_test_conf.yaml # tests multiclass classification
-      - opt_test_conf.yaml # tests optimization mode
-      - regression_test_conf.yaml # tests regresison
-      - survival_test_conf.yaml # tests survival prediciton
-  - slideflow_fork # Forked Slideflow package
-    - ...
-  - requirements.txt
-  - README.md
-  - LICENSE
-  - setup.py # Main setup script for pip
-  - setup_pathbench.py # Script to setup a virtual environment and install base packages
-  - run_pathbench.sh # Bash script to run pathbench
-  - conf.yaml # Default configuration
 
 ## Normalization
 PathBench currently supports:
@@ -799,7 +810,7 @@ The script supports customizable heatmap visualization with options:
 
 The results are saved in the inference_results folder, including prediction vectors and heatmaps.
 
-## Extending PathBench
+# Extending PathBench
 PathBench is designed such that it easy to add new feature extractors and MIL aggregation models. 
 1. **Custom Feature Extractors**
 New feature extractors are added to pathbench/models/feature_extractors.py and follow this format:
