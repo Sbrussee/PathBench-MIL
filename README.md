@@ -271,10 +271,12 @@ experiment:
   val_fraction: 0.1 # Fraction of training data to use for validation
   aggregation_level: slide # Aggregation level, can be slide or patient
   task: classification # Task, can be classification, regression, survival or survival_discrete
-  mode: benchmark # Mode can be either 'benchmark' or 'optimization'
+  mode: benchmark # Mode can be either 'benchmark', 'optimization' or 'feature_extraction'
   mixed_precision: False # Whether to retrieve features in mixed precision (fp16), which is useful for situations with gigantic models and limited GPU-VRAM)
-  feature_extraction_only: False # Wheter to only retrieve features
   report: False # Boolean denoting whether to provide a tile processing report
+  skip_extracted: True # Whether to skip the tile extraction step if tiles already exist
+  skip_feature_extraction: True # Whether to skip the feature extraction step if features already exist
+  save_tiles: False # Whether to save the extracted tile images as .jpg files in addition to the .tfrecords
 
   visualization: # Visualization options, options: CLASSIFICATION: confusion_matrix, precision_recall_curve, roc_curve, top_tiles SURVIVAL: survival_roc, concordance_index, kaplan_meier REGRESSION: predicted_vs_actual, residuals, qq
     - learning_curve
@@ -299,6 +301,8 @@ experiment:
     - whitespace_fraction: 1.0 # Image tiles with whitespace above this fraction are discarded.
 
 optimization:
+  study_name: Exp1 # Name of the optimization study
+  load_study: True # Whether to load an existing study, which continues the optimization from a checkpoint
   objective_metric: balanced_accuracy # Objective metric to optimize, should also be specified in 'evaluation'
   objective_mode: max # Optimization mode, can be 'max' or 'min'
   objective_dataset: test # Dataset to be used for the objective metric, can be 'val' or 'test'
@@ -380,9 +384,18 @@ benchmark_parameters: # Parameters for the benchmarking, can be used to compare 
 # - kaiko_l14
 # - h_optimus_0
 # - h_optimus_1
+# - h0_mini
 # - virchow
 # - virchow2
 # - exaone_path
+# - keep
+# - mstar
+# - lunit_onco_fm
+# - midnight
+# SLIDE LEVEL MODELS:
+# - gigapath_slide
+# - titan_slide
+# - prism_slide
 
 # Available MIL aggregation methods:
 # - clam_mil
@@ -468,9 +481,11 @@ PathBench inherits the project functionality from SlideFlow. PathBench allows cr
 - `mode`: The mode can be either `benchmark` or `optimization`.
 - `num_workers` : Number of workers for parallelization, set to 0 to disable parallel processing.
 - `custom_metrics` : List of custom metrics to be used, which should be defined in metrics.py or as a fastai-metric: https://docs.fast.ai/metrics.html
-- `report` : Whether to output a slide processing report (see Slideflow documentation)
+- `report` : Whether to output a slide processing report (see Slideflow documentation). Reports will be saved in the tfrecords directory of the corresponding tiles in PDF format.
 - `mixed_precision` : Whether to extract features in mixed precision (fp16) mode, reducing GPU requirements.
-
+- `skip_extracted` : Whether to force re-extraction of tiles from WSIs, even if already available. If set to True, will skip re-extraction if tiles are available.
+- `skip_feature_extraction`: Whether to force re-extraction of features from tfrecord tiles. If set to True, will skip re-extraction if features are available.
+- `save_tiles`: Whether to save .jpg images of each tile in addition to the .tfrecord formatted tiles.
 
 # Datasets
 The datasets to be used in the project can be specified in the datasets section. One can add any arbitrary number of data sources to a project and specify whether these should be used for training/validation or as testing datasets:
@@ -586,13 +601,13 @@ python3 main.py $CONFIG_FILE
 ```
 # Features
 - Support for binary/multiclass classification, regression and continuous/discretized time-to-event (e.g. survival prediction) problems.
+- Support for fast multi-GPU tile-level and slide-level feature extraction.
 - Benchmarking w.r.t.
     - Tile sizes, magnifications (e.g. 256px, 20x)
     - Normalization methods (e.g. Macenko, Reinhard)
     - Feature extractors (e.g. UNI, GigaPath)
     - MIL aggregators (e.g. CLAM, DSMIL)
     - Loss functions
-    - MIL-friendly (feature-space) augmentations
     - Activation functions
     - Optimization methods
 - Interpretable visualizations of benchmark output
@@ -611,11 +626,11 @@ python3 main.py $CONFIG_FILE
     - models/
       - aggregators.py # MIL aggregation methods
       - feature_extractors.py # Feature extractors
+      - slide_level_predictors.py # Slide-level 'aggregators'.
     - utils
       - calculate_feature_similarity.py # Calculate feature extractor similarity
       - utils.py # Util functions
       - losses.py # Houses custom losses for training models
-      - augmentations.py # Houses MIL-friendly augmentations
       - metrics.py # Houses custom metrics to calculate during training
     - visualization
       - visualization.py # Houses visualization functions
@@ -675,42 +690,45 @@ PathBench supports a wide range of different feature extractors, including SOTA 
 | Kaiko-B8 | Automatic | [Link](https://github.com/kaiko-ai/towards_large_pathology_fms) |
 | Kaiko-B16 | Automatic | [Link](https://github.com/kaiko-ai/towards_large_pathology_fms) |
 | Kaiko-L14 | Automatic | [Link](https://github.com/kaiko-ai/towards_large_pathology_fms) |
+| Midnight | Automatic | [Link](https://huggingface.co/kaiko-ai/midnight)
 | H-Optimus-0 | Automatic | [Link](https://huggingface.co/bioptimus/H-optimus-0) |
-| H-Optimus-1 | Gated | [Link](https://huggingface.co/bioptimus/H-optimus-1)
-
+| H-Optimus-1 | Gated | [Link](https://huggingface.co/bioptimus/H-optimus-1) |
+| H0-mini | Gated | [Link](https://huggingface.co/bioptimus/H0-mini) |
+| KEEP | Automatic | [Link](https://huggingface.co/Astaxanthin/KEEP) |
+| EXAONEPath | Gated | [Link](https://huggingface.co/LGAI-EXAONE/EXAONEPath) |
+| mSTAR | Gated | [Link](https://huggingface.co/Wangyh/mSTAR) |
 
 ## MIL aggregators
-In addition to a wide range of feature extractors, PathBench also includes a wide variety of MIL aggregation methods. Most of these support all tasks (Binary classification, Muliclass classifcation, regression and survival prediction), but some like the CLAM-models only support binary classification. We are actively working on extending support for these models.
+In addition to a wide range of feature extractors, PathBench also includes a wide variety of MIL aggregation methods.
 
-| MIL aggregator | Bin. class. | Multi-class. | Regression | Survival | Link |
-|----------|----------|----------|----------|----------|----------|
-| CLAM-SB | Supported | Supported | Supported | Supported | [Link](https://github.com/mahmoodlab/CLAM) |
-| CLAM-MB | Supported | Supported |Supported | Supported | [Link](https://github.com/mahmoodlab/CLAM)  |
-| Attention MIL | Supported | Supported | Supported | Supported | [Link](https://github.com/AMLab-Amsterdam/AttentionDeepMIL)|
-| TransMIL | Supported | Supported | Supported | Supported | [Link](https://github.com/szc19990412/TransMIL) |
-| HistoBistro Transformer | Supported | Supported | Supported | Supported | [Link](https://github.com/peng-lab/HistoBistro) |
-| Linear MIL | Supported | Supported | Supported | Supported | NA |
-| Mean MIL | Supported | Supported | Supported | Supported | NA |
-| Max MIL | Supported | Supported | Supported | Supported | NA |
-| Log-Sum-Exp MIL | Supported | Supported | Supported | Supported | NA |
-| LSTM-MIL | Supported | Supported | Supported | Supported | NA |
-| DeepSet-MIL | Supported | Supported | Supported | Supported |[Link](https://github.com/manzilzaheer/DeepSets)|
-| Distribution-pool MIL | Supported | Supported | Supported | Supported | NA |
-| VarMIL | Supported | Supported | Supported | Supported | [Link](https://github.com/NKI-AI/dlup-lightning-mil)|
-| DSMIL | Supported | Supported | Supported | Supported | [Link](https://github.com/binli123/dsmil-wsi)  |
-| PERCEIVER-MIL | Supported | Supported | Supported | Supported | [Link](https://arxiv.org/abs/2103.03206) |
-| Adaptive Instance Ranking (AIR)-MIL | Supported | Supported | Supported | Supported | NA |
-| TopK-MIL | Supported | Supported | Supported | Supported | NA |
-| Weighted Mean MIL | Supported | Supported | Supported | Supported | NA |
-| Gated Attention MIL | Supported | Supported | Supported | Supported | NA |
-| Instance-Level (IL)-MIL | Supported | Supported | Supported | Supported | NA |
+| MIL aggregator | Link |
+|----------|----------|
+| CLAM-SB | [Link](https://github.com/mahmoodlab/CLAM) |
+| CLAM-MB | [Link](https://github.com/mahmoodlab/CLAM)  |
+| Attention MIL | [Link](https://github.com/AMLab-Amsterdam/AttentionDeepMIL)|
+| TransMIL |  [Link](https://github.com/szc19990412/TransMIL) |
+| HistoBistro Transformer | [Link](https://github.com/peng-lab/HistoBistro) |
+| Linear MIL | NA |
+| Mean MIL | NA |
+| Max MIL  NA |
+| Log-Sum-Exp MIL | NA |
+| LSTM-MIL | NA |
+| DeepSet-MIL | [Link](https://github.com/manzilzaheer/DeepSets)|
+| Distribution-pool MIL | NA |
+| VarMIL |  [Link](https://github.com/NKI-AI/dlup-lightning-mil)|
+| DSMIL |  [Link](https://github.com/binli123/dsmil-wsi)  |
+| PERCEIVER-MIL | [Link](https://arxiv.org/abs/2103.03206) |
+| Adaptive Instance Ranking (AIR)-MIL | NA |
+| TopK-MIL | NA |
+| Weighted Mean MIL |  NA |
+| Gated Attention MIL |  NA |
+| Instance-Level (IL)-MIL |  NA |
 
 
 ## PathBench outputs
 PathBench-MIL outputs a variety of visualizations and output tables with the performance metrics on the specified validation and testing datasets. Additionally, pathbench will automatically select the best performing model for each benchmarking/optimization experiment and save it for later use. Inference on this saved model can be performed using the utils/inference.py function, as explained below:
 
 Make sure your model directory has the following structure (the critical file is mil_params.json):
-
 ```
 experiments/{exp_name}/saved_models/best_test_model_{datetime}/
     ├── attention/
@@ -720,6 +738,7 @@ experiments/{exp_name}/saved_models/best_test_model_{datetime}/
     ├── predictions.parquet
     └── slide_manifest.csv
 ```
+It is also possible to use any of the models saved in experiments/{exp_name}/mil as inference input.
 
 Run the Script:
 
