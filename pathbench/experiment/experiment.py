@@ -1,4 +1,5 @@
 import yaml
+from typing import List, Dict, Any
 import slideflow as sf
 import os
 import torch
@@ -119,55 +120,69 @@ class Experiment():
         As such, we create a project based on the first dataset and add the rest of the datasets
         as sources to the project.
         """
-        #Create an experiment folder
+        # Ensure experiments directory exists
         os.makedirs('experiments', exist_ok=True)
 
+        # Project setup
         self.project_name = self.config['experiment']['project_name']
-        if 'datasets' in self.config:
-            first_dataset = self.config['datasets'][0]
-        #Create project based on first dataset
-        #Check if project exists
-        if os.path.exists(f"experiments/{self.project_name}"):
-            logging.info(f"Loading project {self.project_name}")
-            self.project = sf.Project(f"experiments/{self.project_name}",
-            annotations=self.config['experiment']['annotation_file'])
-            logging.info(f"Project {self.project_name} loaded")
-            logging.info(f"Annotations in project: {self.project.annotations}")
-            for index, source in enumerate(self.project.sources):
-                logging.info(f"Source {index}: {source}")
-                logging.info(f"Slides in source: {self.config['datasets'][index]['slide_path']}")
+        project_path = f"experiments/{self.project_name}"
+        annotation_file = self.config['experiment']['annotation_file']
 
+        # Load existing project or create a new empty one
+        if os.path.exists(project_path):
+            logging.info(f"Loading project {self.project_name}")
+            self.project = sf.Project(
+                project_path,
+                annotations=annotation_file
+            )
+            logging.info(f"Project {self.project_name} loaded with annotations: {self.project.annotations}")
         else:
-            logging.info(f"Creating project {self.project_name}")
-            os.makedirs(f"experiments", exist_ok=True)
-            os.makedirs(f"experiments/{self.project_name}", exist_ok=True)
+            logging.info(f"Creating new project {self.project_name}")
+            os.makedirs(project_path, exist_ok=True)
+            # Create an empty project (no initial slides/tiles/tfrecords)
             self.project = sf.create_project(
                 name=self.project_name,
-                root=f"experiments/{self.project_name}",
-                tiles=f"{first_dataset['tile_path']}",
-                tfrecords=f"{first_dataset['tfrecord_path']}",
-                annotations=self.config['experiment']['annotation_file'],
-                slides=first_dataset['slide_path'])
-            
-            logging.info(f"Project {self.project_name} created")
-            logging.info(f"Annotations in project: {self.project.annotations}")
-            logging.debug(f"Slides in project: {first_dataset['slide_path']}")
-            logging.debug(f"Tiles in project: {first_dataset['tile_path']}")
-            logging.debug(f"TFRecords in project: {first_dataset['tfrecord_path']}")
+                root=project_path,
+                annotations=annotation_file
+            )
+            logging.info(f"Project {self.project_name} created with annotations: {self.project.annotations}")
 
-        #Add additional datasets to the project
-        if len(self.config['datasets']) > 1:
-            for source in self.config['datasets'][1:]:
-                self.project.add_source(
-                    name=source['name'],
-                    slides=source['slide_path'],
-                    tfrecords=f'{source["tfrecord_path"]}',
-                    tiles=f'{source["tile_path"]}',
-                )
-                logging.info(f"Added source {source['name']} to project {self.project_name}")
-                logging.info(f"Slides in source: {source['slide_path']}")
-                logging.debug(f"Tiles in source: {source['tile_path']}")
-                logging.debug(f"TFRecords in source: {source['tfrecord_path']}")
+        # Retrieve datasets list and validate
+        datasets = self.config.get('datasets', [])
+        if not datasets:
+            raise ValueError(f"No datasets specified in the configuration for project '{self.project_name}'.")
+
+        # Add each dataset as a source to the project
+        for source in datasets:
+
+            name = source.get('name')
+            if not name:
+                raise ValueError(f"Dataset name is missing in the configuration for project '{self.project_name}'.")
+            
+            def resolve_path(path):
+                if not path:
+                    return None
+                is_absolute = os.path.isabs(path)
+                if is_absolute:
+                    logging.debug(f"Using absolute path: {path}")
+                    return path
+                else:
+                    path = os.path.join(os.getcwd(), path)
+                    logging.debug(f"Interpreted as relative path: {path}")
+                    if not os.path.exists(path):
+                        raise ValueError(f"Path '{path}' does not exist.")
+                    return path
+            
+
+            self.project.add_source(
+                name=source['name'],
+                slides=resolve_path(source.get('slide_path')),
+                tfrecords=resolve_path(source.get('tfrecord_path')),
+                tiles=resolve_path(source.get('tile_path'))
+            )
+            logging.info(f"Added source '{source['name']}' to project '{self.project_name}'")
+            logging.debug(f"Slides: {resolve_path(source.get('slide_path'))}, Tiles: {resolve_path(source.get('tile_path'))}, TFRecords: {resolve_path(source.get('tfrecord_path'))}"
+            )
 
         
     def benchmark(self):
