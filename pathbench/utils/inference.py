@@ -46,6 +46,13 @@ def parse_args():
         action="store_true",
         help="If set, also saves attention heatmap images."
     )
+
+    parser.add_argument(
+        "--uncertainty",
+        action="store_true",
+        help="If set, also saves uncertainty values."
+    )
+
     parser.add_argument(
         "--interpolation",
         type=str,
@@ -143,8 +150,28 @@ def process_slide(args, slide_path, output_dir):
     np.save(pred_file, preds)
     logging.info(f"Saved predictions: {pred_file}, shape: {preds.shape}")
 
+    # Save uncertainty if requested
+    if args.uncertainty:
+        uncertainty = calculate_uncertainty(preds)
+        uncertainty_file = os.path.join(output_dir, f"{base}_uncertainty.npy")
+        np.save(uncertainty_file, uncertainty)
+        logging.info(f"Saved uncertainty: {uncertainty_file}, shape: {uncertainty.shape}")
 
 
+def calculate_uncertainty(preds, uncertainty="entropy"):
+    """
+    Calculate uncertainty based on the predictions.
+    """
+    if uncertainty == "entropy":
+        # Example: using entropy as a measure of uncertainty
+        probs = np.exp(preds) / np.sum(np.exp(preds), axis=1, keepdims=True)
+        uncertainty = -np.sum(probs * np.log(probs + 1e-10), axis=1)
+    elif uncertainty == "variance":
+        # Example: using variance as a measure of uncertainty
+        uncertainty = np.var(preds, axis=1)
+    else:
+        raise ValueError(f"Unknown uncertainty method: {uncertainty}")
+    return uncertainty
 
 def main():
     args = parse_args()

@@ -1,2 +1,11 @@
 __pycache__/
 *.py[cod]
+*.out
+*.log
+*.pth
+*.bin
+*.safetensors
+pretrained_weights/*
+!pretrained_weights/readme.txt
+experiments/
+.cache/

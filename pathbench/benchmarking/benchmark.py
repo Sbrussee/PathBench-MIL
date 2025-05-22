@@ -22,6 +22,7 @@ import traceback
 import random
 import shutil
 from itertools import product
+from typing import List, Dict, Tuple
 
 import numpy as np
 import pandas as pd
@@ -176,6 +177,13 @@ def configure_datasets(config : dict):
 
     # Filter datasets for testing
     test_datasets = [d for d in datasets if d['used_for'] == 'testing']
+
+    if len(train_datasets) == 0:
+        logging.error("No training datasets found in the configuration.")
+        raise ValueError("No training datasets found in the configuration.")
+
+    if len(test_datasets) == 0:
+        logging.warning("No testing datasets found in the configuration. Only getting validation results.")
     
     return train_datasets, test_datasets
 
@@ -404,9 +412,14 @@ def benchmark(config : dict, project : sf.Project):
             os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations", exist_ok=True)
 
             index = 1
-            val_results_per_split, test_results_per_split = [], []
-            val_pr_per_split, test_pr_per_split = [], []
-            survival_results_per_split, test_survival_results_per_split = [], []
+            #Create lists to store validation results
+            val_results_per_split = []
+            val_pr_per_split = []
+            survival_results_per_split = []
+            #Create test results lists per split, per dataset
+            test_results_per_split = { ds['name'] : [] for ds in test_datasets }
+            test_pr_per_split = { ds['name'] : [] for ds in test_datasets }
+            test_survival_results_per_split = { ds['name'] : [] for ds in test_datasets }
             logging.info("Starting training...")
             for train, val in splits:
                 logging.info(f"Split {index} started...")
@@ -457,68 +470,73 @@ def benchmark(config : dict, project : sf.Project):
                 val_df = val_df.append(val_dict, ignore_index=True)
 
                 #Loop through the test datasets
-                for test_dataset in test_datasets:
-                    #Only select the test set at hand
-                    individual_test_set = all_data.filter(filters={'dataset': [test_dataset['name']]})
-
-                    # Define a unique output directory for this test dataset evaluation
-                    test_outdir = (
-                        f"experiments/{config['experiment']['project_name']}/mil_eval/"
-                        f"{number}-{save_string}_{index}_{test_dataset['name']}"
-                    )
-
-                    # Evaluate the MIL model on this specific test set
-                    _ = eval_mil(
-                        weights=f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}",
-                        outcomes=target,
-                        dataset=individual_test_set,
-                        bags=bags,
-                        config=mil_conf,
-                        outdir=test_outdir,
-                        **model_kwargs
-                    )
-
-                    model_string = get_model_string(combination_dict, combination_dict['feature_extraction'])
-
-                    def get_test_metrics(model_string: str, test_outdir: str):
-                        # Load the test predictions for this specific test dataset
-                        predictions_path = (
-                            f"{test_outdir}/00000-{model_string}/predictions.parquet"
-                        )
-                        test_result = pd.read_parquet(predictions_path)
+                if test_dataset:
+                    for test_dataset in test_datasets:
+                        logging.info(f"Evaluating on test dataset: {test_dataset['name']}")
+                        #Only select the test set at hand
+                        individual_test_set = all_data.filter(filters={'dataset': [test_dataset['name']]})
                         
-                        # Process the test_result based on task type
-                        if task in ['survival', 'survival_discrete']:
-                            metrics, durations, events, predictions = calculate_survival_results(test_result)
-                            test_survival_results_per_split.append((durations, events, predictions))
-                        elif task == 'regression':
-                            metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
-                            y_true, y_pred = test_result['y_true'], test_result['y_pred0']
-                            test_results_per_split.append((y_true, y_pred))
+                        # Define a unique output directory for this test dataset evaluation
+                        test_outdir = (
+                            f"experiments/{config['experiment']['project_name']}/mil_eval/"
+                            f"{number}-{save_string}_{index}_{test_dataset['name']}"
+                        )
+
+                        # Evaluate the MIL model on this specific test set
+                        _ = eval_mil(
+                            weights=f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}",
+                            outcomes=target,
+                            dataset=individual_test_set,
+                            bags=bags,
+                            config=mil_conf,
+                            outdir=test_outdir,
+                            **model_kwargs
+                        )
+
+                        model_string = get_model_string(combination_dict, combination_dict['feature_extraction'])
+
+                        def get_test_metrics(model_string: str, test_outdir: str):
+                            # Load the test predictions for this specific test dataset
+                            predictions_path = (
+                                f"{test_outdir}/00000-{model_string}/predictions.parquet"
+                            )
+                            test_result = pd.read_parquet(predictions_path)
+                            
+                            # Process the test_result based on task type
+                            if task in ['survival', 'survival_discrete']:
+                                metrics, durations, events, predictions = calculate_survival_results(test_result)
+                                test_survival_results_per_split[test_dataset['name']].append((durations, events, predictions))
+                            elif task == 'regression':
+                                metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
+                                y_true, y_pred = test_result['y_true'], test_result['y_pred0']
+                                test_results_per_split[test_dataset['name']].append((y_true, y_pred))
+                            else:
+                                metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
+                                test_results_per_split[test_dataset['name']].append([tpr, fpr])
+                                test_pr_per_split[test_dataset['name']].extend(test_pr_curves)
+        
+                            return metrics
+                        
+                        metrics = get_test_metrics(model_string, test_outdir)
+                        # Build a dictionary to record the test results for the current test dataset
+                        test_dict = combination_dict.copy()
+                        test_dict.update(metrics)
+                        test_dict['weights'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}"
+                        test_dict['mil_params'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/mil_params.json"
+                        test_dict['bag_dir'] = bags
+                        test_dict['test_dataset'] = test_dataset['name']
+                        
+                        # Optionally add the tfrecord directory (depending on your config)
+                        if 'x' in str(combination_dict['tile_um']):
+                            test_dict['tfrecord_dir'] = f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}"
                         else:
-                            metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
-                            test_results_per_split.append([tpr, fpr])
-                            test_pr_per_split.extend(test_pr_curves)
-    
-                        return metrics
-                    
-                    metrics = get_test_metrics(model_string, test_outdir)
-                    # Build a dictionary to record the test results for the current test dataset
-                    test_dict = combination_dict.copy()
-                    test_dict.update(metrics)
-                    test_dict['weights'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}"
-                    test_dict['mil_params'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/mil_params.json"
-                    test_dict['bag_dir'] = bags
-                    test_dict['test_dataset'] = test_dataset['name']
-                    
-                    # Optionally add the tfrecord directory (depending on your config)
-                    if 'x' in str(combination_dict['tile_um']):
-                        test_dict['tfrecord_dir'] = f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}"
-                    else:
-                        test_dict['tfrecord_dir'] = f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}um"
-                    
-                    # Append this test result to the overall test results DataFrame
-                    test_df = test_df.append(test_dict, ignore_index=True)
+                            test_dict['tfrecord_dir'] = f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}um"
+                        
+                        # Append this test result to the overall test results DataFrame
+                        test_df = test_df.append(test_dict, ignore_index=True)
+            
+            else:
+                logging.info("No test datasets found in the configuration. Skipping test evaluation.")
 
             # Visualize the top 5 tiles, if applicable
             #Check if model supports attention
@@ -1003,20 +1021,20 @@ def set_mil_config(config: dict, combination_dict: dict, task: str, slide_level:
 # Plotting Functions
 # =============================================================================
 
-def plot_across_splits(config: dict, survival_results_per_split: list, test_survival_results_per_split: list,
-                       val_results_per_split: list, test_results_per_split: list,
-                       val_pr_per_split: list, test_pr_per_split: list, save_string: str) -> None:
+def plot_across_splits(config: dict, survival_results_per_split: list, test_survival_results_per_split: Dict[str, list],
+                       val_results_per_split: list, test_results_per_split: Dict[str, list],
+                       val_pr_per_split: list, test_pr_per_split: Dict[str, list], save_string: str) -> None:
     """
     Plot evaluation results across splits for survival, regression, and classification tasks.
 
     Args:
         config (dict): Experiment configuration dictionary.
         survival_results_per_split (list): Survival results (validation) per split.
-        test_survival_results_per_split (list): Survival results (test) per split.
+        test_survival_results_per_split (dict): Survival results (test) per split, per dataset.
         val_results_per_split (list): Validation results per split.
-        test_results_per_split (list): Test results per split.
+        test_results_per_split (dict): Test results per split, per dataset.
         val_pr_per_split (list): Precision-recall curves (validation) per split.
-        test_pr_per_split (list): Precision-recall curves (test) per split.
+        test_pr_per_split (dict): Precision-recall curves (test) per split, per dataset.
         save_string (str): Identifier for saving the plots.
 
     Returns:
@@ -1026,30 +1044,45 @@ def plot_across_splits(config: dict, survival_results_per_split: list, test_surv
     if task in ['survival', 'survival_discrete']:
         if 'survival_roc' in config['experiment']['visualization']:
             plot_survival_auc_across_folds(survival_results_per_split, save_string, 'val', config)
-            plot_survival_auc_across_folds(test_survival_results_per_split, save_string, 'test', config)
         if 'concordance_index' in config['experiment']['visualization']:
             plot_concordance_index_across_folds(survival_results_per_split, save_string, 'val', config)
-            plot_concordance_index_across_folds(test_survival_results_per_split, save_string, 'test', config)
         if 'kaplan_meier' in config['experiment']['visualization']:
             plot_kaplan_meier_curves_across_folds(survival_results_per_split, save_string, 'val', config)
-            plot_kaplan_meier_curves_across_folds(test_survival_results_per_split, save_string, 'test', config)
     elif task == 'regression':
         if 'residuals' in config['experiment']['visualization']:
             plot_residuals_across_folds(val_results_per_split, save_string, 'val', config)
-            plot_residuals_across_folds(test_results_per_split, save_string, 'test', config)
         if 'predicted_vs_actual' in config['experiment']['visualization']:
             plot_predicted_vs_actual_across_folds(val_results_per_split, save_string, 'val', config)
-            plot_predicted_vs_actual_across_folds(test_results_per_split, save_string, 'test', config)
         if 'qq' in config['experiment']['visualization']:
             plot_qq_across_folds(val_results_per_split, save_string, 'val', config)
-            plot_qq_across_folds(test_results_per_split, save_string, 'test', config)
     elif task == 'classification':
         if 'roc_curve' in config['experiment']['visualization']:
             plot_roc_curve_across_splits(val_results_per_split, save_string, "val", config)
-            plot_roc_curve_across_splits(test_results_per_split, save_string, "test", config)
         if 'precision_recall_curve' in config['experiment']['visualization']:
             plot_precision_recall_across_splits(val_pr_per_split, save_string, "val", config)
-            plot_precision_recall_across_splits(test_pr_per_split, save_string, "test", config)
+
+    if test_results_per_split != {}:
+        for ds_name, splits in test_results_per_split.items():
+            if task == 'classification':
+                if 'roc_curve' in config['experiment']['visualization']:
+                    plot_roc_curve_across_splits(splits, save_string, f"test_{ds_name}", config)
+                if 'precision_recall_curve' in config['experiment']['visualization']:
+                    plot_precision_recall_across_splits(test_pr_per_split[ds_name], save_string, f"test_{ds_name}", config)
+            elif task == 'regression':
+                if 'residuals' in config['experiment']['visualization']:
+                    plot_residuals_across_folds(splits, save_string, f"test_{ds_name}", config)
+                if 'predicted_vs_actual' in config['experiment']['visualization']:
+                    plot_predicted_vs_actual_across_folds(splits, save_string, f"test_{ds_name}", config)
+                if 'qq' in config['experiment']['visualization']:
+                    plot_qq_across_folds(splits, save_string, f"test_{ds_name}", config)
+            elif task in ['survival', 'survival_discrete']:
+                if 'survival_roc' in config['experiment']['visualization']:
+                    plot_survival_auc_across_folds(survival_results_per_split['ds_name'], save_string, f"test_{ds_name}", config)
+                if 'concordance_index' in config['experiment']['visualization']:
+                    plot_concordance_index_across_folds(survival_results_per_split['ds_name'], save_string, f"test_{ds_name}", config)
+                if 'kaplan_meier' in config['experiment']['visualization']:
+                    plot_kaplan_meier_curves_across_folds(survival_results_per_split['ds_name'], save_string, f"test_{ds_name}", config)
+        logging.info(f"Plots saved to experiments/{config['experiment']['project_name']}/visualizations/benchmarking/{save_string}.png")
 
 
 # =============================================================================
@@ -1471,8 +1504,8 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
         logging.info(f"Starting trial {trial.number}...")
         # Sample hyperparameters
 
-        #Get the dict of additional search parameters e.g. {'epochs' : [10, 50]}
-        additional_hyperparameters = config['optimization']['search_parameters']
+        #Get the dict of additional search parameters in format hp: range e.g. {'epochs' : [10, 50]}
+        additional_hyperparameters = config['optimization']['search_parameters'] if 'search_parameters' in config['optimization'] else {}
         if 'epochs' in additional_hyperparameters:
             epochs = trial.suggest_int('epochs', additional_hyperparameters['epochs'][0], additional_hyperparameters['epochs'][1])
         else:
@@ -1572,9 +1605,12 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
         os.makedirs(f"experiments/{config['experiment']['project_name']}/visualizations", exist_ok=True)
 
         index = 1
-        val_results_per_split, test_results_per_split = [], []
-        val_pr_per_split, test_pr_per_split = [], []
-        survival_results_per_split, test_survival_results_per_split = [], []
+        val_results_per_split = []
+        val_pr_per_split = []
+        survival_results_per_split = []
+        test_results_per_split = {ds['name']: [] for ds in test_datasets}
+        test_pr_per_split = {ds['name']: [] for ds in test_datasets}
+        test_survival_results_per_split = {ds['name']: [] for ds in test_datasets}
         logging.info("Starting training for each split...")
         for train, val in splits:
             logging.info(f"Trial {trial.number} - Split {index} started...")
@@ -1619,43 +1655,117 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
             val_dict.update(metrics)
             val_df = val_df.append(val_dict, ignore_index=True)
 
-            # Evaluate the model on the test set
-            test_result = eval_mil(
-                weights=f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}",
-                outcomes=target,
-                dataset=test_set,
-                bags=bags,
-                config=mil_conf,
-                outdir=f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}",
-                **model_kwargs
-            )
 
+            if test_datasets:
+                test_metrics = []
+                # If test datasets are provided, evaluate on the test set
+                for test_dataset in test_datasets:
+                    logging.info(f"Evaluating on test set {test_dataset['name']}...")
 
-            model_string = get_model_string(combination_dict, feature_extraction)
-            test_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}/00000-{model_string}/predictions.parquet")
-            
-            def get_test_metrics():
-                if task in ['survival', 'survival_discrete']:
-                    metrics, durations, events, predictions = calculate_survival_results(test_result)
-                    test_survival_results_per_split.append((durations, events, predictions))
-                elif task == 'regression':
-                    metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
-                    y_true, y_pred = test_result['y_true'], test_result['y_pred0']
-                    test_results_per_split.append((y_true, y_pred))
+                    test_set = all_data.filter(filters={'dataset': [test_dataset['name']]})
+
+                    outdir = (
+                    f"{project_directory}/optimization/"
+                    f"trial_{trial.number}_"
+                    f"{test_dataset['name']}"
+                    )
+
+                    test_result = eval_mil(
+                        weights=f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}",
+                        outcomes=target,
+                        dataset=test_set,
+                        bags=bags,
+                        config=mil_conf,
+                        outdir=f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}",
+                        **model_kwargs
+                    )
+
+                    model_string = get_model_string(combination_dict, feature_extraction)
+                    test_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}/00000-{model_string}/predictions.parquet")
+
+                    def get_test_metrics():
+                        if task in ['survival', 'survival_discrete']:
+                            metrics, durations, events, predictions = calculate_survival_results(test_result)
+                            test_survival_results_per_split[test_dataset['name']].append((durations, events, predictions))
+                        elif task == 'regression':
+                            metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
+                            y_true, y_pred = test_result['y_true'], test_result['y_pred0']
+                            test_results_per_split[test_dataset['name']].append((y_true, y_pred))
+                        else:
+                            metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
+                            test_results_per_split[test_dataset['name']].append([tpr, fpr])
+                            test_pr_per_split[test_dataset['name']].extend(test_pr_curves)
+
+                        return metrics
+
+                    metrics = get_test_metrics()
+
+                    test_dict = combination_dict.copy()
+                    test_dict.update(metrics)
+                    test_dict['weights'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}"
+                    test_dict['mil_params'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/mil_params.json"
+                    test_dict['bag_dir'] = bags
+                    test_dict['test_dataset'] = test_dataset['name']
+                    
+                    # Optionally add the tfrecord directory (depending on your config)
+                    if 'x' in str(combination_dict['tile_um']):
+                        test_dict['tfrecord_dir'] = f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}"
+                    else:
+                        test_dict['tfrecord_dir'] = f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}um"
+                    
+                    # Append this test result to the overall test results DataFrame
+                    test_df = test_df.append(test_dict, ignore_index=True)
+            else:
+                # If no test datasets are provided, use the validation set as the test set
+                logging.warning("No test datasets provided. Using validation set as test set.")
+                test_set = val
+                # Use the same model weights for evaluation
+                test_result = eval_mil(
+                    weights=f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}",
+                    outcomes=target,
+                    dataset=test_set,
+                    bags=bags,
+                    config=mil_conf,
+                    outdir=f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}",
+                    **model_kwargs
+                )
+
+                model_string = get_model_string(combination_dict, feature_extraction)
+                test_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}/00000-{model_string}/predictions.parquet")
+                
+                def get_test_metrics():
+                    if task in ['survival', 'survival_discrete']:
+                        metrics, durations, events, predictions = calculate_survival_results(test_result)
+                        test_survival_results_per_split[test_dataset['name']].append((durations, events, predictions))
+                    elif task == 'regression':
+                        metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
+                        y_true, y_pred = test_result['y_true'], test_result['y_pred0']
+                        test_results_per_split[test_dataset['name']].append((y_true, y_pred))
+                    else:
+                        metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
+                        test_results_per_split[test_dataset['name']].append([tpr, fpr])
+                        test_pr_per_split[test_dataset['name']].extend(test_pr_curves)
+
+                    return metrics
+
+                    metrics = get_test_metrics()
+
+                test_dict = combination_dict.copy()
+                test_dict.update(metrics)
+                test_dict['weights'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}"
+                test_dict['mil_params'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/mil_params.json"
+                test_dict['bag_dir'] = bags
+                test_dict['test_dataset'] = 'validation'
+                
+                # Optionally add the tfrecord directory (depending on your config)
+                if 'x' in str(combination_dict['tile_um']):
+                    test_dict['tfrecord_dir'] = f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}"
                 else:
-                    metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
-                    test_results_per_split.append([tpr, fpr])
-                    test_pr_per_split.extend(test_pr_curves)
+                    test_dict['tfrecord_dir'] = f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}um"
+                
+                # Append this test result to the overall test results DataFrame
+                test_df = test_df.append(test_dict, ignore_index=True)
 
-                return metrics
-
-            metrics = get_test_metrics()
-            test_dict = combination_dict.copy()
-            test_dict.update(metrics)
-            test_dict['weights'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}"
-            test_dict['mil_params'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/mil_params.json"
-            test_dict['bag_dir'] = bags
-            test_df = test_df.append(test_dict, ignore_index=True)
             logging.info(f"Trial {trial.number} - Split {index} completed.")
             index += 1
 
@@ -1663,26 +1773,44 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
                            val_results_per_split, test_results_per_split, val_pr_per_split, test_pr_per_split,
                            save_string)
 
+        # Specify which results to use for the objective metric
+        if config['optimization']['objective_dataset'] == 'val':
+            measure_df = val_df
+        elif config['optimization']['objective_dataset'] == 'test':
+            measure_df = test_df
+        
+        if config['optimization']['objective_dataset'] == "test":
+            #Aggregate test metrics across datasets
+            per_dataset_means = []
+            for ds in test_datasets:
+                ds_name = ds['name']
+                # select only rows for this dataset
+                ds_rows = test_df[test_df['test_dataset'] == ds_name]
+                if len(ds_rows):
+                    per_dataset_means.append(ds_rows[objective_metric].mean())
+                else:
+                    logging.warning(f"No results for dataset {ds_name}, skipping.")
+            if not per_dataset_means:
+                raise RuntimeError("No test results to aggregate for Optuna objective!")
+            # Final aggregate: mean across dataset‐means
+            aggregated_score = float(np.mean(per_dataset_means))
+
+        elif config['optimization']['objective_dataset'] == "val":
+            aggregated_score = float(measure_df[objective_metric].mean())
+
         # Report progress to the trial
         if config['optimization'].get('pruner'):
-            trial.report(np.mean(test_df[objective_metric]), index)
+            trial.report(aggregated_score, index)
             if trial.should_prune():
                 raise optuna.TrialPruned()
 
-        # Save results (optional) and return the chosen objective metric
-        if config['optimization']['objective_dataset'] == 'test':
-            measure_df = test_df
-        elif config['optimization']['objective_dataset'] == 'val':
-            measure_df = val_df
-        else:
-            raise ValueError("Objective dataset must be 'test' or 'val'.")
         # Save the weights directory for this trial as a user attribute for later retrieval
         trial.set_user_attr("weights_path", test_dict['weights'])
         #Save the model configuration as well
         trial.set_user_attr("mil_params", mil_conf.json_dump())
 
-        logging.info(f"Trial {trial.number} completed with {objective_metric}: {np.mean(measure_df[objective_metric])}")
-        return np.mean(measure_df[objective_metric])
+        logging.info(f"Trial {trial.number} completed with {objective_metric}: {aggregated_score} on {config['optimization']['objective_dataset']} set.")
+        return aggregated_score
 
     # Create optimization directory and study storage
     opt_dir = f"{project_directory}/optimization"
