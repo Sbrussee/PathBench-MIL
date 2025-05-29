@@ -19,7 +19,12 @@ experiment:
   mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
   custom_metrics: [ConcordanceIndex] # Custom metrics to be used, needs to be defined in metrics.py or as a fastai-metric: https://docs.fast.ai/metrics.html
   report: False # Whether to generate a tile extraction report
-  feature_extraction_only: False
+  skip_extracted: True # Whether to skip the tile extraction step if tiles already exist
+  skip_feature_extraction: True # Whether to skip the feature extraction step if features already exist
+  save_tiles: False # Whether to save the extracted tile images as .jpg files in addition to the .tfrecords
+  mixed_precision: True # Whether to use mixed precision feature extraction
+  save_heatmaps_test: True # Whether to save heatmaps for test slides
+  save_heatmaps_val: False # Whether to save heatmaps for validation slides
   
   qc: # List of quality control methods to be used
     - GaussianV2
@@ -69,13 +74,13 @@ benchmark_parameters:
     - resnet50_imagenet
 
   mil: # MIL models, as specified in aggregators.py
-    - clam_mil
     - dsmil
     - varmil
     - attention_mil
 
   loss: # Loss functions, as specified in losses.py
-    - CrossEntropyLoss
+    - CoxPHLoss
+    - ExponentialConcordanceLoss
 
   activation_function: # activation function for the MIL encoder, supports any pytorch.nn activation function.
     - ReLU
@@ -83,5 +88,5 @@ benchmark_parameters:
   optimizer: # Optimizers, can be any fastai optimizer (Default: Adam)
     - Adam
   
-weights_dir: ./pretrained_weights # Path to pretrained weights and/or where to save retrieved weights, defaults to the pretrained_weights directory in the PathDev repository
+weights_dir: ../../pretrained_weights # Path to pretrained weights and/or where to save retrieved weights, defaults to the pretrained_weights directory in the PathDev repository
 hf_key: YOUR_HUGGINGFACE_TOKEN # Token for Hugging Face model hub to access gated models, if you do not have one, just set to None

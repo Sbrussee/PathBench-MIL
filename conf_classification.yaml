@@ -19,7 +19,12 @@ experiment:
   mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
   custom_metrics: [RocAuc] # Custom metrics to be used, needs to be defined in metrics.py or as a fastai-metric: https://docs.fast.ai/metrics.html
   report: False # Whether to generate a tile extraction report
-  feature_extraction_only: False
+  skip_extracted: True # Whether to skip the tile extraction step if tiles already exist
+  skip_feature_extraction: True # Whether to skip the feature extraction step if features already exist
+  save_tiles: False # Whether to save the extracted tile images as .jpg files in addition to the .tfrecords
+  mixed_precision: True # Whether to use mixed precision feature extraction
+  save_heatmaps_test: True # Whether to save heatmaps for test slides
+  save_heatmaps_val: False # Whether to save heatmaps for validation slides
   
   qc: # List of quality control methods to be used
     - GaussianV2

@@ -12,6 +12,7 @@ Authors:
 """
 import importlib
 import os
+import datetime
 import sys
 import gc
 import json
@@ -374,7 +375,7 @@ def benchmark(config : dict, project : sf.Project):
 
             #Extract tiles with QC for all datasets
             all_data.extract_tiles(enable_downsample=True,
-                                    save_tiles=False,
+                                    save_tiles=config['experiment']['save_tiles'] if 'save_tiles' in config['experiment'] else False,
                                     qc=qc_list,
                                     grayspace_fraction = float(qc_filters['grayspace_fraction']),
                                     whitespace_fraction = float(qc_filters['whitespace_fraction']),
@@ -440,6 +441,7 @@ def benchmark(config : dict, project : sf.Project):
                     val_dataset=val,
                     bags=bags,
                     exp_label=f"{save_string}_{index}",
+                    attention_heatmaps=config['experiment']['save_heatmaps_val'] if 'attention_heatmaps_val' in config['experiment'] else False,
                     **model_kwargs)
                 
 
@@ -582,28 +584,9 @@ def benchmark(config : dict, project : sf.Project):
 def plot_benchmarking_output(config: dict, val_df: pd.DataFrame, test_df: pd.DataFrame):
     """
     Plot boxplots of each evaluation metric for each parameter combination using
-    the unaggregated val_df and test_df.
-
-    For the validation set, one boxplot is generated per metric,
-    grouping by the parameter combination.
-
-    For the test set, separate boxplots are generated for each unique test_dataset
-    (as defined by the "test_dataset" column). The parameter combinations are used
-    to group the metric values.
-
-    A timestamp in the format "YYYY-MM-DD_HH-MM-SS" is appended to each filename.
-
-    Args:
-        config (dict): Configuration dictionary containing:
-                       - 'benchmark_parameters': dict of parameter lists.
-                       - 'experiment': dict with at least the keys 'evaluation' and 'project_name'.
-        val_df (pd.DataFrame): Unaggregated validation results.
-        test_df (pd.DataFrame): Unaggregated test results.
+    the unaggregated val_df and test_df, with shortened labels, dynamic sizing,
+    sorted by mean, and unique colors.
     """
-    import os
-    import matplotlib.pyplot as plt
-    import datetime
-
     # Create a timestamp string for filenames
     current_date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
@@ -611,60 +594,92 @@ def plot_benchmarking_output(config: dict, val_df: pd.DataFrame, test_df: pd.Dat
     output_dir = f"experiments/{config['experiment']['project_name']}/visualizations/benchmarking"
     os.makedirs(output_dir, exist_ok=True)
 
-    # --- Process Validation DataFrame ---
-    # Identify the parameter columns from the benchmark_parameters config
+    # Identify all parameter keys
     param_keys = list(config['benchmark_parameters'].keys())
 
-    # Work on a copy so as not to modify the original DataFrame
-    val_df = val_df.copy()
-    # Create a unique identifier for each combination by joining the parameter values
-    val_df['combination'] = val_df[param_keys].astype(str).agg('_'.join, axis=1)
+    # Determine which parameters vary across all runs (val + test)
+    combined = pd.concat([val_df[param_keys], test_df[param_keys]], ignore_index=True)
+    varying_params = [k for k in param_keys if combined[k].nunique() > 1]
+    if not varying_params:
+        varying_params = param_keys
 
-    # Get the list of evaluation metrics to plot (if not provided, default to empty list)
+    # Function to build short labels from varying params
+    def make_labels(df):
+        return df[varying_params].astype(str).agg('_'.join, axis=1)
+
+    # Get evaluation metrics
     metrics = config['experiment'].get('evaluation', [])
 
-    # Loop over each metric for the validation dataframe
+    # --- Validation Plots ---
+    val_df_proc = val_df.copy()
+    val_df_proc['combination'] = make_labels(val_df_proc)
+
     for metric in metrics:
-        if metric not in val_df.columns:
-            continue  # Skip if the metric column is not present
+        if metric not in val_df_proc.columns:
+            continue
 
-        plt.figure(figsize=(10, 6))
-        # Group by the combination identifier
-        grouped = val_df.groupby('combination')[metric].apply(list)
-        data = grouped.tolist()
+        # Prepare grouped data
+        grouped = val_df_proc.groupby('combination')[metric].apply(list)
         labels = grouped.index.tolist()
+        data = grouped.tolist()
 
-        plt.boxplot(data, labels=labels, showfliers=True)
+        # Sort by mean
+        means = [np.mean(d) for d in data]
+        order = np.argsort(means)
+        sorted_data = [data[i] for i in order]
+        sorted_labels = [labels[i] for i in order]
+
+        # Dynamic figure size based on number of boxes
+        fig_width = max(10, len(sorted_labels) * 0.5)
+        plt.figure(figsize=(fig_width, 6))
+
+        # Create boxplot with unique colors
+        box = plt.boxplot(sorted_data, labels=sorted_labels, patch_artist=True, showfliers=True)
+        cmap = plt.get_cmap('tab20')
+        colors = cmap.colors if hasattr(cmap, 'colors') else [cmap(i) for i in range(len(sorted_labels))]
+        for patch, color in zip(box['boxes'], colors):
+            patch.set_facecolor(color)
+
         plt.xticks(rotation=45, ha='right')
-        plt.title(f"Validation {metric} Distribution by Parameter Combination")
+        plt.subplots_adjust(bottom=0.3)
+        plt.title(f"Validation {metric} by Parameter Combination")
         plt.xlabel("Parameter Combination")
         plt.ylabel(metric)
         plt.tight_layout()
         plt.savefig(f"{output_dir}/val_{metric}_boxplot_{current_date}.png")
         plt.close()
 
-    # --- Process Test DataFrame ---
-    # Work on a copy of test_df
-    test_df = test_df.copy()
-    # Create the 'combination' identifier as before
-    test_df['combination'] = test_df[param_keys].astype(str).agg('_'.join, axis=1)
+    # --- Test Plots ---
+    test_df_proc = test_df.copy()
+    test_df_proc['combination'] = make_labels(test_df_proc)
 
-    # Loop over each unique test dataset so that each gets its own plots
-    unique_datasets = test_df['test_dataset'].unique()
-    for ds in unique_datasets:
-        ds_subset = test_df[test_df['test_dataset'] == ds]
+    for ds in test_df_proc['test_dataset'].unique():
+        subset = test_df_proc[test_df_proc['test_dataset'] == ds]
         for metric in metrics:
-            if metric not in ds_subset.columns:
+            if metric not in subset.columns:
                 continue
 
-            plt.figure(figsize=(10, 6))
-            grouped = ds_subset.groupby('combination')[metric].apply(list)
-            data = grouped.tolist()
+            grouped = subset.groupby('combination')[metric].apply(list)
             labels = grouped.index.tolist()
+            data = grouped.tolist()
 
-            plt.boxplot(data, labels=labels, showfliers=True)
+            means = [np.mean(d) for d in data]
+            order = np.argsort(means)
+            sorted_data = [data[i] for i in order]
+            sorted_labels = [labels[i] for i in order]
+
+            fig_width = max(10, len(sorted_labels) * 0.5)
+            plt.figure(figsize=(fig_width, 6))
+
+            box = plt.boxplot(sorted_data, labels=sorted_labels, patch_artist=True, showfliers=True)
+            cmap = plt.get_cmap('tab20')
+            colors = cmap.colors if hasattr(cmap, 'colors') else [cmap(i) for i in range(len(sorted_labels))]
+            for patch, color in zip(box['boxes'], colors):
+                patch.set_facecolor(color)
+
             plt.xticks(rotation=45, ha='right')
-            plt.title(f"Test ({ds}) {metric} Distribution by Parameter Combination")
+            plt.subplots_adjust(bottom=0.3)
+            plt.title(f"Test ({ds}) {metric} by Parameter Combination")
             plt.xlabel("Parameter Combination")
             plt.ylabel(metric)
             plt.tight_layout()
@@ -832,6 +847,9 @@ def split_datasets(config: dict, project: sf.Project, splits_file: str, target: 
         target = None
         model_type = 'linear'
 
+
+    logging.info(f"Splitting dataset using {config['experiment']['split_technique']} with target: {target}")
+    logging.debug(f"Splits file: {splits_file}")
     if config['experiment']['split_technique'] == 'k-fold' or config['experiment']['split_technique'] == 'k-fold-stratified':
         k = config['experiment']['k']
 
@@ -1707,12 +1725,6 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
                     test_dict['bag_dir'] = bags
                     test_dict['test_dataset'] = test_dataset['name']
                     
-                    # Optionally add the tfrecord directory (depending on your config)
-                    if 'x' in str(combination_dict['tile_um']):
-                        test_dict['tfrecord_dir'] = f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}"
-                    else:
-                        test_dict['tfrecord_dir'] = f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}um"
-                    
                     # Append this test result to the overall test results DataFrame
                     test_df = test_df.append(test_dict, ignore_index=True)
             else:
@@ -1756,12 +1768,6 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
                 test_dict['mil_params'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/mil_params.json"
                 test_dict['bag_dir'] = bags
                 test_dict['test_dataset'] = 'validation'
-                
-                # Optionally add the tfrecord directory (depending on your config)
-                if 'x' in str(combination_dict['tile_um']):
-                    test_dict['tfrecord_dir'] = f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}"
-                else:
-                    test_dict['tfrecord_dir'] = f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}um"
                 
                 # Append this test result to the overall test results DataFrame
                 test_df = test_df.append(test_dict, ignore_index=True)
