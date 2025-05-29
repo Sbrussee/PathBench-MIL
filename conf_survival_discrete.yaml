@@ -75,7 +75,8 @@ benchmark_parameters:
     - attention_mil
 
   loss: # Loss functions, as specified in losses.py
-    - CrossEntropyLoss
+    - BCESurvLoss
+    - NLLLogisticHazardLoss
 
   activation_function: # activation function for the MIL encoder, supports any pytorch.nn activation function.
     - ReLU

@@ -178,11 +178,9 @@ class Experiment():
                 name=source['name'],
                 slides=resolve_path(source.get('slide_path')),
                 tfrecords=resolve_path(source.get('tfrecord_path')),
-                tiles=resolve_path(source.get('tile_path'))
+                tiles=resolve_path(source.get('tile_path')) if self.config['experiment'].get('save_tiles', None) else None,
             )
             logging.info(f"Added source '{source['name']}' to project '{self.project_name}'")
-            logging.debug(f"Slides: {resolve_path(source.get('slide_path'))}, Tiles: {resolve_path(source.get('tile_path'))}, TFRecords: {resolve_path(source.get('tfrecord_path'))}"
-            )
 
         
     def benchmark(self):

@@ -670,7 +670,7 @@ def plot_kaplan_meier_curves_across_folds(results_per_split, save_string, datase
 
     # Annotate the log-rank p-value.
     p_text = f"p = {p_value:.3g}" if p_value >= 0.001 else "p < 0.001"
-    plt.text(0.95, 0.85, p_text,
+    plt.text(0.95, 0.80, p_text,
              transform=plt.gca().transAxes,
              ha='right', va='top',
              bbox=dict(facecolor='white', alpha=0.5))
