@@ -929,13 +929,13 @@ def generate_bags(config: dict, project: sf.Project, all_data: sf.Dataset,
                                             outdir=bags_dir,
                                             mixed_precision=config['experiment']['mixed_precision'],
                                             num_gpus=num_gpus,
-                                            force_regenerate=config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else False)
+                                            force_regenerate=not config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else True)
     else:
         bags = project.generate_feature_bags(model=feature_extractor, dataset=all_data,
                                             normalizer=combination_dict['normalization'],
                                             outdir=bags_dir,
                                             num_gpus=num_gpus,
-                                            force_regenerate=config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else False)
+                                            force_regenerate=not config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else True)
     return bags
 
 
