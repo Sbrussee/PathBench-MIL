@@ -373,18 +373,29 @@ def benchmark(config : dict, project : sf.Project):
 
             logging.info(f"QC methods: {qc_list}")
 
+            # NOTE(pvalkema): if num_workers is 0 or 1 and this value is used for num_threads, an error occurs during tile extraction.
+            # TODO: We need to either fix the bug in extract_tiles or decide to keep the workaround below
+            tile_extraction_num_threads = config['experiment']['num_workers'] if 'num_workers' in config['experiment'] else 4
+            if tile_extraction_num_threads <= 1:
+                tile_extraction_num_threads = 4
+
             #Extract tiles with QC for all datasets
-            all_data.extract_tiles(enable_downsample=True,
-                                    save_tiles=config['experiment']['save_tiles'] if 'save_tiles' in config['experiment'] else False,
-                                    qc=qc_list,
-                                    grayspace_fraction = float(qc_filters['grayspace_fraction']),
-                                    whitespace_fraction = float(qc_filters['whitespace_fraction']),
-                                    grayspace_threshold = float(qc_filters['grayspace_threshold']),
-                                    whitespace_threshold = int(qc_filters['whitespace_threshold']),
-                                    num_threads = config['experiment']['num_workers'] if 'num_workers' in config['experiment'] else 1,
-                                    report=config['experiment']['report'] if 'report' in config['experiment'] else False,
-                                    skip_extracted=config['experiment']['skip_extracted'] if 'skip_extracted' in config['experiment'] else True,
-            )
+            try:
+                all_data.extract_tiles(enable_downsample=True,
+                                        save_tiles=config['experiment']['save_tiles'] if 'save_tiles' in config['experiment'] else False,
+                                        qc=qc_list,
+                                        grayspace_fraction = float(qc_filters['grayspace_fraction']),
+                                        whitespace_fraction = float(qc_filters['whitespace_fraction']),
+                                        grayspace_threshold = float(qc_filters['grayspace_threshold']),
+                                        whitespace_threshold = int(qc_filters['whitespace_threshold']),
+                                        num_threads = tile_extraction_num_threads,
+                                        report=config['experiment']['report'] if 'report' in config['experiment'] else False,
+                                        skip_extracted=config['experiment']['skip_extracted'] if 'skip_extracted' in config['experiment'] else True,
+                )
+            except Exception as e:
+                logging.error(f"tile extraction failed: {e}")
+                sys.exit()
+
             train_datasets, test_datasets = configure_datasets(config)
 
             train_set, test_set = split_train_test(config, all_data, task)
@@ -865,10 +876,10 @@ def split_datasets(config: dict, project: sf.Project, splits_file: str, target: 
         else:
             if 'stratified' in config['experiment']['split_technique']:
                 splits = train_set.kfold_split(k=k, labels=target, splits=splits_file, preserved_site=True, site_labels=dataset_mapping)
-                logging.info(f"Stratified K-fold splits written to {project_directory}/kfold_stratified_{splits}")
+                logging.info(f"Stratified K-fold splits written to {splits_file}")
             else:
                 splits = train_set.kfold_split(k=k, labels=target, splits=splits_file)
-                logging.info(f"K-fold splits written to {project_directory}/kfold_{splits}")
+                logging.info(f"K-fold splits written to {splits_file}")
     else:
         if os.path.exists(f"{project_directory}/fixed_{splits_file}"):
             train, val = train_set.split(labels=target, model_type=model_type,
@@ -918,13 +929,13 @@ def generate_bags(config: dict, project: sf.Project, all_data: sf.Dataset,
                                             outdir=bags_dir,
                                             mixed_precision=config['experiment']['mixed_precision'],
                                             num_gpus=num_gpus,
-                                            force_regenerate=config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else False)
+                                            force_regenerate=not config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else True)
     else:
         bags = project.generate_feature_bags(model=feature_extractor, dataset=all_data,
                                             normalizer=combination_dict['normalization'],
                                             outdir=bags_dir,
                                             num_gpus=num_gpus,
-                                            force_regenerate=config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else False)
+                                            force_regenerate=not config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else True)
     return bags
 
 
