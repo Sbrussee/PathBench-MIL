@@ -876,10 +876,10 @@ def split_datasets(config: dict, project: sf.Project, splits_file: str, target: 
         else:
             if 'stratified' in config['experiment']['split_technique']:
                 splits = train_set.kfold_split(k=k, labels=target, splits=splits_file, preserved_site=True, site_labels=dataset_mapping)
-                logging.info(f"Stratified K-fold splits written to {project_directory}/kfold_stratified_{splits}")
+                logging.info(f"Stratified K-fold splits written to {splits_file}")
             else:
                 splits = train_set.kfold_split(k=k, labels=target, splits=splits_file)
-                logging.info(f"K-fold splits written to {project_directory}/kfold_{splits}")
+                logging.info(f"K-fold splits written to {splits_file}")
     else:
         if os.path.exists(f"{project_directory}/fixed_{splits_file}"):
             train, val = train_set.split(labels=target, model_type=model_type,
