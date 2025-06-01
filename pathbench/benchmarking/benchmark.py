@@ -394,6 +394,7 @@ def benchmark(config : dict, project : sf.Project):
                 )
             except Exception as e:
                 logging.error(f"tile extraction failed: {e}")
+                traceback.print_exc()
                 sys.exit()
 
             train_datasets, test_datasets = configure_datasets(config)
@@ -823,8 +824,8 @@ def balance_dataset(dataset: sf.Dataset, task: str, config: dict) -> sf.Dataset:
         return dataset
 
     logging.info(f"Balancing dataset on {headers} using '{config['experiment']['balancing']}' strategy.")
-    dataset.balance(headers=headers, strategy=config['experiment']['balancing'], force=True)
-    return dataset
+    dataset_with_balancing_info = dataset.balance(headers=headers, strategy=config['experiment']['balancing'], force=True)
+    return dataset_with_balancing_info
 
 
 def split_datasets(config: dict, project: sf.Project, splits_file: str, target: str,
