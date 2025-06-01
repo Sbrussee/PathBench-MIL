@@ -136,7 +136,7 @@ def extract_features(config : dict, project : sf.Project):
             logging.info("Feature extraction...")
             bags = generate_bags(config, project, all_data, combination_dict, string_without_mil, feature_extractor)
             logging.info(f"Feature extraction for combination {combination} finished...")
-        except:
+        except Exception as e:
             logging.warning(f"Combination {combination} was not succesfully trained due to Error {e}")
             logging.warning(traceback.format_exc())
         
@@ -358,6 +358,8 @@ def benchmark(config : dict, project : sf.Project):
 
         logging.info(f"Running combination: {combination_dict}")
 
+        save_string, string_without_mil = get_save_strings(combination_dict)
+
         try:
             target = determine_target_variable(task, config)
             logging.info(f"Target variable: {target}")
@@ -404,7 +406,6 @@ def benchmark(config : dict, project : sf.Project):
             logging.info("Splitting datasets...")
             splits = split_datasets(config, project, splits_file, target, project_directory, train_set, dataset_mapping)
 
-            save_string, string_without_mil = get_save_strings(combination_dict)
             #Run with current parameters
             
             logging.info("Feature extraction...")
@@ -549,8 +550,8 @@ def benchmark(config : dict, project : sf.Project):
                         # Append this test result to the overall test results DataFrame
                         test_df = test_df.append(test_dict, ignore_index=True)
             
-            else:
-                logging.info("No test datasets found in the configuration. Skipping test evaluation.")
+                else:
+                    logging.info("No test datasets found in the configuration. Skipping test evaluation.")
 
             # Visualize the top 5 tiles, if applicable
             #Check if model supports attention
