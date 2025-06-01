@@ -484,7 +484,7 @@ def benchmark(config : dict, project : sf.Project):
                 val_df = val_df.append(val_dict, ignore_index=True)
 
                 #Loop through the test datasets
-                if test_dataset:
+                if test_datasets:
                     for test_dataset in test_datasets:
                         logging.info(f"Evaluating on test dataset: {test_dataset['name']}")
                         #Only select the test set at hand
@@ -617,6 +617,8 @@ def plot_benchmarking_output(config: dict, val_df: pd.DataFrame, test_df: pd.Dat
 
     # Function to build short labels from varying params
     def make_labels(df):
+        if df.empty:
+            return pd.Series([], dtype=str, index=df.index)
         return df[varying_params].astype(str).agg('_'.join, axis=1)
 
     # Get evaluation metrics
