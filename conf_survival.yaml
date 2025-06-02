@@ -1,7 +1,7 @@
 experiment:
   project_name: Exp1 # Name of the project
   annotation_file: /path/to/your/annotations # Path to the annotation file
-  balancing: event # Balancing can be 'tile', 'slide', 'patient' or 'category'
+  balancing: category # Balancing can be 'tile', 'slide', 'patient' or 'category'
   class_weighting: False # Whether to use class weighting for imbalanced datasets  
   split_technique: k-fold # Split technique can be 'k-fold' or 'fixed' or 'k_fold_site_preserved'
   k: 3 # Number of folds for k-fold cross-validation
