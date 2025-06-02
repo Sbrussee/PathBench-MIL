@@ -15,8 +15,8 @@ One can use PathBench for binary classification, multiclass classification, regr
 The output of benchmarking experiments can be loaded into a plotly-based visualization app for further investigation. We also provide a pipeline which calculates the semantic feature similarity between feature bags which can then be used to build model ensembles.
 
 PathBench is being developed at the Leiden University Medical Center: Department of Pathology.
-- Lead Developer: Siemen Brussee
-- Developers:
+- Lead Developers: Siemen Brussee, Pieter Valkema
+
 
 ## 📖 Citation
 
