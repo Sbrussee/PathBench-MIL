@@ -148,11 +148,12 @@ class linear_mil(nn.Module):
         else:
             raise ValueError(f"Unsupported goal: {goal}")
         self.goal = goal
+        self.act_name = activation_function
         self._initialize_weights()
 
     def _initialize_weights(self):
         """Initialize weights using the helper function."""
-        initialize_weights(self, self.goal)
+        initialize_weights(self, self.act_name)
 
     def forward(self, bags: torch.Tensor) -> torch.Tensor:
         """
@@ -222,11 +223,13 @@ class mean_mil(nn.Module):
         else:
             raise ValueError(f"Unsupported goal: {goal}")
         self.goal = goal
+        self.act_name = activation_function
         self._initialize_weights()
+
 
     def _initialize_weights(self):
         """Initialize model weights."""
-        initialize_weights(self, self.goal)
+        initialize_weights(self, self.act_name)
 
     def forward(self, bags: torch.Tensor) -> torch.Tensor:
         """
@@ -291,11 +294,12 @@ class max_mil(nn.Module):
         else:
             raise ValueError(f"Unsupported goal: {goal}")
         self.goal = goal
+        self.act_name = activation_function
         self._initialize_weights()
 
     def _initialize_weights(self):
         """Initialize model weights."""
-        initialize_weights(self, self.goal)
+        initialize_weights(self, self.act_name)
 
     def forward(self, bags: torch.Tensor) -> torch.Tensor:
         """
@@ -363,11 +367,12 @@ class lse_mil(nn.Module):
             raise ValueError(f"Unsupported goal: {goal}")
         self.r = r
         self.goal = goal
+        self.act_name = activation_function
         self._initialize_weights()
 
     def _initialize_weights(self):
         """Initialize model weights."""
-        initialize_weights(self, self.goal)
+        initialize_weights(self, self.act_name)
 
     def forward(self, bags: torch.Tensor) -> torch.Tensor:
         """
@@ -436,11 +441,12 @@ class lstm_mil(nn.Module):
         else:
             raise ValueError(f"Unsupported goal: {goal}")
         self.goal = goal
+        self.act_name = activation_function
         self._initialize_weights()
 
     def _initialize_weights(self):
         """Initialize weights for lstm_mil."""
-        initialize_weights(self, self.goal)
+        initialize_weights(self, self.act_name)
 
     def forward(self, bags: torch.Tensor, lens: torch.Tensor) -> torch.Tensor:
         """
@@ -517,11 +523,12 @@ class deepset_mil(nn.Module):
         else:
             raise ValueError(f"Unsupported goal: {goal}")
         self.goal = goal
+        self.act_name = activation_function
         self._initialize_weights()
 
     def _initialize_weights(self):
         """Initialize weights for deepset_mil."""
-        initialize_weights(self, self.goal)
+        initialize_weights(self, self.act_name)
 
     def forward(self, bags: torch.Tensor) -> torch.Tensor:
         """
@@ -542,9 +549,9 @@ class deepset_mil(nn.Module):
         return scores
 
 
-class distributionpooling_mil(nn.Module):
+class distribution_mil(nn.Module):
     """
-    distributionpooling_mil (Distribution Pooling MIL Model)
+    distribution_mil (Distribution-based MIL Model)
 
     This model aggregates instance embeddings by computing both the mean and variance
     across instances. These statistics are concatenated and passed through a final head.
@@ -586,15 +593,16 @@ class distributionpooling_mil(nn.Module):
         else:
             raise ValueError(f"Unsupported goal: {goal}")
         self.goal = goal
+        self.act_name = activation_function
         self._initialize_weights()
 
     def _initialize_weights(self):
-        """Initialize weights for distributionpooling_mil."""
-        initialize_weights(self, self.goal)
+        """Initialize weights for distribution_mil."""
+        initialize_weights(self, self.act_name)
 
     def forward(self, bags: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass for distributionpooling_mil.
+        Forward pass for distribution_mil.
 
         Args:
             bags (torch.Tensor): Input tensor with shape [B, N, n_feats].
@@ -667,11 +675,12 @@ class dsmil(nn.Module):
         else:
             raise ValueError(f"Unsupported goal: {goal}")
         self.goal = goal
+        self.act_name = activation_function
         self._initialize_weights()
 
     def _initialize_weights(self):
         """Initialize weights for dsmil."""
-        initialize_weights(self, self.goal)
+        initialize_weights(self, self.act_name)
 
     def forward(self, bags: torch.Tensor, return_attention: bool = False):
         """
@@ -778,11 +787,12 @@ class varmil(nn.Module):
         else:
             raise ValueError(f"Unsupported goal: {goal}")
         self.goal = goal
+        self.act_name = activation_function
         self._initialize_weights()
 
     def _initialize_weights(self):
         """Initialize weights for varmil."""
-        initialize_weights(self, self.goal)
+        initialize_weights(self, self.act_name)
 
     def forward(self, bags: torch.Tensor, return_attention: bool = False):
         """
@@ -869,6 +879,7 @@ class perceiver_mil(nn.Module):
         use_bn = (goal == 'classification')
         self.cls_token = nn.Parameter(torch.randn(1, latent_dim))
         self.latents = nn.Parameter(torch.randn(num_latents, latent_dim))
+        self.latent_pos = nn.Parameter(torch.randn(num_latents + 1, latent_dim))
         self.cross_attention = nn.MultiheadAttention(embed_dim=latent_dim, 
                                                      num_heads=num_heads, 
                                                      dropout=dropout_p)
@@ -889,33 +900,161 @@ class perceiver_mil(nn.Module):
         else:
             raise ValueError(f"Unsupported goal: {goal}")
         self.goal = goal
+        self.act_name = activation_function
         self._initialize_weights()
 
     def _initialize_weights(self):
         """Initialize weights for perceiver_mil."""
-        initialize_weights(self, self.goal)
+        initialize_weights(self, self.act_name)
+
+    def forward(self, bags: torch.Tensor) -> torch.Tensor:
+        B, N, _ = bags.shape
+
+        # 1) project each patch
+        x = self.input_projection(bags.view(-1, bags.size(-1)))
+        x = x.view(B, N, -1).permute(1, 0, 2)   # → (N, B, D)
+
+        # 2) build [CLS; latents] sequence
+        #    cls_token: (1,D) → (1, B, D)
+        cls = self.cls_token.unsqueeze(1).expand(-1, B, -1)
+        #    latents:  (L, D) → (L, B, D)
+        lts = self.latents.unsqueeze(1).expand(-1, B, -1)
+        latents = torch.cat([cls, lts], dim=0)  # (1 + L, B, D)
+
+        # add positional embeddings
+        # latent_pos: (1+L, D) → (1+L, B, D)
+        pos = self.latent_pos.unsqueeze(1)
+        latents = latents + pos
+
+        # 3) cross-attention
+        latents, _ = self.cross_attention(latents, x, x)
+
+        # 4) Transformer encoder
+        latents = self.transformer_layers(latents)
+
+        # 5) take CLS (first token) and classify
+        cls_out = latents[0]                     # (B, D)
+        return self.output_projection(cls_out)
+
+    def calculate_attention(self,
+                            bags: torch.Tensor,
+                            apply_softmax: bool = False) -> torch.Tensor:
+        """
+        Return the attention weights from CLS → each input patch
+        using the first cross-attention layer.
+        Args:
+            bags: Tensor of shape [B, N, n_feats]
+            apply_softmax: if False, returns exactly what MHA gave (already softmaxed);
+                           if True, applies a second softmax over the N patches.
+        Returns:
+            attn: Tensor [B, N]
+        """
+        B, N, _ = bags.shape
+
+        # project and reshape to (N, B, D)
+        x = self.input_projection(bags.view(-1, bags.size(-1)))
+        x = x.view(B, N, -1).permute(1, 0, 2)
+
+        # build (1+L, B, D) tokens
+        cls = self.cls_token.unsqueeze(1).expand(-1, B, -1)
+        lts = self.latents.unsqueeze(1).expand(-1, B, -1)
+        latents = torch.cat([cls, lts], dim=0)               # (1+L, B, D)
+        latents = latents + self.latent_pos.unsqueeze(1)     # add pos-emb
+
+        # cross-attention with weights
+        # attn shape: (B, tgt_len, src_len) where src_len=N, tgt_len=1+L
+        _, attn = self.cross_attention(latents, x, x, need_weights=True)
+
+        # pick CLS token (index 0) → patches
+        weights = attn[:, 0, :]   # (B, N)
+
+        if apply_softmax:
+            weights = torch.softmax(weights, dim=1)
+
+        return weights
+
+class prototype_mil(nn.Module):
+    """
+    Prototype-based MIL with attention:
+    1) Encode instances
+    2) Compute prototype similarities
+    3) Compute per-instance attention weights
+    4) Weighted pooling of similarities
+    """
+    def __init__(self,
+                 n_feats: int,
+                 n_out: int,
+                 z_dim: int = 256,
+                 dropout_p: float = 0.1,
+                 activation_function: str = 'ReLU',
+                 encoder_layers: int = 1):
+        super().__init__()
+        # 1) per-instance encoder
+        self.encoder = build_encoder(
+            n_feats, z_dim, encoder_layers,
+            activation_function, dropout_p,
+            use_batchnorm=False
+        )
+        # 2) prototypes: one per class
+        self.prototypes = nn.Parameter(torch.randn(n_out, z_dim))
+        # 3) attention head: scores each instance for pooling
+        self.attn_head = nn.Sequential(
+            nn.Linear(z_dim, z_dim),
+            get_activation_function(activation_function),
+            nn.Linear(z_dim, 1)
+        )
+        initialize_weights(self, activation_function)
 
     def forward(self, bags: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass for perceiver_mil.
-
         Args:
-            bags (torch.Tensor): Input tensor of shape [B, N, n_feats].
-
+            bags: [B, N, n_feats]
         Returns:
-            torch.Tensor: Output scores.
+            bag_logits: [B, n_out]
         """
-        batch_size, n_patches, n_feats = bags.shape
-        x = self.input_projection(bags.view(-1, n_feats)).view(batch_size, n_patches, -1)
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        latents = torch.cat([cls_tokens, self.latents.unsqueeze(0).expand(batch_size, -1, -1)], dim=1)
-        latents = latents.permute(1, 0, 2)
-        x = x.permute(1, 0, 2)
-        latents, _ = self.cross_attention(latents, x, x)
-        latents = self.transformer_layers(latents)
-        cls_output = latents[0]
-        output = self.output_projection(cls_output)
-        return output
+        B, N, _ = bags.shape
+        # encode instances
+        flat = bags.view(-1, bags.size(-1))             # [B*N, n_feats]
+        emb  = self.encoder(flat)                        # [B*N, z_dim]
+        inst = emb.view(B, N, -1)                        # [B, N, z_dim]
+
+        # compute prototype distances & similarities
+        # distances: [B, N, n_out]
+        dists = torch.cdist(inst, self.prototypes)      
+        sims  = -dists                                   # [B, N, n_out]
+
+        # compute attention weights per instance
+        attn_logits = self.attn_head(inst).squeeze(-1)  # [B, N]
+        weights     = F.softmax(attn_logits, dim=1)      # [B, N]
+
+        # weighted pooling of similarities
+        # [B, N, 1] * [B, N, n_out] -> sum over N -> [B, n_out]
+        bag_logits = torch.sum(
+            sims * weights.unsqueeze(-1), dim=1
+        )
+        return bag_logits
+        
+    def calculate_attention(self,
+                            bags: torch.Tensor,
+                            apply_softmax: bool = False) -> torch.Tensor:
+        """
+        Extract per-instance attention weights.
+        Args:
+            bags: [B, N, n_feats]
+            apply_softmax: if True, re-apply softmax to the logits.
+        Returns:
+            weights: [B, N]
+        """
+        B, N, _ = bags.shape
+        # encode
+        flat = bags.view(-1, bags.size(-1))
+        emb  = self.encoder(flat).view(B, N, -1)
+        # compute attention logits
+        attn_logits = self.attn_head(emb).squeeze(-1)   # [B, N]
+        weights     = F.softmax(attn_logits, dim=1)
+        if apply_softmax:
+            weights = F.softmax(attn_logits, dim=1)
+        return weights
 
 
 class gated_attention_mil(nn.Module):
@@ -972,11 +1111,12 @@ class gated_attention_mil(nn.Module):
         else:
             raise ValueError(f"Unsupported goal: {goal}")
         self.goal = goal
+        self.act_name = activation_function
         self._initialize_weights()
 
     def _initialize_weights(self):
         """Initialize weights for gated_attention_mil."""
-        initialize_weights(self, self.goal)
+        initialize_weights(self, self.act_name)
 
     def forward(self, bags: torch.Tensor) -> torch.Tensor:
         """
@@ -1070,11 +1210,12 @@ class topk_mil(nn.Module):
             raise ValueError(f"Unsupported goal: {goal}")
         self.k = k
         self.goal = goal
+        self.act_name = activation_function
         self._initialize_weights()
 
     def _initialize_weights(self):
         """Initialize weights for topk_mil."""
-        initialize_weights(self, self.goal)
+        initialize_weights(self, self.act_name)
 
     def forward(self, bags: torch.Tensor, return_attention: bool = False):
         """
@@ -1160,7 +1301,8 @@ class air_mil(nn.Module):
         # k param no longer used for attention heatmap, but kept for backward compatibility
         self.k_param = nn.Parameter(torch.tensor(float(initial_k)), requires_grad=True)
         self.goal = goal
-        initialize_weights(self, self.goal)
+        self.act_name = activation_function
+        initialize_weights(self, self.act_name)
 
     def forward(self,
                 bags: torch.Tensor,
@@ -1623,8 +1765,10 @@ class transmil(nn.Module):
     """
     transmil (Transformer-based MIL Model)
 
-    This model employs an encoder followed by a Transformer to capture contextual relationships
-    among instance embeddings. The mean-pooled representation from the Transformer is used for the final prediction.
+    1) Encode each instance
+    2) Contextualize via TransformerEncoder
+    3) Aggregate via CLS→patch cross-attention
+    4) Classify from the attended CLS embedding
     """
     def __init__(self,
                  n_feats: int,
@@ -1636,31 +1780,35 @@ class transmil(nn.Module):
                  activation_function: str = 'ReLU',
                  encoder_layers: int = 1,
                  goal: str = 'classification'):
-        """
-        Initialize the transmil model.
-
-        Args:
-            n_feats (int): Input feature dimension.
-            n_out (int): Number of outputs.
-            z_dim (int): Latent dimension for the encoder.
-            num_layers (int): Number of transformer layers.
-            num_heads (int): Number of attention heads.
-            dropout_p (float): Dropout probability.
-            activation_function (str): Activation function.
-            encoder_layers (int): Number of encoder layers.
-            goal (str): The task goal.
-        """
-        super(transmil, self).__init__()
+        super().__init__()
         use_bn = (goal == 'classification')
-        self.encoder = build_encoder(n_feats, z_dim, encoder_layers,
-                                     activation_function, dropout_p, use_bn)
+
+        # 1) per-instance encoder
+        self.encoder = build_encoder(
+            n_feats, z_dim, encoder_layers,
+            activation_function, dropout_p, use_bn
+        )
+
+        # 2) context Transformer
         self.transformer = TransformerEncoder(
-            TransformerEncoderLayer(d_model=z_dim, 
-                                    nhead=num_heads, 
-                                    dim_feedforward=z_dim, 
-                                    dropout=dropout_p),
+            TransformerEncoderLayer(
+                d_model=z_dim,
+                nhead=num_heads,
+                dim_feedforward=z_dim,
+                dropout=dropout_p
+            ),
             num_layers=num_layers
         )
+
+        # 3) CLS token & cross-attention
+        self.cls_token  = nn.Parameter(torch.randn(1, z_dim))
+        self.cross_attn = nn.MultiheadAttention(
+            embed_dim=z_dim,
+            num_heads=num_heads,
+            dropout=dropout_p
+        )
+
+        # 4) final prediction head
         if goal == 'classification':
             self.head = nn.Sequential(
                 nn.BatchNorm1d(z_dim),
@@ -1669,34 +1817,77 @@ class transmil(nn.Module):
             )
         elif goal in ['survival', 'regression']:
             self.head = nn.Linear(z_dim, 1)
-        elif goal == 'survival_discrete':
+        else:  # 'survival_discrete'
             self.head = nn.Linear(z_dim, n_out)
-        else:
-            raise ValueError(f"Unsupported goal: {goal}")
-        self.goal = goal
+
+        self.goal               = goal
         self.activation_function = activation_function
         self._initialize_weights()
 
     def _initialize_weights(self):
-        """Initialize weights for transmil."""
         initialize_weights(self, self.activation_function)
 
     def forward(self, bags: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass for transmil.
-
-        Args:
-            bags (torch.Tensor): Input tensor with shape [B, N, n_feats].
-
+        Forward:
+          bags: [B, N, n_feats]
         Returns:
-            torch.Tensor: Output scores.
+          logits: [B, n_out] (or [B,1])
         """
-        batch_size, n_patches, n_feats = bags.shape
-        embeddings = self.encoder(bags.view(-1, n_feats))
-        embeddings = embeddings.view(batch_size, n_patches, -1)
-        embeddings = embeddings.permute(1, 0, 2)
-        embeddings = self.transformer(embeddings)
-        embeddings = embeddings.permute(1, 0, 2)
-        pooled_embeddings = embeddings.mean(dim=1)
-        scores = self.head(pooled_embeddings)
-        return scores
+        B, N, _ = bags.shape
+
+        # --- encode & contextualize ---
+        # encode each patch → (B*N, z_dim)
+        flat = bags.view(-1, bags.size(-1))
+        emb  = self.encoder(flat)
+        # → (B, N, z_dim)
+        emb = emb.view(B, N, -1)
+        # → (N, B, z_dim) for transformer
+        ctx = emb.permute(1, 0, 2)
+        ctx = self.transformer(ctx)
+        # back to (B, N, z_dim)
+        ctx = ctx.permute(1, 0, 2)
+
+        # --- CLS→patch cross-attention ---
+        # prepare CLS: (1, z_dim) → (1, B, z_dim)
+        cls = self.cls_token.unsqueeze(1).expand(-1, B, -1)
+        # patches as key/value: (B, N, z_dim) → (N, B, z_dim)
+        patches = ctx.permute(1, 0, 2)
+        # attend: query=cls, key=patches, value=patches
+        # out: (1, B, z_dim), attn: (B, 1, N)
+        cls_out, _ = self.cross_attn(cls, patches, patches)
+        # → (B, z_dim)
+        bag_emb = cls_out.squeeze(0)
+
+        # --- classify ---
+        return self.head(bag_emb)
+
+    def calculate_attention(self,
+                            bags: torch.Tensor,
+                            apply_softmax: bool = False) -> torch.Tensor:
+        """
+        Extract the CLS→patch attention weights.
+        Args:
+            bags: [B, N, n_feats]
+            apply_softmax: if True, re-apply softmax over N patches
+        Returns:
+            weights: [B, N]
+        """
+        B, N, _ = bags.shape
+
+        # same encode & context steps
+        flat = bags.view(-1, bags.size(-1))
+        emb  = self.encoder(flat).view(B, N, -1)
+        patches = self.transformer(emb.permute(1, 0, 2))      # (N, B, D)
+        patches = patches                                     # already permuted
+
+        # CLS token
+        cls = self.cls_token.unsqueeze(1).expand(-1, B, -1)   # (1, B, D)
+        # attention (need_weights=True by default)
+        _, attn = self.cross_attn(cls, patches, patches, need_weights=True)
+        # attn: (B, 1, N) → (B, N)
+        weights = attn[:, 0, :]
+
+        if apply_softmax:
+            weights = F.softmax(weights, dim=1)
+        return weights
