@@ -136,7 +136,7 @@ def extract_features(config : dict, project : sf.Project):
             logging.info("Feature extraction...")
             bags = generate_bags(config, project, all_data, combination_dict, string_without_mil, feature_extractor)
             logging.info(f"Feature extraction for combination {combination} finished...")
-        except Exception as e:
+        except:
             logging.warning(f"Combination {combination} was not succesfully trained due to Error {e}")
             logging.warning(traceback.format_exc())
         
@@ -231,7 +231,7 @@ def get_save_strings(combination_dict: dict) -> str:
     """
     save_string = "_".join([f"{value}" for key, value in combination_dict.items()])
     
-    string_without_mil = "_".join([f"{value}" for key, value in combination_dict.items() if key != 'mil' and key != 'loss' and key != 'augmentation' and key != 'activation_function' and key != 'optimizer' and key != 'dropout_p' and key != 'encoder_layers' and key != 'z_dim'])
+    string_without_mil = "_".join([f"{value}" for key, value in combination_dict.items() if key != 'mil' and key != 'loss' and key != 'augmentation' and key != 'activation_function' and key != 'optimizer' and key != 'dropout_p' and key != 'encoder_layers' and key != 'z_dim' and key != "activation_function"])
     
     logging.debug(f"Save string: {save_string}")
     logging.debug(f"String without MIL: {string_without_mil}")
@@ -358,8 +358,6 @@ def benchmark(config : dict, project : sf.Project):
 
         logging.info(f"Running combination: {combination_dict}")
 
-        save_string, string_without_mil = get_save_strings(combination_dict)
-
         try:
             target = determine_target_variable(task, config)
             logging.info(f"Target variable: {target}")
@@ -375,30 +373,18 @@ def benchmark(config : dict, project : sf.Project):
 
             logging.info(f"QC methods: {qc_list}")
 
-            # NOTE(pvalkema): if num_workers is 0 or 1 and this value is used for num_threads, an error occurs during tile extraction.
-            # TODO: We need to either fix the bug in extract_tiles or decide to keep the workaround below
-            tile_extraction_num_threads = config['experiment']['num_workers'] if 'num_workers' in config['experiment'] else 4
-            if tile_extraction_num_threads <= 1:
-                tile_extraction_num_threads = 4
-
             #Extract tiles with QC for all datasets
-            try:
-                all_data.extract_tiles(enable_downsample=True,
-                                        save_tiles=config['experiment']['save_tiles'] if 'save_tiles' in config['experiment'] else False,
-                                        qc=qc_list,
-                                        grayspace_fraction = float(qc_filters['grayspace_fraction']),
-                                        whitespace_fraction = float(qc_filters['whitespace_fraction']),
-                                        grayspace_threshold = float(qc_filters['grayspace_threshold']),
-                                        whitespace_threshold = int(qc_filters['whitespace_threshold']),
-                                        num_threads = tile_extraction_num_threads,
-                                        report=config['experiment']['report'] if 'report' in config['experiment'] else False,
-                                        skip_extracted=config['experiment']['skip_extracted'] if 'skip_extracted' in config['experiment'] else True,
-                )
-            except Exception as e:
-                logging.error(f"tile extraction failed: {e}")
-                traceback.print_exc()
-                sys.exit()
-
+            all_data.extract_tiles(enable_downsample=True,
+                                    save_tiles=False,
+                                    qc=qc_list,
+                                    grayspace_fraction = float(qc_filters['grayspace_fraction']),
+                                    whitespace_fraction = float(qc_filters['whitespace_fraction']),
+                                    grayspace_threshold = float(qc_filters['grayspace_threshold']),
+                                    whitespace_threshold = int(qc_filters['whitespace_threshold']),
+                                    num_threads = config['experiment']['num_workers'] if 'num_workers' in config['experiment'] else 1,
+                                    report=config['experiment']['report'] if 'report' in config['experiment'] else False,
+                                    skip_extracted=config['experiment']['skip_extracted'] if 'skip_extracted' in config['experiment'] else True,
+            )
             train_datasets, test_datasets = configure_datasets(config)
 
             train_set, test_set = split_train_test(config, all_data, task)
@@ -406,6 +392,7 @@ def benchmark(config : dict, project : sf.Project):
             logging.info("Splitting datasets...")
             splits = split_datasets(config, project, splits_file, target, project_directory, train_set, dataset_mapping)
 
+            save_string, string_without_mil = get_save_strings(combination_dict)
             #Run with current parameters
             
             logging.info("Feature extraction...")
@@ -444,7 +431,7 @@ def benchmark(config : dict, project : sf.Project):
                 model_kwargs = {
                     'pb_config' : config,
                 }
-                logging.info(f"Model kwargs before passing to slideflow: {model_kwargs}")
+                logging.debug(f"Model kwargs before passing to slideflow: {model_kwargs}")
 
                 # Train the MIL model
                 val_result = project.train_mil(
@@ -550,8 +537,8 @@ def benchmark(config : dict, project : sf.Project):
                         # Append this test result to the overall test results DataFrame
                         test_df = test_df.append(test_dict, ignore_index=True)
             
-                else:
-                    logging.info("No test datasets found in the configuration. Skipping test evaluation.")
+            else:
+                logging.info("No test datasets found in the configuration. Skipping test evaluation.")
 
             # Visualize the top 5 tiles, if applicable
             #Check if model supports attention
@@ -618,8 +605,6 @@ def plot_benchmarking_output(config: dict, val_df: pd.DataFrame, test_df: pd.Dat
 
     # Function to build short labels from varying params
     def make_labels(df):
-        if df.empty:
-            return pd.Series([], dtype=str, index=df.index)
         return df[varying_params].astype(str).agg('_'.join, axis=1)
 
     # Get evaluation metrics
@@ -827,8 +812,7 @@ def balance_dataset(dataset: sf.Dataset, task: str, config: dict) -> sf.Dataset:
         return dataset
 
     logging.info(f"Balancing dataset on {headers} using '{config['experiment']['balancing']}' strategy.")
-    dataset_with_balancing_info = dataset.balance(headers=headers, strategy=config['experiment']['balancing'], force=True)
-    return dataset_with_balancing_info
+    return dataset.balance(headers=headers, strategy=config['experiment']['balancing'], force=True)
 
 
 def split_datasets(config: dict, project: sf.Project, splits_file: str, target: str,
@@ -880,10 +864,10 @@ def split_datasets(config: dict, project: sf.Project, splits_file: str, target: 
         else:
             if 'stratified' in config['experiment']['split_technique']:
                 splits = train_set.kfold_split(k=k, labels=target, splits=splits_file, preserved_site=True, site_labels=dataset_mapping)
-                logging.info(f"Stratified K-fold splits written to {splits_file}")
+                logging.info(f"Stratified K-fold splits written to {project_directory}/kfold_stratified_{splits}")
             else:
                 splits = train_set.kfold_split(k=k, labels=target, splits=splits_file)
-                logging.info(f"K-fold splits written to {splits_file}")
+                logging.info(f"K-fold splits written to {project_directory}/kfold_{splits}")
     else:
         if os.path.exists(f"{project_directory}/fixed_{splits_file}"):
             train, val = train_set.split(labels=target, model_type=model_type,
@@ -933,13 +917,13 @@ def generate_bags(config: dict, project: sf.Project, all_data: sf.Dataset,
                                             outdir=bags_dir,
                                             mixed_precision=config['experiment']['mixed_precision'],
                                             num_gpus=num_gpus,
-                                            force_regenerate=not config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else True)
+                                            force_regenerate=config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else False)
     else:
         bags = project.generate_feature_bags(model=feature_extractor, dataset=all_data,
                                             normalizer=combination_dict['normalization'],
                                             outdir=bags_dir,
                                             num_gpus=num_gpus,
-                                            force_regenerate=not config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else True)
+                                            force_regenerate=config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else False)
     return bags
 
 
@@ -1110,11 +1094,11 @@ def plot_across_splits(config: dict, survival_results_per_split: list, test_surv
                     plot_qq_across_folds(splits, save_string, f"test_{ds_name}", config)
             elif task in ['survival', 'survival_discrete']:
                 if 'survival_roc' in config['experiment']['visualization']:
-                    plot_survival_auc_across_folds(survival_results_per_split['ds_name'], save_string, f"test_{ds_name}", config)
+                    plot_survival_auc_across_folds(survival_results_per_split[ds_name], save_string, f"test_{ds_name}", config)
                 if 'concordance_index' in config['experiment']['visualization']:
-                    plot_concordance_index_across_folds(survival_results_per_split['ds_name'], save_string, f"test_{ds_name}", config)
+                    plot_concordance_index_across_folds(survival_results_per_split[ds_name], save_string, f"test_{ds_name}", config)
                 if 'kaplan_meier' in config['experiment']['visualization']:
-                    plot_kaplan_meier_curves_across_folds(survival_results_per_split['ds_name'], save_string, f"test_{ds_name}", config)
+                    plot_kaplan_meier_curves_across_folds(survival_results_per_split[ds_name], save_string, f"test_{ds_name}", config)
         logging.info(f"Plots saved to experiments/{config['experiment']['project_name']}/visualizations/benchmarking/{save_string}.png")
 
 
@@ -1193,7 +1177,7 @@ def save_best_model_weights(source_weights_dir: str, config: dict, model_tag: st
     #Save model configuration as well
     try:
         with open(f"{dest_dir}/model_config.json", 'w') as f:
-            json.dump(model_config, f, indent=4)
+            json.dump(model_config, f)
     except:
         logging.error(f"Failed to save model configuration to {dest_dir}/model_config.json")
         # If the model_config is not serializable, you can use pickle instead
@@ -1263,7 +1247,13 @@ def find_and_apply_best_model(config: dict, val_df_agg: pd.DataFrame, test_df_ag
         if not slide_level:
             best_test_model_dict['params']['model'] = getattr(aggregators, best_test_model_dict['params']['model'])
         else:
-            best_test_model_dict['params']['model'] = getattr(slide_level_predictors, best_test_model_dict['params']['model'])
+            try:
+                mil_method = get_model_class(slide_level_predictors, best_test_model_dict['params']['model'])
+            except:
+                logging.warning(f"You are either using an undefined slide predictor head or an MIL model: {mil_name}, Now falling back to Slide-level MLP classifier")
+                mil_method = get_model_class(slide_level_predictors, 'mlp_slide_classifier')
+                best_test_model_dict['params']['model'] = mil_method
+                pass
         best_test_model_config = sf.mil.mil_config(trainer=best_test_model_dict['trainer'], **best_test_model_dict['params'])
     else:
         best_test_model_config = None
@@ -1431,34 +1421,108 @@ def calculate_survival_results(result: pd.DataFrame):
     Calculate survival metrics (C-index and Brier score) from prediction results.
 
     Args:
-        result (pd.DataFrame): Dataframe containing survival predictions and true outcomes.
+        result (pd.DataFrame): DataFrame containing at least:
+            - one “duration” column (e.g. named "duration")
+            - one “y_true” column (event indicator, 0/1)
+            - one or more “y_pred” columns (raw model outputs)
 
     Returns:
         tuple: (metrics dict, durations, events, predictions)
+            - metrics: {'c_index': float, 'brier_score': float}
+            - durations: 1-D numpy array, shape (N,)
+            - events: 1-D numpy array (0/1), shape (N,)
+            - predictions: 1-D numpy array (risk score), shape (N,)
     """
     logging.info("Calculating survival metrics...")
-    metrics = {}
-    duration_col = [col for col in result.columns if 'duration' in col]
-    y_pred_col = [col for col in result.columns if 'y_pred' in col]
-    y_true_col = [col for col in result.columns if 'y_true' in col]
 
-    durations = result[duration_col].values
-    events = result[y_true_col].values
-    predictions = result[y_pred_col].values
-    assert durations.shape[0] == events.shape[0] == predictions.shape[0], "Mismatch in number of samples."
+    # 1) Find the relevant columns by substring
+    duration_cols = [col for col in result.columns if 'duration' in col]
+    event_cols    = [col for col in result.columns if 'y_true'   in col]
+    pred_cols     = [col for col in result.columns if 'y_pred'   in col]
 
-    if len(y_pred_col) > 1:
-        predictions = np.exp(predictions) / np.sum(np.exp(predictions), axis=1)[:, np.newaxis]
-        predictions = np.sum(predictions * np.arange(predictions.shape[1]), axis=1)
+    if len(duration_cols) != 1:
+        raise ValueError(f"Expected exactly one duration column, found: {duration_cols}")
+    if len(event_cols) != 1:
+        raise ValueError(f"Expected exactly one y_true (event) column, found: {event_cols}")
+    if len(pred_cols) < 1:
+        raise ValueError(f"Expected at least one y_pred column, found: {pred_cols}")
 
-    c_index = concordance_index(durations, predictions, events)
-    metrics['c_index'] = c_index
-    logging.info(f"Survival C-index: {c_index}")
-    brier = calculate_brier_score(durations, events, predictions)
-    metrics['brier_score'] = brier
-    logging.info(f"Survival Brier Score: {brier}")
-    return metrics, durations, events, predictions
+    # 2) Extract raw arrays, then squeeze to 1-D
+    durations = result[duration_cols[0]].values
+    events    = result[event_cols[0]].values
+    preds_raw = result[pred_cols].values
 
+    # If any of these came back as shape (N, 1), or (N, k), we want to squeeze or reshape:
+    durations = np.squeeze(durations)
+    events    = np.squeeze(events)
+
+    # preds_raw might be:
+    #  - shape (N, 1), if there was exactly one y_pred column (continuous survival risk)
+    #  - shape (N, k), if multiple y_pred columns (discrete-time probabilities, etc.)
+    if preds_raw.ndim == 2 and preds_raw.shape[1] == 1:
+        preds = np.squeeze(preds_raw, axis=1)
+    else:
+        # In the “multiple‐column” case, interpret each y_pred_i as logit for discrete bin i:
+        #   1) apply softmax → probability of each time-bin
+        #   2) convert that into a single continuous risk score by taking ∑ bin_index * P(bin_index)
+        logits = preds_raw.astype(np.float64)
+        exp_logits = np.exp(logits - np.max(logits, axis=1, keepdims=True))
+        probs = exp_logits / np.sum(exp_logits, axis=1, keepdims=True)
+        # “bin indices” go from 0..(k−1).  Choose whichever convention you used during training.
+        # Here we assume bin i corresponds to “time category i.”
+        bin_indices = np.arange(probs.shape[1], dtype=np.float64)
+        preds = np.sum(probs * bin_indices[np.newaxis, :], axis=1)
+
+    # Now ‘preds’ is a 1-D array of length N:
+    preds = np.asarray(preds, dtype=np.float64)
+    preds = np.squeeze(preds)
+
+    # ──────────────────────────────────────────────────────────────────────────────
+    # 3) Assertions to catch common mis-shapes or invalid values
+    # ──────────────────────────────────────────────────────────────────────────────
+    assert durations.ndim == 1, f"durations must be 1-D, got shape {durations.shape}"
+    assert events.ndim    == 1, f"events must be 1-D,    got shape {events.shape}"
+    assert preds.ndim     == 1, f"predictions must be 1-D,got shape {preds.shape}"
+    N = durations.shape[0]
+    assert events.shape[0] == N and preds.shape[0] == N, (
+        f"Number of samples mismatch: durations has length {N}, "
+        f"events has length {events.shape[0]}, preds has length {preds.shape[0]}"
+    )
+
+    # Events must be 0 or 1
+    uniq_events = np.unique(events)
+    assert set(uniq_events).issubset({0, 1}), (
+        f"events must only contain 0 or 1, but found {uniq_events}"
+    )
+
+    # Durations must be non-negative (>= 0)
+    if np.any(durations < 0):
+        bad = durations[durations < 0]
+        raise ValueError(f"Found negative durations: {bad}")
+
+    # Predictions (risk scores) must be finite
+    if not np.all(np.isfinite(preds)):
+        bad_idx = np.where(~np.isfinite(preds))[0]
+        raise ValueError(
+            f"Non-finite prediction values at indices {bad_idx}: "
+            f"{preds[bad_idx]}"
+        )
+
+    # ──────────────────────────────────────────────────────────────────────────────
+    # 4) Compute Concordance Index (lifelines ≥ 0.25 signature is (event_times, pred_scores, event_observed))
+    # ──────────────────────────────────────────────────────────────────────────────
+    c_index = concordance_index(durations, preds, events)
+    logging.info(f"Survival C-index: {c_index:.4f}")
+
+    # ──────────────────────────────────────────────────────────────────────────────
+    # 5) Compute a simple time-averaged Brier score over 100 time points
+    # ──────────────────────────────────────────────────────────────────────────────
+    brier = calculate_brier_score(durations, events, preds)
+    logging.info(f"Survival Brier Score: {brier:.4f}")
+
+    metrics = {'c_index': c_index, 'brier_score': brier}
+    return metrics, durations, events, preds
+    
 
 def calculate_brier_score(durations: np.array, events: np.array, predictions: np.array) -> float:
     """
