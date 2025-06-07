@@ -351,6 +351,7 @@ def benchmark(config : dict, project : sf.Project):
     logging.info(f"Total number of combinations: {len(all_combinations)}")
 
     # Iterate over combinations
+    combinations_successfully_finished = 0
     for combination in all_combinations:
         combination_dict = {}
         for parameter_name, parameter_value in zip(benchmark_parameters.keys(), combination):
@@ -559,6 +560,7 @@ def benchmark(config : dict, project : sf.Project):
                 visualize_top5_tiles(config, val, test_set, annotation_df, target, index, number, save_string, model_string, test_dict)
 
             logging.info(f"Combination {save_string} finished...")
+            combinations_successfully_finished += 1
 
             # Save the combination results up to this point, and mark it as finished
             val_df.to_csv(f"experiments/{config['experiment']['project_name']}/results/val_results.csv")
@@ -576,15 +578,18 @@ def benchmark(config : dict, project : sf.Project):
             logging.warning(traceback.format_exc())
         
 
-    print(val_df, test_df)
-    print(list(benchmark_parameters.keys()))
+    logging.info(f"Combinations successfully finished: {combinations_successfully_finished}")
+    if combinations_successfully_finished > 0:
+        print(val_df, test_df)
+        print(list(benchmark_parameters.keys()))
 
-    plot_benchmarking_output(config, val_df, test_df)
+        plot_benchmarking_output(config, val_df, test_df)
 
-    val_df_agg, test_df_agg = build_aggregated_results(val_df, test_df, config, benchmark_parameters, aggregation_functions)
+        val_df_agg, test_df_agg = build_aggregated_results(val_df, test_df, config, benchmark_parameters,
+                                                           aggregation_functions)
 
-    find_and_apply_best_model(config, val_df_agg, test_df_agg, benchmark_parameters, val_df, test_df,
-                              val, test_set, target, slide_level)
+        find_and_apply_best_model(config, val_df_agg, test_df_agg, benchmark_parameters, val_df, test_df,
+                                  val, test_set, target, slide_level)
 
     # Empty the val and test results
     if os.path.exists(f"experiments/{config['experiment']['project_name']}/results/val_results.csv"):
