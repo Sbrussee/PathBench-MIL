@@ -1266,7 +1266,7 @@ def find_and_apply_best_model(config: dict, val_df_agg: pd.DataFrame, test_df_ag
             try:
                 mil_method = get_model_class(slide_level_predictors, best_test_model_dict['params']['model'])
             except:
-                logging.warning(f"You are either using an undefined slide predictor head or an MIL model: {mil_name}, Now falling back to Slide-level MLP classifier")
+                logging.warning(f"You are either using an undefined slide predictor head or an MIL model: {best_test_model_dict['params']['model']}, Now falling back to Slide-level MLP classifier")
                 mil_method = get_model_class(slide_level_predictors, 'mlp_slide_classifier')
                 best_test_model_dict['params']['model'] = mil_method
                 pass
