@@ -136,7 +136,7 @@ def extract_features(config : dict, project : sf.Project):
             logging.info("Feature extraction...")
             bags = generate_bags(config, project, all_data, combination_dict, string_without_mil, feature_extractor)
             logging.info(f"Feature extraction for combination {combination} finished...")
-        except:
+        except Exception as e:
             logging.warning(f"Combination {combination} was not succesfully trained due to Error {e}")
             logging.warning(traceback.format_exc())
         
@@ -358,6 +358,8 @@ def benchmark(config : dict, project : sf.Project):
 
         logging.info(f"Running combination: {combination_dict}")
 
+        save_string, string_without_mil = get_save_strings(combination_dict)
+
         try:
             target = determine_target_variable(task, config)
             logging.info(f"Target variable: {target}")
@@ -373,18 +375,30 @@ def benchmark(config : dict, project : sf.Project):
 
             logging.info(f"QC methods: {qc_list}")
 
+            # NOTE(pvalkema): if num_workers is 0 or 1 and this value is used for num_threads, an error occurs during tile extraction.
+            # TODO: We need to either fix the bug in extract_tiles or decide to keep the workaround below
+            tile_extraction_num_threads = config['experiment']['num_workers'] if 'num_workers' in config['experiment'] else 4
+            if tile_extraction_num_threads <= 1:
+                tile_extraction_num_threads = 4
+
             #Extract tiles with QC for all datasets
-            all_data.extract_tiles(enable_downsample=True,
-                                    save_tiles=False,
-                                    qc=qc_list,
-                                    grayspace_fraction = float(qc_filters['grayspace_fraction']),
-                                    whitespace_fraction = float(qc_filters['whitespace_fraction']),
-                                    grayspace_threshold = float(qc_filters['grayspace_threshold']),
-                                    whitespace_threshold = int(qc_filters['whitespace_threshold']),
-                                    num_threads = config['experiment']['num_workers'] if 'num_workers' in config['experiment'] else 1,
-                                    report=config['experiment']['report'] if 'report' in config['experiment'] else False,
-                                    skip_extracted=config['experiment']['skip_extracted'] if 'skip_extracted' in config['experiment'] else True,
-            )
+            try:
+                all_data.extract_tiles(enable_downsample=True,
+                                        save_tiles=config['experiment']['save_tiles'] if 'save_tiles' in config['experiment'] else False,
+                                        qc=qc_list,
+                                        grayspace_fraction = float(qc_filters['grayspace_fraction']),
+                                        whitespace_fraction = float(qc_filters['whitespace_fraction']),
+                                        grayspace_threshold = float(qc_filters['grayspace_threshold']),
+                                        whitespace_threshold = int(qc_filters['whitespace_threshold']),
+                                        num_threads = tile_extraction_num_threads,
+                                        report=config['experiment']['report'] if 'report' in config['experiment'] else False,
+                                        skip_extracted=config['experiment']['skip_extracted'] if 'skip_extracted' in config['experiment'] else True,
+                )
+            except Exception as e:
+                logging.error(f"tile extraction failed: {e}")
+                traceback.print_exc()
+                sys.exit()
+
             train_datasets, test_datasets = configure_datasets(config)
 
             train_set, test_set = split_train_test(config, all_data, task)
@@ -392,7 +406,6 @@ def benchmark(config : dict, project : sf.Project):
             logging.info("Splitting datasets...")
             splits = split_datasets(config, project, splits_file, target, project_directory, train_set, dataset_mapping)
 
-            save_string, string_without_mil = get_save_strings(combination_dict)
             #Run with current parameters
             
             logging.info("Feature extraction...")
@@ -537,8 +550,8 @@ def benchmark(config : dict, project : sf.Project):
                         # Append this test result to the overall test results DataFrame
                         test_df = test_df.append(test_dict, ignore_index=True)
             
-            else:
-                logging.info("No test datasets found in the configuration. Skipping test evaluation.")
+                else:
+                    logging.info("No test datasets found in the configuration. Skipping test evaluation.")
 
             # Visualize the top 5 tiles, if applicable
             #Check if model supports attention
@@ -605,6 +618,8 @@ def plot_benchmarking_output(config: dict, val_df: pd.DataFrame, test_df: pd.Dat
 
     # Function to build short labels from varying params
     def make_labels(df):
+        if df.empty:
+            return pd.Series([], dtype=str, index=df.index)
         return df[varying_params].astype(str).agg('_'.join, axis=1)
 
     # Get evaluation metrics
@@ -812,7 +827,8 @@ def balance_dataset(dataset: sf.Dataset, task: str, config: dict) -> sf.Dataset:
         return dataset
 
     logging.info(f"Balancing dataset on {headers} using '{config['experiment']['balancing']}' strategy.")
-    return dataset.balance(headers=headers, strategy=config['experiment']['balancing'], force=True)
+    dataset_with_balancing_info = dataset.balance(headers=headers, strategy=config['experiment']['balancing'], force=True)
+    return dataset_with_balancing_info
 
 
 def split_datasets(config: dict, project: sf.Project, splits_file: str, target: str,
@@ -864,10 +880,10 @@ def split_datasets(config: dict, project: sf.Project, splits_file: str, target: 
         else:
             if 'stratified' in config['experiment']['split_technique']:
                 splits = train_set.kfold_split(k=k, labels=target, splits=splits_file, preserved_site=True, site_labels=dataset_mapping)
-                logging.info(f"Stratified K-fold splits written to {project_directory}/kfold_stratified_{splits}")
+                logging.info(f"Stratified K-fold splits written to {splits_file}")
             else:
                 splits = train_set.kfold_split(k=k, labels=target, splits=splits_file)
-                logging.info(f"K-fold splits written to {project_directory}/kfold_{splits}")
+                logging.info(f"K-fold splits written to {splits_file}")
     else:
         if os.path.exists(f"{project_directory}/fixed_{splits_file}"):
             train, val = train_set.split(labels=target, model_type=model_type,
@@ -917,13 +933,13 @@ def generate_bags(config: dict, project: sf.Project, all_data: sf.Dataset,
                                             outdir=bags_dir,
                                             mixed_precision=config['experiment']['mixed_precision'],
                                             num_gpus=num_gpus,
-                                            force_regenerate=config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else False)
+                                            force_regenerate=not config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else True)
     else:
         bags = project.generate_feature_bags(model=feature_extractor, dataset=all_data,
                                             normalizer=combination_dict['normalization'],
                                             outdir=bags_dir,
                                             num_gpus=num_gpus,
-                                            force_regenerate=config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else False)
+                                            force_regenerate=not config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else True)
     return bags
 
 
