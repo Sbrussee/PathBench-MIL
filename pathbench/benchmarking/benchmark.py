@@ -444,6 +444,7 @@ def benchmark(config : dict, project : sf.Project):
 
                 model_kwargs = {
                     'pb_config' : config,
+                    'loss' : combination_dict['loss']
                 }
                 logging.debug(f"Model kwargs before passing to slideflow: {model_kwargs}")
 
