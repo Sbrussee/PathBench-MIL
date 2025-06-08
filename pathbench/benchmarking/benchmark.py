@@ -419,7 +419,7 @@ def benchmark(config : dict, project : sf.Project):
             #Generate bags
             bags = generate_bags(config, project, all_data, combination_dict, string_without_mil, feature_extractor)
             #Set MIL configuration
-            mil_conf, combination_dict = set_mil_config(config, combination_dict, task)
+            mil_conf, combination_dict = set_mil_config(config, combination_dict, task, slide_level)
 
             #Create results directory
             os.makedirs(f"experiments/{config['experiment']['project_name']}/results", exist_ok=True)
