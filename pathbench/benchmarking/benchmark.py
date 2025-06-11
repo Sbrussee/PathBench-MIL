@@ -575,7 +575,7 @@ def benchmark(config : dict, project : sf.Project):
 
             plot_across_splits(config, survival_results_per_split, test_survival_results_per_split,
                                 val_results_per_split, test_results_per_split, val_pr_per_split, test_pr_per_split,
-                                save_string, True if config['experiment']['task'] == 'survival' else False)
+                                save_string)
 
             #Close all unused file handles
             gc.collect()
@@ -1069,8 +1069,7 @@ def set_mil_config(config: dict, combination_dict: dict, task: str, slide_level:
 
 def plot_across_splits(config: dict, survival_results_per_split: list, test_survival_results_per_split: Dict[str, list],
                        val_results_per_split: list, test_results_per_split: Dict[str, list],
-                       val_pr_per_split: list, test_pr_per_split: Dict[str, list], save_string: str,
-                       invert_preds : bool) -> None:
+                       val_pr_per_split: list, test_pr_per_split: Dict[str, list], save_string: str) -> None:
     """
     Plot evaluation results across splits for survival, regression, and classification tasks.
 
@@ -1083,7 +1082,6 @@ def plot_across_splits(config: dict, survival_results_per_split: list, test_surv
         val_pr_per_split (list): Precision-recall curves (validation) per split.
         test_pr_per_split (dict): Precision-recall curves (test) per split, per dataset.
         save_string (str): Identifier for saving the plots.
-        invert_preds (bool): Whether to invert predictions for survival tasks.
 
     Returns:
         None
@@ -1091,11 +1089,11 @@ def plot_across_splits(config: dict, survival_results_per_split: list, test_surv
     task = config['experiment']['task']
     if task in ['survival', 'survival_discrete']:
         if 'survival_roc' in config['experiment']['visualization']:
-            plot_survival_auc_across_folds(survival_results_per_split, save_string, 'val', config, invert_preds)
+            plot_survival_auc_across_folds(survival_results_per_split, save_string, 'val', config)
         if 'concordance_index' in config['experiment']['visualization']:
             plot_concordance_index_across_folds(survival_results_per_split, save_string, 'val', config)
         if 'kaplan_meier' in config['experiment']['visualization']:
-            plot_kaplan_meier_curves_across_folds(survival_results_per_split, save_string, 'val', config, invert_preds)
+            plot_kaplan_meier_curves_across_folds(survival_results_per_split, save_string, 'val', config)
     elif task == 'regression':
         if 'residuals' in config['experiment']['visualization']:
             plot_residuals_across_folds(val_results_per_split, save_string, 'val', config)
@@ -1494,8 +1492,6 @@ def calculate_survival_results(result: pd.DataFrame):
     if preds_raw.ndim == 2 and preds_raw.shape[1] == 1:
         preds = np.squeeze(preds_raw, axis=1)
 
-        #CONTINUOUS HAZARDS NEED TO BE INVERTED TO REPRESENT RISK SCORE
-        preds = -preds  # Invert the continuous hazards to represent risk scores
     else:
         # In the “multiple‐column” case, interpret each y_pred_i as logit for discrete bin i:
         #   1) apply softmax → probability of each time-bin
@@ -1902,7 +1898,7 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
 
         plot_across_splits(config, survival_results_per_split, test_survival_results_per_split,
                            val_results_per_split, test_results_per_split, val_pr_per_split, test_pr_per_split,
-                           save_string, True if config['experiment']['task'] == 'survival' else False)
+                           save_string)
 
         # Specify which results to use for the objective metric
         if config['optimization']['objective_dataset'] == 'val':
