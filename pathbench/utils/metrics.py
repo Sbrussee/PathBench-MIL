@@ -14,9 +14,8 @@ class ConcordanceIndex(Metric):
           over the bin indices [1..n_bins].
     """
 
-    def __init__(self, invert_preds=False):
+    def __init__(self):
         self._name = "concordance_index"
-        self.invert_preds = invert_preds
         self.reset()
 
     def reset(self):
@@ -91,10 +90,6 @@ class ConcordanceIndex(Metric):
         preds = torch.cat(self.preds).cpu().numpy()
         durations = torch.cat(self.durations).cpu().numpy()
         events = torch.cat(self.events).cpu().numpy()
-
-        #Invert log_hazard predictions if specified
-        if self.invert_preds:
-            preds = -preds
         
         # events must be bool or 0/1 for lifelines
         ci = concordance_index(durations, preds, events)
