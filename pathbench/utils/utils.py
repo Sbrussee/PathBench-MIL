@@ -111,6 +111,33 @@ def get_model_class(module, class_name):
     """
     return getattr(module, class_name)
 
+def get_mil_directory_number(source_directory : str, save_string: str):
+    """
+    Get the directory number for the MIL experiment based on the source directory and save string.
+
+    Args:
+        source_directory: The source directory of the experiment
+        save_string: The save string to identify the experiment
+
+    Returns:
+        The directory number as an integer
+    """
+    files = os.listdir(source_directory)
+
+    # Select the files that contain the save_string
+    relevant_files = [f for f in files if save_string in f]
+    #If multiple files are found, select the one with the highest number
+    if relevant_files:
+        # Extract the numbers from the filenames
+        numbers = [int(f.split('-')[0]) for f in relevant_files if f.split('-')[0].isdigit()]
+        # Return the maximum number found
+        number = max(numbers)
+        #Append 0's to front of number to make it 5-digit long
+        return str(number).zfill(5)
+    else:
+        # If no relevant files are found, return 0
+        return 0
+
 def get_highest_numbered_filename(directory_path : str):
     """
     Get the highest numbered filename in the directory

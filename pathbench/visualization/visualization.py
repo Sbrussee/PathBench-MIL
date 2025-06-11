@@ -136,7 +136,7 @@ def plot_roc_curve_across_splits(rates: list, save_string: str, dataset: str, co
     plt.savefig(f"{output_dir}/roc_auc_{save_string}_{dataset}.png")
     plt.close()
     
-def plot_survival_auc_across_folds(results_per_split, save_string, dataset, config):
+def plot_survival_auc_across_folds(results_per_split, save_string, dataset, config, invert_preds=False):
     """
     Plot time-dependent ROC AUC curves for continuous survival predictions (log hazard)
     across folds using cumulative dynamic AUC.
@@ -185,6 +185,10 @@ def plot_survival_auc_across_folds(results_per_split, save_string, dataset, conf
         if raw_preds.ndim != 1:
             raise ValueError(f"Fold {fold_idx}: Expected continuous 1D predictions (log hazard).")
         
+        if invert_preds:
+            # Invert predictions if specified (e.g., for risk scores).
+            raw_preds = -raw_preds
+            
         # Build a structured array for survival data.
         dtype = np.dtype([('event', bool), ('time', float)])
         survival_data = np.array([(e, t) for e, t in zip(events, durations)], dtype=dtype)
@@ -593,7 +597,7 @@ def plot_calibration_curve_across_splits(results_per_split, save_string, dataset
     logging.info(f"Saved calibration curve plot to {save_path}")
 
     
-def plot_kaplan_meier_curves_across_folds(results_per_split, save_string, dataset, config):
+def plot_kaplan_meier_curves_across_folds(results_per_split, save_string, dataset, config, invert_preds=False):
     """
     Plot Kaplan–Meier curves for high- vs low-risk groups, pooling data across folds.
 
@@ -609,6 +613,8 @@ def plot_kaplan_meier_curves_across_folds(results_per_split, save_string, datase
         dataset (str): Dataset identifier.
         config (dict): Configuration dictionary (expects keys such as
             config['experiment']['project_name'] and config['experiment']['task']).
+
+        invert_preds (bool): If True, invert the predictions before processing.
     """
     # Define directory and file path for saving the plot.
     viz_dir = os.path.join("experiments", config['experiment']['project_name'], "visualizations")
@@ -623,6 +629,10 @@ def plot_kaplan_meier_curves_across_folds(results_per_split, save_string, datase
     for (durations, events, raw_preds) in results_per_split:
         durations = np.asarray(durations).flatten().astype(float)
         events = np.asarray(events).flatten().astype(bool)
+
+        if invert_preds:
+            # Invert predictions if specified.
+            raw_preds = -np.asarray(raw_preds).flatten()
 
         # Convert raw predictions to continuous risk scores.
         cont_preds = get_continuous_preds(raw_preds)

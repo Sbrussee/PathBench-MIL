@@ -430,6 +430,7 @@ def benchmark(config : dict, project : sf.Project):
 
                 model_kwargs = {
                     'pb_config' : config,
+                    'loss' : combination_dict['loss'],
                 }
                 logging.debug(f"Model kwargs before passing to slideflow: {model_kwargs}")
 
@@ -444,12 +445,13 @@ def benchmark(config : dict, project : sf.Project):
                     attention_heatmaps=config['experiment']['save_heatmaps_val'] if 'attention_heatmaps_val' in config['experiment'] else False,
                     **model_kwargs)
                 
+                mil_directory = f"experiments/{config['experiment']['project_name']}/mil"
 
-                number = get_highest_numbered_filename(f"experiments/{config['experiment']['project_name']}/mil/")
+                number = get_mil_directory_number(mil_directory, save_string)
 
                 def get_validation_metrics(number: str):
                     #Get current newest MIL model number
-                    number = get_highest_numbered_filename(f"experiments/{config['experiment']['project_name']}/mil/")
+                    number = get_mil_directory_number(mil_directory, save_string)
                     #Get the corresponding validation results
                     val_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/predictions.parquet")
                     if task == 'survival' or task == 'survival_discrete':	
@@ -528,6 +530,11 @@ def benchmark(config : dict, project : sf.Project):
                         test_dict['bag_dir'] = bags
                         test_dict['test_dataset'] = test_dataset['name']
                         
+                        logging.debug(f"Test weights: {test_dict['weights']}")
+                        logging.debug(f"Test MIL params: {test_dict['mil_params']}")
+                        logging.debug(f"Test bag directory: {test_dict['bag_dir']}")
+                        logging.debug(f"Test dataset: {test_dict['test_dataset']}")
+
                         # Optionally add the tfrecord directory (depending on your config)
                         if 'x' in str(combination_dict['tile_um']):
                             test_dict['tfrecord_dir'] = f"experiments/{config['experiment']['project_name']}/tfrecords/{combination_dict['tile_px']}px_{combination_dict['tile_um']}"
@@ -553,7 +560,7 @@ def benchmark(config : dict, project : sf.Project):
 
             plot_across_splits(config, survival_results_per_split, test_survival_results_per_split,
                                 val_results_per_split, test_results_per_split, val_pr_per_split, test_pr_per_split,
-                                save_string)
+                                save_string, True if config['experiment']['task'] == 'survival' else False)
 
             #Close all unused file handles
             gc.collect()
@@ -864,7 +871,7 @@ def split_datasets(config: dict, project: sf.Project, splits_file: str, target: 
         else:
             if 'stratified' in config['experiment']['split_technique']:
                 splits = train_set.kfold_split(k=k, labels=target, splits=splits_file, preserved_site=True, site_labels=dataset_mapping)
-                logging.info(f"Stratified K-fold splits written to {project_directory}/kfold_stratified_{splits}")
+                logging.info(f"Stratified K-fold splits written to {splits_file}")
             else:
                 splits = train_set.kfold_split(k=k, labels=target, splits=splits_file)
                 logging.info(f"K-fold splits written to {project_directory}/kfold_{splits}")
@@ -986,7 +993,7 @@ def set_mil_config(config: dict, combination_dict: dict, task: str, slide_level:
     # Check if the MIL method is slideflow built-in or external
     if mil_name not in BUILT_IN_MIL:
         #check if correct MIL methods chosen for slide-level. If not, will fall back to MLP classifier.
-        if slide_level:
+        if slide_level and config['experiment']['aggregation_level'] == 'slide':
             try:
                 mil_method = get_model_class(slide_level_predictors, mil_name)
             except:
@@ -995,9 +1002,10 @@ def set_mil_config(config: dict, combination_dict: dict, task: str, slide_level:
                 combination_dict['mil'] = 'mlp_slide_classifier'
                 pass
         else:
+            #If not slide-level, use the MIL method as specified
             mil_method = get_model_class(aggregators, mil_name)
     else:
-        if slide_level:
+        if slide_level and config['experiment']['aggregation_level'] == 'slide':
             logging.warning("You are using a bag-level model for slide-level predictions. Please use a slide-level model.")
             mil_method = get_model_class(slide_level_predictors, 'mlp_slide_classifier')
             combination_dict['mil'] = 'mlp_slide_classifier'
@@ -1010,7 +1018,7 @@ def set_mil_config(config: dict, combination_dict: dict, task: str, slide_level:
                             trainer="fastai",
                             epochs=config['experiment']['epochs'] if 'epochs' in config['experiment'] else 50,
                             batch_size=config['experiment']['batch_size'] if 'batch_size' in config['experiment'] else 64,
-                            bag_size=1,
+                            bag_size=None,
                             z_dim = config['experiment']['z_dim'] if 'bag_size' in config['experiment'] else 512,
                             encoder_layers = config['experiment']['encoder_layers'] if 'encoder_layers' in config['experiment'] else 1,
                             dropout_p = config['experiment']['dropout_p'] if 'dropout_p' in config['experiment'] else 0.25,
@@ -1040,7 +1048,8 @@ def set_mil_config(config: dict, combination_dict: dict, task: str, slide_level:
 
 def plot_across_splits(config: dict, survival_results_per_split: list, test_survival_results_per_split: Dict[str, list],
                        val_results_per_split: list, test_results_per_split: Dict[str, list],
-                       val_pr_per_split: list, test_pr_per_split: Dict[str, list], save_string: str) -> None:
+                       val_pr_per_split: list, test_pr_per_split: Dict[str, list], save_string: str,
+                       invert_preds : bool) -> None:
     """
     Plot evaluation results across splits for survival, regression, and classification tasks.
 
@@ -1053,6 +1062,7 @@ def plot_across_splits(config: dict, survival_results_per_split: list, test_surv
         val_pr_per_split (list): Precision-recall curves (validation) per split.
         test_pr_per_split (dict): Precision-recall curves (test) per split, per dataset.
         save_string (str): Identifier for saving the plots.
+        invert_preds (bool): Whether to invert predictions for survival tasks.
 
     Returns:
         None
@@ -1060,11 +1070,11 @@ def plot_across_splits(config: dict, survival_results_per_split: list, test_surv
     task = config['experiment']['task']
     if task in ['survival', 'survival_discrete']:
         if 'survival_roc' in config['experiment']['visualization']:
-            plot_survival_auc_across_folds(survival_results_per_split, save_string, 'val', config)
+            plot_survival_auc_across_folds(survival_results_per_split, save_string, 'val', config, invert_preds)
         if 'concordance_index' in config['experiment']['visualization']:
             plot_concordance_index_across_folds(survival_results_per_split, save_string, 'val', config)
         if 'kaplan_meier' in config['experiment']['visualization']:
-            plot_kaplan_meier_curves_across_folds(survival_results_per_split, save_string, 'val', config)
+            plot_kaplan_meier_curves_across_folds(survival_results_per_split, save_string, 'val', config, invert_preds)
     elif task == 'regression':
         if 'residuals' in config['experiment']['visualization']:
             plot_residuals_across_folds(val_results_per_split, save_string, 'val', config)
@@ -1094,11 +1104,11 @@ def plot_across_splits(config: dict, survival_results_per_split: list, test_surv
                     plot_qq_across_folds(splits, save_string, f"test_{ds_name}", config)
             elif task in ['survival', 'survival_discrete']:
                 if 'survival_roc' in config['experiment']['visualization']:
-                    plot_survival_auc_across_folds(survival_results_per_split[ds_name], save_string, f"test_{ds_name}", config)
+                    plot_survival_auc_across_folds(test_survival_results_per_split[ds_name], save_string, f"test_{ds_name}", config)
                 if 'concordance_index' in config['experiment']['visualization']:
-                    plot_concordance_index_across_folds(survival_results_per_split[ds_name], save_string, f"test_{ds_name}", config)
+                    plot_concordance_index_across_folds(test_survival_results_per_split[ds_name], save_string, f"test_{ds_name}", config)
                 if 'kaplan_meier' in config['experiment']['visualization']:
-                    plot_kaplan_meier_curves_across_folds(survival_results_per_split[ds_name], save_string, f"test_{ds_name}", config)
+                    plot_kaplan_meier_curves_across_folds(test_survival_results_per_split[ds_name], save_string, f"test_{ds_name}", config)
         logging.info(f"Plots saved to experiments/{config['experiment']['project_name']}/visualizations/benchmarking/{save_string}.png")
 
 
@@ -1244,9 +1254,10 @@ def find_and_apply_best_model(config: dict, val_df_agg: pd.DataFrame, test_df_ag
         del best_test_model_dict['task']
 
     if best_test_model_dict['params']['model'].lower() not in BUILT_IN_MIL:
-        if not slide_level:
+        if not slide_level and not config['experiment']['aggregation_level'] == 'slide':
             best_test_model_dict['params']['model'] = getattr(aggregators, best_test_model_dict['params']['model'])
         else:
+            #If slide-level, use the slide-level predictors
             try:
                 mil_method = get_model_class(slide_level_predictors, best_test_model_dict['params']['model'])
             except:
@@ -1461,6 +1472,9 @@ def calculate_survival_results(result: pd.DataFrame):
     #  - shape (N, k), if multiple y_pred columns (discrete-time probabilities, etc.)
     if preds_raw.ndim == 2 and preds_raw.shape[1] == 1:
         preds = np.squeeze(preds_raw, axis=1)
+
+        #CONTINUOUS HAZARDS NEED TO BE INVERTED TO REPRESENT RISK SCORE
+        preds = -preds  # Invert the continuous hazards to represent risk scores
     else:
         # In the “multiple‐column” case, interpret each y_pred_i as logit for discrete bin i:
         #   1) apply softmax → probability of each time-bin
@@ -1474,7 +1488,7 @@ def calculate_survival_results(result: pd.DataFrame):
         preds = np.sum(probs * bin_indices[np.newaxis, :], axis=1)
 
     # Now ‘preds’ is a 1-D array of length N:
-    preds = np.asarray(preds, dtype=np.float64)
+    preds = np.asarray(preds, dtype=np.float32)
     preds = np.squeeze(preds)
 
     # ──────────────────────────────────────────────────────────────────────────────
@@ -1511,13 +1525,16 @@ def calculate_survival_results(result: pd.DataFrame):
     # ──────────────────────────────────────────────────────────────────────────────
     # 4) Compute Concordance Index (lifelines ≥ 0.25 signature is (event_times, pred_scores, event_observed))
     # ──────────────────────────────────────────────────────────────────────────────
+
+
     c_index = concordance_index(durations, preds, events)
+
     logging.info(f"Survival C-index: {c_index:.4f}")
 
     # ──────────────────────────────────────────────────────────────────────────────
     # 5) Compute a simple time-averaged Brier score over 100 time points
     # ──────────────────────────────────────────────────────────────────────────────
-    brier = calculate_brier_score(durations, events, preds)
+    brier = calculate_brier_score(durations, events, preds_raw)
     logging.info(f"Survival Brier Score: {brier:.4f}")
 
     metrics = {'c_index': c_index, 'brier_score': brier}
@@ -1716,6 +1733,7 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
 
             model_kwargs = {
                 'pb_config': config,
+                'loss': loss,
             }
             # Train the model on the current split
             _ = project.train_mil(
@@ -1728,7 +1746,9 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
                 **model_kwargs
             )
 
-            number = get_highest_numbered_filename(f"experiments/{config['experiment']['project_name']}/mil/")
+            mil_directory = f"experiments/{config['experiment']['project_name']}/mil"
+
+            number = get_mil_directory_number(mil_directory, save_string)
             def get_validation_metrics(number: str):
                 #Get the corresponding validation results
                 val_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/predictions.parquet")
@@ -1797,6 +1817,8 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
 
                     metrics = get_test_metrics()
 
+                    number = get_mil_directory_number(mil_directory, save_string)
+
                     test_dict = combination_dict.copy()
                     test_dict.update(metrics)
                     test_dict['weights'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}"
@@ -1841,6 +1863,9 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
 
                     metrics = get_test_metrics()
 
+
+                number = get_mil_directory_number(mil_directory, save_string)
+
                 test_dict = combination_dict.copy()
                 test_dict.update(metrics)
                 test_dict['weights'] = f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}"
@@ -1856,7 +1881,7 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
 
         plot_across_splits(config, survival_results_per_split, test_survival_results_per_split,
                            val_results_per_split, test_results_per_split, val_pr_per_split, test_pr_per_split,
-                           save_string)
+                           save_string, True if config['experiment']['task'] == 'survival' else False)
 
         # Specify which results to use for the objective metric
         if config['optimization']['objective_dataset'] == 'val':
