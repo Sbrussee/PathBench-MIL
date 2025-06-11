@@ -84,7 +84,7 @@ If you use **PathBench-MIL** in your research or projects, please cite:
 
 ## Prerequisites
 
-- Python >= 3.9
+- Python >= 3.10
 - Git
 
 ## Steps to Install PathBench and SlideFlow Fork
