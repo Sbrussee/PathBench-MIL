@@ -1,17 +1,17 @@
 experiment:
   project_name: TCGA_LUSC
-  annotation_file: pathbench/test/dataset2_continuous_survival.csv
-  balancing: event
+  annotation_file: /exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/pathbench/test/final_survival_annotation_tcga-lusc_days_split.csv
+  balancing: None
   class_weighting: False
-  split_technique: k-fold
+  split_technique: fixed
   k: 3
   val_fraction: 0.2
   best_epoch_based_on: val_loss  # Metric to be used for selecting the best epoch, can be val_loss or any metric in evaluation
   epochs: 50 # Number of epochs for training
   batch_size: 64 # Batch size for training
-  bag_size: 512 # Bag size for MIL models
-  encoder_layers: 2 # Number of layers in the MIL encoder
-  z_dim: 512 # Dimension of the latent space in the MIL encoder
+  bag_size: None # Bag size for MIL models
+  encoder_layers: 1 # Number of layers in the MIL encoder
+  z_dim: 256 # Dimension of the latent space in the MIL encoder
   dropout_p: 0.3 # Dropout probability for the MIL model
   num_workers: 4 # Number of workers for data loading, 0 for no parallelization.
   aggregation_level: patient # Aggregation level can be 'slide' or 'patient'
@@ -20,6 +20,11 @@ experiment:
   custom_metrics: [ConcordanceIndex]
   report: False
   mixed_precision: True
+  schedulers: [ReduceLROnPlateau, EarlyStoppingCallback]
+  skip_feature_extraction: True # Whether to skip the feature extraction step if features already exist
+  multiprocessing_context: fork
+  persistent_workers: True
+
 
   qc: # List of quality control methods to be used
     - GaussianV2
@@ -42,13 +47,13 @@ experiment:
 
 datasets:
   - name: train
-    slide_path: /exports/path-cutane-lymfomen-hpc/siemen/tcga/TCGA-LUSC
+    slide_path: /exports/path-cutane-lymfomen-hpc/siemen/TCGA-Tools/TCGA/TCGA-LUSC
     tfrecord_path: TCGA_LUSC/tfrecords
     tile_path: TCGA_LUSC/tiles
     used_for: training
 
   - name: test
-    slide_path: /exports/path-cutane-lymfomen-hpc/siemen/tcga/TCGA-LUSC
+    slide_path: /exports/path-cutane-lymfomen-hpc/siemen/TCGA-Tools/TCGA/TCGA-LUSC
     tfrecord_path: TCGA_LUSC/tfrecords
     tile_path: TCGA_LUSC/tiles
     used_for: testing
@@ -62,12 +67,14 @@ benchmark_parameters:
     - macenko
   
   feature_extraction:
-    - uni
-
+    - h_optimus_0
+    - resnet50_imagenet
+    - CTransPath
+    
   mil:
     - attention_mil
-    - mean_mil
-    - linear_evaluation_mil
+    - transmil
+    - linear_mil
 
   loss:
     - CoxPHLoss

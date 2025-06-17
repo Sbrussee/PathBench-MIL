@@ -469,7 +469,7 @@ def benchmark(config : dict, project : sf.Project):
                     #Get the corresponding validation results
                     val_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/predictions.parquet")
                     if task == 'survival' or task == 'survival_discrete':	
-                        metrics, durations, events, predictions = calculate_survival_results(val_result)
+                        metrics, durations, events, predictions = calculate_survival_results(val_result, invert_preds=(task == 'survival'))
                         survival_results_per_split.append((durations, events, predictions))
                     elif task  == 'regression':
                         metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, save_string, "val")
@@ -522,7 +522,7 @@ def benchmark(config : dict, project : sf.Project):
                             
                             # Process the test_result based on task type
                             if task in ['survival', 'survival_discrete']:
-                                metrics, durations, events, predictions = calculate_survival_results(test_result)
+                                metrics, durations, events, predictions = calculate_survival_results(test_result, invert_preds=(task == 'survival'))
                                 test_survival_results_per_split[test_dataset['name']].append((durations, events, predictions))
                             elif task == 'regression':
                                 metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
@@ -575,7 +575,7 @@ def benchmark(config : dict, project : sf.Project):
 
             plot_across_splits(config, survival_results_per_split, test_survival_results_per_split,
                                 val_results_per_split, test_results_per_split, val_pr_per_split, test_pr_per_split,
-                                save_string)
+                                save_string, invert_preds=True if config['experiment']['task'] == 'survival' else False)
 
             #Close all unused file handles
             gc.collect()
@@ -945,13 +945,15 @@ def generate_bags(config: dict, project: sf.Project, all_data: sf.Dataset,
                                             outdir=bags_dir,
                                             mixed_precision=config['experiment']['mixed_precision'],
                                             num_gpus=num_gpus,
-                                            force_regenerate=not config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else True)
+                                            force_regenerate=not config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else False,
+                                            progress=False)
     else:
         bags = project.generate_feature_bags(model=feature_extractor, dataset=all_data,
                                             normalizer=combination_dict['normalization'],
                                             outdir=bags_dir,
                                             num_gpus=num_gpus,
-                                            force_regenerate=not config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else True)
+                                            force_regenerate=not config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else False,
+                                            progress=False)
     return bags
 
 
@@ -1069,7 +1071,8 @@ def set_mil_config(config: dict, combination_dict: dict, task: str, slide_level:
 
 def plot_across_splits(config: dict, survival_results_per_split: list, test_survival_results_per_split: Dict[str, list],
                        val_results_per_split: list, test_results_per_split: Dict[str, list],
-                       val_pr_per_split: list, test_pr_per_split: Dict[str, list], save_string: str) -> None:
+                       val_pr_per_split: list, test_pr_per_split: Dict[str, list], save_string: str,
+                       invert_preds: bool) -> None:
     """
     Plot evaluation results across splits for survival, regression, and classification tasks.
 
@@ -1089,11 +1092,11 @@ def plot_across_splits(config: dict, survival_results_per_split: list, test_surv
     task = config['experiment']['task']
     if task in ['survival', 'survival_discrete']:
         if 'survival_roc' in config['experiment']['visualization']:
-            plot_survival_auc_across_folds(survival_results_per_split, save_string, 'val', config)
+            plot_survival_auc_across_folds(survival_results_per_split, save_string, 'val', config, invert_preds=invert_preds)
         if 'concordance_index' in config['experiment']['visualization']:
-            plot_concordance_index_across_folds(survival_results_per_split, save_string, 'val', config)
+            plot_concordance_index_across_folds(survival_results_per_split, save_string, 'val', config, invert_preds=invert_preds)
         if 'kaplan_meier' in config['experiment']['visualization']:
-            plot_kaplan_meier_curves_across_folds(survival_results_per_split, save_string, 'val', config)
+            plot_kaplan_meier_curves_across_folds(survival_results_per_split, save_string, 'val', config, invert_preds=invert_preds)
     elif task == 'regression':
         if 'residuals' in config['experiment']['visualization']:
             plot_residuals_across_folds(val_results_per_split, save_string, 'val', config)
@@ -1123,11 +1126,11 @@ def plot_across_splits(config: dict, survival_results_per_split: list, test_surv
                     plot_qq_across_folds(splits, save_string, f"test_{ds_name}", config)
             elif task in ['survival', 'survival_discrete']:
                 if 'survival_roc' in config['experiment']['visualization']:
-                    plot_survival_auc_across_folds(test_survival_results_per_split[ds_name], save_string, f"test_{ds_name}", config)
+                    plot_survival_auc_across_folds(test_survival_results_per_split[ds_name], save_string, f"test_{ds_name}", config, invert_preds=invert_preds)
                 if 'concordance_index' in config['experiment']['visualization']:
-                    plot_concordance_index_across_folds(test_survival_results_per_split[ds_name], save_string, f"test_{ds_name}", config)
+                    plot_concordance_index_across_folds(test_survival_results_per_split[ds_name], save_string, f"test_{ds_name}", config, invert_preds=invert_preds)
                 if 'kaplan_meier' in config['experiment']['visualization']:
-                    plot_kaplan_meier_curves_across_folds(test_survival_results_per_split[ds_name], save_string, f"test_{ds_name}", config)
+                    plot_kaplan_meier_curves_across_folds(test_survival_results_per_split[ds_name], save_string, f"test_{ds_name}", config, invert_preds=invert_preds)
         logging.info(f"Plots saved to experiments/{config['experiment']['project_name']}/visualizations/benchmarking/{save_string}.png")
 
 
@@ -1446,7 +1449,7 @@ def calculate_results(result: pd.DataFrame, config: dict, save_string: str, data
     return metrics, tpr, fpr, precision_recall_data
 
 
-def calculate_survival_results(result: pd.DataFrame):
+def calculate_survival_results(result: pd.DataFrame, invert_preds=False):
     """
     Calculate survival metrics (C-index and Brier score) from prediction results.
 
@@ -1543,6 +1546,9 @@ def calculate_survival_results(result: pd.DataFrame):
     # 4) Compute Concordance Index (lifelines ≥ 0.25 signature is (event_times, pred_scores, event_observed))
     # ──────────────────────────────────────────────────────────────────────────────
 
+    if invert_preds:
+        # If you want to invert the predictions (e.g., higher risk = lower survival)
+        preds = -preds
 
     c_index = concordance_index(durations, preds, events)
 
@@ -1637,28 +1643,31 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
 
         #Get the dict of additional search parameters in format hp: range e.g. {'epochs' : [10, 50]}
         additional_hyperparameters = config['optimization']['search_parameters'] if 'search_parameters' in config['optimization'] else {}
-        if 'epochs' in additional_hyperparameters:
+        if 'epochs' in additional_hyperparameters and len(additional_hyperparameters['epochs']) > 1:
             epochs = trial.suggest_int('epochs', additional_hyperparameters['epochs'][0], additional_hyperparameters['epochs'][1])
         else:
-            epochs = config['experiment']['epochs'] if 'epochs' in config['experiment'] else 50
-        if 'batch_size' in additional_hyperparameters:
+            #If there is one value, use it directly
+            epochs = additional_hyperparameters['epochs'][0] if 'epochs' in additional_hyperparameters else config['experiment']['epochs'] if 'epochs' in config['experiment'] else 50
+
+        if 'batch_size' in additional_hyperparameters and len(additional_hyperparameters['batch_size']) > 1:
             batch_size = trial.suggest_int('batch_size', additional_hyperparameters['batch_size'][0], additional_hyperparameters['batch_size'][1])
         else:
-            batch_size = config['experiment']['batch_size'] if 'batch_size' in config['experiment'] else 32
-        if 'z_dim' in additional_hyperparameters:
+            batch_size = additional_hyperparameters['batch_size'][0] if 'batch_size' in additional_hyperparameters else config['experiment']['batch_size'] if 'batch_size' in config['experiment'] else 32
+
+        if 'z_dim' in additional_hyperparameters and len(additional_hyperparameters['z_dim']) > 1:
             z_dim = trial.suggest_int('z_dim', additional_hyperparameters['z_dim'][0], additional_hyperparameters['z_dim'][1])
         else:
-            z_dim = config['experiment']['z_dim'] if 'z_dim' in config['experiment'] else 256
+            z_dim = additional_hyperparameters['z_dim'][0] if 'z_dim' in additional_hyperparameters else config['experiment']['z_dim'] if 'z_dim' in config['experiment'] else 256
         
-        if 'encoder_layers' in additional_hyperparameters:
+        if 'encoder_layers' in additional_hyperparameters and len(additional_hyperparameters['encoder_layers']) > 1:
             encoder_layers = trial.suggest_int('encoder_layers', additional_hyperparameters['encoder_layers'][0], additional_hyperparameters['encoder_layers'][1])
         else:
-            encoder_layers = config['experiment']['encoder_layers'] if 'encoder_layers' in config['experiment'] else 2
+            encoder_layers = additional_hyperparameters['encoder_layers'][0] if 'encoder_layers' in additional_hyperparameters else config['experiment']['encoder_layers'] if 'encoder_layers' in config['experiment'] else 1
         
-        if 'dropout_p' in additional_hyperparameters:
+        if 'dropout_p' in additional_hyperparameters and len(additional_hyperparameters['dropout_p']) > 1:
             dropout_p = trial.suggest_float('dropout_p', additional_hyperparameters['dropout_p'][0], additional_hyperparameters['dropout_p'][1])
         else:
-            dropout_p = config['experiment']['dropout_p'] if 'dropout_p' in config['experiment'] else 0.25
+            dropout_p = additional_hyperparameters['dropout_p'][0] if 'dropout_p' in additional_hyperparameters else config['experiment']['dropout_p'] if 'dropout_p' in config['experiment'] else 0.25
 
         tile_px = trial.suggest_categorical('tile_px', tile_px_choices)
         tile_um = trial.suggest_categorical('tile_um', tile_um_choices)
@@ -1770,7 +1779,7 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
                 #Get the corresponding validation results
                 val_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/predictions.parquet")
                 if task == 'survival' or task == 'survival_discrete':	
-                    metrics, durations, events, predictions = calculate_survival_results(val_result)
+                    metrics, durations, events, predictions = calculate_survival_results(val_result, invert_preds=(task == 'survival'))
                     survival_results_per_split.append((durations, events, predictions))
                 elif task  == 'regression':
                     metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, save_string, "val")
@@ -1819,7 +1828,7 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
 
                     def get_test_metrics():
                         if task in ['survival', 'survival_discrete']:
-                            metrics, durations, events, predictions = calculate_survival_results(test_result)
+                            metrics, durations, events, predictions = calculate_survival_results(test_result, invert_preds=(task == 'survival'))
                             test_survival_results_per_split[test_dataset['name']].append((durations, events, predictions))
                         elif task == 'regression':
                             metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
@@ -1865,7 +1874,7 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
                 
                 def get_test_metrics():
                     if task in ['survival', 'survival_discrete']:
-                        metrics, durations, events, predictions = calculate_survival_results(test_result)
+                        metrics, durations, events, predictions = calculate_survival_results(test_result, invert_preds=(task == 'survival'))
                         test_survival_results_per_split[test_dataset['name']].append((durations, events, predictions))
                     elif task == 'regression':
                         metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
@@ -1898,7 +1907,7 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
 
         plot_across_splits(config, survival_results_per_split, test_survival_results_per_split,
                            val_results_per_split, test_results_per_split, val_pr_per_split, test_pr_per_split,
-                           save_string)
+                           save_string, invert_preds = True if task == 'survival' else False)
 
         # Specify which results to use for the objective metric
         if config['optimization']['objective_dataset'] == 'val':
@@ -1964,7 +1973,7 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
             load_if_exists=True if config['optimization'].get('load_study') else False
         )
     logging.info("Starting optimization...")
-    study.optimize(objective, n_trials=config['optimization']['trials'])
+    study.optimize(objective, n_trials=config['optimization']['trials'], show_progress_bar=False)
 
     # Save the study results
     plot_optimization_output(project_directory, study)
