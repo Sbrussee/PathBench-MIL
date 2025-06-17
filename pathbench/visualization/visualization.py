@@ -294,7 +294,8 @@ def plot_concordance_index_across_folds(
     results_per_split: list,  # list of (durations, events, predictions)
     save_string: str,
     dataset: str,
-    config: dict
+    config: dict,
+    invert_preds: bool = False
 ):
     """
     Plot c-index over time (approx) across folds.
@@ -323,7 +324,16 @@ def plot_concordance_index_across_folds(
         events    = events.astype(bool)
 
         # Discrete => continuous
-        cont_preds = get_continuous_preds(raw_preds)
+
+        #If discrete, convert to continuous predictions
+        if raw_preds.ndim > 1:
+            cont_preds = get_continuous_preds(raw_preds)
+        else:
+            cont_preds = raw_preds.flatten().astype(float)
+            if invert_preds:
+                # Invert predictions if specified (e.g., for risk scores).
+                cont_preds = -cont_preds
+
 
         cindexes = []
         for t in unique_durations:

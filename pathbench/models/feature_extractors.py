@@ -28,6 +28,8 @@ from conch.open_clip_custom import create_model_from_pretrained
 
 #Set weights dir based on the $WEIGHTS_DIR environment variable
 WEIGHTS_DIR = os.environ.get('WEIGHTS_DIR', "./pretrained_weights")
+#Set HF_HOME based on WEIGHTS_DIR
+os.environ['HF_HOME'] = WEIGHTS_DIR
 
 def get_pretrained_url_vit(key : str):
     """
@@ -2546,6 +2548,8 @@ class mstar(TorchFeatureExtractor):
         base_model.load_state_dict(state_dict, strict=False)
 
         self.model = base_model
+        self.model.to('cuda')
+        self.model.eval()
 
         # 5. Transforms & preprocessing
         self.transform = transforms.Compose([
