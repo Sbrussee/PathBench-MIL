@@ -332,6 +332,8 @@ PathBench inherits the project functionality from SlideFlow. PathBench allows cr
 - `skip_extracted` : Whether to force re-extraction of tiles from WSIs, even if already available. If set to True, will skip re-extraction if tiles are available.
 - `skip_feature_extraction`: Whether to force re-extraction of features from tfrecord tiles. If set to True, will skip re-extraction if features are available.
 - `save_tiles`: Whether to save .jpg images of each tile in addition to the .tfrecord formatted tiles.
+- `multiprocessing_context` : Which multiprocessing mode to use ('fork' or 'spawn')
+- `persistent_workers` : Whether dataloaders should keep multiprocesses alive across batches
 
 # Datasets
 The datasets to be used in the project can be specified in the datasets section. One can add any arbitrary number of data sources to a project and specify whether these should be used for training/validation or as testing datasets:
@@ -446,6 +448,7 @@ experiment:
   skip_extracted: True # Whether to skip the tile extraction step if tiles already exist
   skip_feature_extraction: True # Whether to skip the feature extraction step if features already exist
   save_tiles: False # Whether to save the extracted tile images as .jpg files in addition to the .tfrecords
+
 
   visualization: # Visualization options, options: CLASSIFICATION: confusion_matrix, precision_recall_curve, roc_curve, top_tiles SURVIVAL: survival_roc, concordance_index, kaplan_meier REGRESSION: predicted_vs_actual, residuals, qq
     - learning_curve
