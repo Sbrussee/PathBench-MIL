@@ -330,6 +330,12 @@ def benchmark(config : dict, project : sf.Project):
     benchmark_parameters = config['benchmark_parameters'] if 'benchmark_parameters' in config else None
     project_directory = f"experiments/{config['experiment']['project_name']}" if 'project_name' in config['experiment'] else "experiments/project"
     annotations = project.annotations 
+
+    #Generate an experiment label for the current run
+    if 'experiment_label' in config['experiment']:
+        experiment_label = config['experiment']['experiment_label']
+    else:
+        experiment_label = f"benchmarking_{task}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
     
     logging.info(f"Using {project_directory} for project directory...")
     logging.info(f"Using {annotations} for annotations...")
@@ -570,8 +576,8 @@ def benchmark(config : dict, project : sf.Project):
             combinations_successfully_finished += 1
 
             # Save the combination results up to this point, and mark it as finished
-            val_df.to_csv(f"experiments/{config['experiment']['project_name']}/results/val_results.csv")
-            test_df.to_csv(f"experiments/{config['experiment']['project_name']}/results/test_results.csv")
+            val_df.to_csv(f"experiments/{config['experiment']['project_name']}/results/val_results_{experiment_label}.csv")
+            test_df.to_csv(f"experiments/{config['experiment']['project_name']}/results/test_results_{experiment_label}.csv")
 
             plot_across_splits(config, survival_results_per_split, test_survival_results_per_split,
                                 val_results_per_split, test_results_per_split, val_pr_per_split, test_pr_per_split,
@@ -590,23 +596,23 @@ def benchmark(config : dict, project : sf.Project):
         print(val_df, test_df)
         print(list(benchmark_parameters.keys()))
 
-        plot_benchmarking_output(config, val_df, test_df)
+        plot_benchmarking_output(config, val_df, test_df, experiment_label)
 
         val_df_agg, test_df_agg = build_aggregated_results(val_df, test_df, config, benchmark_parameters,
-                                                           aggregation_functions)
+                                                           aggregation_functions, experiment_label)
 
         find_and_apply_best_model(config, val_df_agg, test_df_agg, benchmark_parameters, val_df, test_df,
                                   val, test_set, target, slide_level)
 
     # Empty the val and test results
-    if os.path.exists(f"experiments/{config['experiment']['project_name']}/results/val_results.csv"):
-        os.remove(f"experiments/{config['experiment']['project_name']}/results/val_results.csv")
-    if os.path.exists(f"experiments/{config['experiment']['project_name']}/results/test_results.csv"):
-        os.remove(f"experiments/{config['experiment']['project_name']}/results/test_results.csv")
+    if os.path.exists(f"experiments/{config['experiment']['project_name']}/results/val_results_{experiment_label}.csv"):
+        os.remove(f"experiments/{config['experiment']['project_name']}/results/val_results_{experiment_label}.csv")
+    if os.path.exists(f"experiments/{config['experiment']['project_name']}/results/test_results_{experiment_label}.csv"):
+        os.remove(f"experiments/{config['experiment']['project_name']}/results/test_results_{experiment_label}.csv")
     logging.info("Benchmarking finished...")
 
 
-def plot_benchmarking_output(config: dict, val_df: pd.DataFrame, test_df: pd.DataFrame):
+def plot_benchmarking_output(config: dict, val_df: pd.DataFrame, test_df: pd.DataFrame, experiment_label: str):
     """
     Plot boxplots of each evaluation metric for each parameter combination using
     the unaggregated val_df and test_df, with shortened labels, dynamic sizing,
@@ -673,7 +679,7 @@ def plot_benchmarking_output(config: dict, val_df: pd.DataFrame, test_df: pd.Dat
         plt.xlabel("Parameter Combination")
         plt.ylabel(metric)
         plt.tight_layout()
-        plt.savefig(f"{output_dir}/val_{metric}_boxplot_{current_date}.png")
+        plt.savefig(f"{output_dir}/val_{metric}_boxplot_{experiment_label}.png")
         plt.close()
 
     # --- Test Plots ---
@@ -710,7 +716,7 @@ def plot_benchmarking_output(config: dict, val_df: pd.DataFrame, test_df: pd.Dat
             plt.xlabel("Parameter Combination")
             plt.ylabel(metric)
             plt.tight_layout()
-            plt.savefig(f"{output_dir}/test_{ds}_{metric}_boxplot_{current_date}.png")
+            plt.savefig(f"{output_dir}/test_{ds}_{metric}_boxplot_{experiment_label}.png")
             plt.close()
 
 
@@ -946,7 +952,8 @@ def generate_bags(config: dict, project: sf.Project, all_data: sf.Dataset,
                                             mixed_precision=config['experiment']['mixed_precision'],
                                             num_gpus=num_gpus,
                                             force_regenerate=not config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else False,
-                                            progress=False)
+                                            progress=False
+        )
     else:
         bags = project.generate_feature_bags(model=feature_extractor, dataset=all_data,
                                             normalizer=combination_dict['normalization'],
@@ -1128,7 +1135,7 @@ def plot_across_splits(config: dict, survival_results_per_split: list, test_surv
                 if 'survival_roc' in config['experiment']['visualization']:
                     plot_survival_auc_across_folds(test_survival_results_per_split[ds_name], save_string, f"test_{ds_name}", config, invert_preds=invert_preds)
                 if 'concordance_index' in config['experiment']['visualization']:
-                    plot_concordance_index_across_folds(test_survival_results_per_split[ds_name], save_string, f"test_{ds_name}", config, invert_preds=invert_preds)
+                    plot_concordance_index_across_folds(test_survival_results_per_split[ds_name], save_string, f"test_{ds_name}", config)
                 if 'kaplan_meier' in config['experiment']['visualization']:
                     plot_kaplan_meier_curves_across_folds(test_survival_results_per_split[ds_name], save_string, f"test_{ds_name}", config, invert_preds=invert_preds)
         logging.info(f"Plots saved to experiments/{config['experiment']['project_name']}/visualizations/benchmarking/{save_string}.png")
@@ -1139,7 +1146,8 @@ def plot_across_splits(config: dict, survival_results_per_split: list, test_surv
 # =============================================================================
 
 def build_aggregated_results(val_df: pd.DataFrame, test_df: pd.DataFrame, config: dict,
-                             benchmark_parameters: dict, aggregation_functions: dict) -> (pd.DataFrame, pd.DataFrame):
+                             benchmark_parameters: dict, aggregation_functions: dict,
+                             experiment_label: str) -> (pd.DataFrame, pd.DataFrame):
     """
     Aggregate the results across splits and sort based on the primary evaluation metric.
 
@@ -1149,6 +1157,7 @@ def build_aggregated_results(val_df: pd.DataFrame, test_df: pd.DataFrame, config
         config (dict): Experiment configuration dictionary.
         benchmark_parameters (dict): Dictionary of benchmark parameters.
         aggregation_functions (dict): Dictionary of aggregation functions for each metric.
+        experiment_label (str): Label for the current experiment.
 
     Returns:
         tuple: Aggregated (and sorted) validation and test results dataframes.
@@ -1178,10 +1187,10 @@ def build_aggregated_results(val_df: pd.DataFrame, test_df: pd.DataFrame, config
 
     results_dir = f"experiments/{config['experiment']['project_name']}/results"
     os.makedirs(results_dir, exist_ok=True)
-    val_df_agg.to_csv(f"{results_dir}/val_results_agg.csv")
-    test_df_agg.to_csv(f"{results_dir}/test_results_agg.csv")
-    val_df_agg.to_html(f"{results_dir}/val_results_agg.html")
-    test_df_agg.to_html(f"{results_dir}/test_results_agg.html")
+    val_df_agg.to_csv(f"{results_dir}/val_results_agg_{experiment_label}.csv")
+    test_df_agg.to_csv(f"{results_dir}/test_results_agg_{experiment_label}.csv")
+    val_df_agg.to_html(f"{results_dir}/val_results_agg_{experiment_label}.html")
+    test_df_agg.to_html(f"{results_dir}/test_results_agg_{experiment_label}.html")
 
     return val_df_agg, test_df_agg
 
