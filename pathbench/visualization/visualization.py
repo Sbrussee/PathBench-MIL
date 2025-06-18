@@ -295,7 +295,6 @@ def plot_concordance_index_across_folds(
     save_string: str,
     dataset: str,
     config: dict,
-    invert_preds: bool = False
 ):
     """
     Plot c-index over time (approx) across folds.
@@ -330,9 +329,6 @@ def plot_concordance_index_across_folds(
             cont_preds = get_continuous_preds(raw_preds)
         else:
             cont_preds = raw_preds.flatten().astype(float)
-            if invert_preds:
-                # Invert predictions if specified (e.g., for risk scores).
-                cont_preds = -cont_preds
 
 
         cindexes = []
