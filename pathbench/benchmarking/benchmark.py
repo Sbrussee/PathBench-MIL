@@ -567,6 +567,13 @@ def benchmark(config : dict, project : sf.Project):
                 else:
                     logging.info("No test datasets found in the configuration. Skipping test evaluation.")
 
+                # Increment the index for the next split
+                index += 1
+
+            
+
+
+
             # Visualize the top 5 tiles, if applicable
             #Check if model supports attention
             if 'top_tiles' in config['experiment']['visualization']:
