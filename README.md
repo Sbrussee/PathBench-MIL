@@ -269,6 +269,12 @@ If nano is not installed:
 ```bash
 apt-get update && apt-get install -y nano
 ```
+
+## Setting Slide Backend
+Inhereting from SlideFlow, we use the CuCIM backend by default. This is a fast framework but does not support *.scn, *.mrxs, *.ndpi, *.vms, and *.vmu WSIs. For PathBench-MIL to work with these slide types please set:
+```export SF_SLIDE_BACKEND=libvips```
+which will use libvips instead of CuCIM. Note that this requires the [libvips](https://github.com/libvips/libvips) package.
+
 ## Run PathBench
 Execute, inside the docker container:
 ```bash
@@ -334,6 +340,7 @@ PathBench inherits the project functionality from SlideFlow. PathBench allows cr
 - `save_tiles`: Whether to save .jpg images of each tile in addition to the .tfrecord formatted tiles.
 - `multiprocessing_context` : Which multiprocessing mode to use ('fork' or 'spawn')
 - `persistent_workers` : Whether dataloaders should keep multiprocesses alive across batches
+- `experiment_label` : Label to use for the current experiment. Results will be saved using this label.
 
 # Datasets
 The datasets to be used in the project can be specified in the datasets section. One can add any arbitrary number of data sources to a project and specify whether these should be used for training/validation or as testing datasets:
@@ -448,6 +455,7 @@ experiment:
   skip_extracted: True # Whether to skip the tile extraction step if tiles already exist
   skip_feature_extraction: True # Whether to skip the feature extraction step if features already exist
   save_tiles: False # Whether to save the extracted tile images as .jpg files in addition to the .tfrecords
+  experiment_label: exp1 # Experiment label to use.
 
 
   visualization: # Visualization options, options: CLASSIFICATION: confusion_matrix, precision_recall_curve, roc_curve, top_tiles SURVIVAL: survival_roc, concordance_index, kaplan_meier REGRESSION: predicted_vs_actual, residuals, qq
