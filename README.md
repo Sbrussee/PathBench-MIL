@@ -1150,10 +1150,10 @@ For more fundamental changes, and adding new normalization methods, one needs to
 
 # Frequently Asked Questions
 1. **I encountered a bug / problem. How can i resolve this?**
-When encountering bugs, please provide your pathbench configuration along with information on your python environment and OS, this aids in solving the problem in a correct and timely manner. Some issues encountered might be part of the original SlideFlow codebase, please refer to [Link](https://github.com/slideflow/slideflow) for these problems.
+When encountering bugs, please provide your pathbench configuration along with information on your python environment and OS, this aids in solving the problem in a correct and timely manner. Some issues encountered might be part of the original SlideFlow codebase, please refer to [SlideFlow](https://github.com/slideflow/slideflow) for these problems.
 
 2. **I want to share a new feature / fix i added to PathBench. How do i share this with the community?**
-Of course, we welcome collaboration on PathBench by the community. Feel free to open a pull request, after some stress-testing your new feature can be made available to all users of PathBench.
+Of course, we welcome collaboration on PathBench by the community. Feel free to open a pull request, after some stress-testing your new feature can be made available to all users of PathBench. For some ideas of what we are working on and where you can contribute, please see this [document](https://docs.google.com/document/d/1EhzTDkVFf8-U7ojRNKVm6i4u67BfZjxc0JCqSyv8rOQ/edit?usp=sharing).
 
 3. **Am i allowed to use PathBench for my own research purposes?**
 PathBench is available under the open source GPL-3 license. This means it is freely usable and modifyable, but can only be redistributed under the same GPL-3 license, and thus, should stay in the open source domain. Please consider adding features as a pull request to PathBench if you think your own projects might help the community of PathBench users.
