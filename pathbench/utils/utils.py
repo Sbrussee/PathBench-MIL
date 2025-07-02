@@ -11,6 +11,20 @@ import torch
 
 CURRENT_OPEN_FILES = []
 
+def remove_cache():
+    """
+    Remove the cache directories
+    """
+    #Remove /home/user/.cache/huggingface
+    default_cache = os.path.expanduser("~/.cache/huggingface")
+    if os.path.exists(default_cache):
+        os.system(f"rm -rf {default_cache}")
+    #Remove /home/user/.cache/torch
+    default_cache = os.path.expanduser("~/.cache/torch")
+    if os.path.exists(default_cache):
+        os.system(f"rm -rf {default_cache}")
+    return
+    
 def get_available_gpus():
     """
     Retrieves the number of available GPUs, prioritizing SLURM environment variables

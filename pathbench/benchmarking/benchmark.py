@@ -54,10 +54,12 @@ from slideflow.slide import qc
 # Import local modules (adjust the import paths if necessary)
 from ..models.feature_extractors import *
 from ..models import aggregators, slide_level_predictors
-from ..utils.utils import *
-from ..visualization.visualization import *
-from ..utils.losses import *
-from ..utils.metrics import *
+from ..utils.utils  import get_available_gpus, remove_cache, get_model_class, get_mil_directory_number, free_up_gpu_memory, calculate_entropy
+from ..visualization.visualization import plot_calibration_curve_across_splits, plot_roc_curve_across_splits, \
+                            plot_concordance_index_across_folds, plot_kaplan_meier_curves_across_folds, plot_precision_recall_across_splits, \
+                            plot_predicted_vs_actual_across_folds, plot_top5_attended_tiles_per_class, plot_survival_auc_across_folds, \
+                            plot_residuals_across_folds, plot_qq_across_folds
+
 from conch.open_clip_custom import create_model_from_pretrained 
 
 # Set logging level for the pipeline
@@ -260,6 +262,27 @@ def get_model_string(combination_dict: dict, feature_extraction: str) -> str:
     
     return model_string
 
+def get_default_loss(task: str):
+    """
+    Get the default loss function based on the task type.
+
+    Args:
+        task (str): The task type.
+
+    Returns:
+        str: The default loss function.
+    """
+    if task == 'classification':
+        return 'CrossEntropyLoss'
+    elif task == 'regression':
+        return 'MSELossReg'
+    elif task in ['survival']:
+        return 'CoxPHLoss'
+    elif task in ['survival_discrete']:
+        return "NLLLogisticHazardLoss"
+    else:
+        raise ValueError(f"Unsupported task type: {task}")
+
 def visualize_top5_tiles(config: dict,
                          val: sf.Dataset,
                          test_set: sf.Dataset,
@@ -450,7 +473,7 @@ def benchmark(config : dict, project : sf.Project):
 
                 model_kwargs = {
                     'pb_config' : config,
-                    'loss' : combination_dict['loss']
+                    'loss' : combination_dict['loss'] if 'loss' in combination_dict else get_default_loss(task),
                 }
                 logging.debug(f"Model kwargs before passing to slideflow: {model_kwargs}")
 
@@ -474,6 +497,8 @@ def benchmark(config : dict, project : sf.Project):
                     number = get_mil_directory_number(mil_directory, save_string)
                     #Get the corresponding validation results
                     val_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/predictions.parquet")
+                    val_result.to_csv(f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/predictions.csv", index=False)
+                    logging.info(f"Validation results saved to experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/predictions.parquet")
                     if task == 'survival' or task == 'survival_discrete':	
                         metrics, durations, events, predictions = calculate_survival_results(val_result, invert_preds=(task == 'survival'))
                         survival_results_per_split.append((durations, events, predictions))
@@ -525,7 +550,7 @@ def benchmark(config : dict, project : sf.Project):
                                 f"{test_outdir}/00000-{model_string}/predictions.parquet"
                             )
                             test_result = pd.read_parquet(predictions_path)
-                            
+                            test_result.to_csv(f"{test_outdir}/00000-{model_string}/predictions.csv", index=False)
                             # Process the test_result based on task type
                             if task in ['survival', 'survival_discrete']:
                                 metrics, durations, events, predictions = calculate_survival_results(test_result, invert_preds=(task == 'survival'))
@@ -587,7 +612,7 @@ def benchmark(config : dict, project : sf.Project):
             test_df.to_csv(f"experiments/{config['experiment']['project_name']}/results/test_results_{experiment_label}.csv")
 
             plot_across_splits(config, survival_results_per_split, test_survival_results_per_split,
-                                val_results_per_split, test_results_per_split, val_pr_per_split, test_pr_per_split,
+                        val_results_per_split, test_results_per_split, val_pr_per_split, test_pr_per_split,
                                 save_string, invert_preds=True if config['experiment']['task'] == 'survival' else False)
 
             #Close all unused file handles
@@ -951,6 +976,11 @@ def generate_bags(config: dict, project: sf.Project, all_data: sf.Dataset,
     num_gpus = get_available_gpus()
     logging.info(f"Number of GPUs available for feature extraction: {num_gpus}")
 
+    #Check if on server environment
+    if "SLURM_JOB_ID" in os.environ:
+        logging.info("Running on a SLURM server environment, removing torch/huggingface cache to avoid full cache errors.")
+        remove_cache()
+
     #If some bags are missing, recalculate them
     if "mixed_precision" in config['experiment']:
         bags = project.generate_feature_bags(model=feature_extractor, dataset=all_data,
@@ -1108,7 +1138,7 @@ def plot_across_splits(config: dict, survival_results_per_split: list, test_surv
         if 'survival_roc' in config['experiment']['visualization']:
             plot_survival_auc_across_folds(survival_results_per_split, save_string, 'val', config, invert_preds=invert_preds)
         if 'concordance_index' in config['experiment']['visualization']:
-            plot_concordance_index_across_folds(survival_results_per_split, save_string, 'val', config, invert_preds=invert_preds)
+            plot_concordance_index_across_folds(survival_results_per_split, save_string, 'val', config)
         if 'kaplan_meier' in config['experiment']['visualization']:
             plot_kaplan_meier_curves_across_folds(survival_results_per_split, save_string, 'val', config, invert_preds=invert_preds)
     elif task == 'regression':
@@ -1794,6 +1824,9 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
             def get_validation_metrics(number: str):
                 #Get the corresponding validation results
                 val_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/predictions.parquet")
+                # Save the val_result as csv to the mil {number}_{save_string}_{index} directory
+                val_result.to_csv(f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/val_result.csv", index=False)
+                logging.info(f"Validation results saved to experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/val_result.csv")
                 if task == 'survival' or task == 'survival_discrete':	
                     metrics, durations, events, predictions = calculate_survival_results(val_result, invert_preds=(task == 'survival'))
                     survival_results_per_split.append((durations, events, predictions))
@@ -1835,13 +1868,14 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
                         dataset=test_set,
                         bags=bags,
                         config=mil_conf,
-                        outdir=f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}",
+                        outdir=f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}_{test_dataset['name']}",
                         **model_kwargs
                     )
 
                     model_string = get_model_string(combination_dict, feature_extraction)
-                    test_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}/00000-{model_string}/predictions.parquet")
-
+                    test_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}_{test_dataset['name']}/00000-{model_string}/predictions.parquet")
+                    # Save the test_result as csv to the mil_eval {number}_{save_string}_{index} directory
+                    test_result.to_csv(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}_{test_dataset['name']}/test_result.csv", index=False)
                     def get_test_metrics():
                         if task in ['survival', 'survival_discrete']:
                             metrics, durations, events, predictions = calculate_survival_results(test_result, invert_preds=(task == 'survival'))
@@ -1887,7 +1921,7 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
 
                 model_string = get_model_string(combination_dict, feature_extraction)
                 test_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}/00000-{model_string}/predictions.parquet")
-                
+                test_result.to_csv(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}/test_result.csv", index=False)
                 def get_test_metrics():
                     if task in ['survival', 'survival_discrete']:
                         metrics, durations, events, predictions = calculate_survival_results(test_result, invert_preds=(task == 'survival'))

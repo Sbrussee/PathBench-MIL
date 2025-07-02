@@ -9,8 +9,8 @@ import shutil
 import logging
 from huggingface_hub import login
 import multiprocessing as mp
-import torch.multiprocessing as torch_mp
-torch_mp.set_sharing_strategy('file_system')
+#import torch.multiprocessing as torch_mp
+#torch_mp.set_sharing_strategy('file_system')
 
 def read_config(config_file : str):
     """

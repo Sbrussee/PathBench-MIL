@@ -25,11 +25,14 @@ import functools
 from functools import reduce
 from operator import mul
 from conch.open_clip_custom import create_model_from_pretrained
+import logging
 
 #Set weights dir based on the $WEIGHTS_DIR environment variable
 WEIGHTS_DIR = os.environ.get('WEIGHTS_DIR', "./pretrained_weights")
-#Set HF_HOME based on WEIGHTS_DIR
+#Set environment variables for Hugging Face and Torch
 os.environ['HF_HOME'] = WEIGHTS_DIR
+os.environ['TORCH_HOME'] = WEIGHTS_DIR
+os.environ['XDG_CACHE_HOME'] = WEIGHTS_DIR
 
 def get_pretrained_url_vit(key : str):
     """
@@ -2718,6 +2721,9 @@ class gigapath_slide(SlideFeatureExtractor):
         tile_features = tile_features.unsqueeze(0)
         output = self.slide_encoder(tile_features, tile_coordinates)
         output = output[0].squeeze()
+        logging.info("ProvGigaPathSlide tile_features shape: %s", tile_features.shape)
+        logging.info("Tile coordinates shape: %s", tile_coordinates.shape)
+        logging.info("ProvGigaPathSlide output (slide_level shape)shape: %s", output.shape)
         return output
 
     def dump_config(self):
@@ -2770,6 +2776,9 @@ class titan_slide(SlideFeatureExtractor):
         output = self.slide_encoder.encode_slide_from_patch_features(
             tile_features, tile_coordinates, self.tile_px
         )
+        logging.info("TITAN tile_features shape: %s", tile_features.shape)
+        logging.info("TITAN tile_coordinates shape: %s", tile_coordinates.shape)
+        logging.info("TITAN output (slide_level shape)shape: %s", output.shape)
         return output
 
     def dump_config(self):
@@ -2814,6 +2823,8 @@ class prism_slide(SlideFeatureExtractor):
         tile_features = tile_features.unsqueeze(0)
         reprs = self.slide_encoder.slide_representations(tile_features)
         output = reprs["image_embedding"]  # [1, 1280]
+        logging.info("PRISM tile_features shape: %s", tile_features.shape)
+        logging.info("PRISM slide level output shape: %s", output.shape)
         return output
 
 

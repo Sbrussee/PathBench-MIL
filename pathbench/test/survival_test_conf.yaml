@@ -3,17 +3,17 @@ experiment:
   annotation_file: /exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/pathbench/test/final_survival_annotation_tcga-lusc_days_split.csv
   balancing: None
   class_weighting: False
-  split_technique: fixed
-  k: 3
+  split_technique: k-fold
+  k: 5
   val_fraction: 0.2
-  best_epoch_based_on: val_loss  # Metric to be used for selecting the best epoch, can be val_loss or any metric in evaluation
-  epochs: 50 # Number of epochs for training
-  batch_size: 64 # Batch size for training
-  bag_size: None # Bag size for MIL models
+  best_epoch_based_on: concordance_index  # Metric to be used for selecting the best epoch, can be val_loss or any metric in evaluation
+  epochs: 25 # Number of epochs for training
+  batch_size: 256 # Batch size for training
+  bag_size: 1024 # Bag size for MIL models
   encoder_layers: 1 # Number of layers in the MIL encoder
   z_dim: 256 # Dimension of the latent space in the MIL encoder
   dropout_p: 0.3 # Dropout probability for the MIL model
-  num_workers: 4 # Number of workers for data loading, 0 for no parallelization.
+  num_workers: 8 # Number of workers for data loading, 0 for no parallelization.
   aggregation_level: patient # Aggregation level can be 'slide' or 'patient'
   task: survival # Task can be 'classification', 'regression', 'survival' or 'survival_discrete'
   mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
@@ -24,8 +24,7 @@ experiment:
   skip_feature_extraction: True # Whether to skip the feature extraction step if features already exist
   multiprocessing_context: fork
   persistent_workers: True
-
-
+  experiment_label: tcga_survival_continuous
   qc: # List of quality control methods to be used
     - GaussianV2
     - Otsu-CLAHE
@@ -65,25 +64,20 @@ benchmark_parameters:
     - 128
   normalization:
     - macenko
-  
   feature_extraction:
     - h_optimus_0
     - resnet50_imagenet
     - CTransPath
-    
   mil:
     - attention_mil
     - transmil
     - linear_mil
-
   loss:
     - CoxPHLoss
     - RankingLoss
     - ExponentialConcordanceLoss
-
   optimizer:
     - Adam
-
   activation_function:
     - LeakyReLU
 

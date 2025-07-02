@@ -9,7 +9,7 @@ from typing import Optional, Tuple
 
 class CrossEntropyLoss(nn.Module):
     """
-    Standard cross-entropy classification loss. (Not from pycox, classification only.)
+    Standard cross-entropy classification loss.
 
     forward(preds, targets)
     """
@@ -24,7 +24,7 @@ class CrossEntropyLoss(nn.Module):
 
 class FocalLoss(nn.Module):
     """
-    Focal loss for imbalanced classification. (Not from pycox, classification only.)
+    Focal loss for imbalanced classification.
 
     forward(preds, targets)
     """
@@ -53,7 +53,7 @@ class FocalLoss(nn.Module):
 
 class LabelSmoothingCrossEntropyLoss(nn.Module):
     """
-    Label smoothing cross-entropy for classification. (Not from pycox, classification only.)
+    Label smoothing cross-entropy for classification. 
 
     forward(preds, targets)
     """
@@ -528,7 +528,7 @@ class AdaptedCrossEntropySurvivalLoss(nn.Module):
       - preds: [N, T], hazard probabilities in [0,1]
       - targets: [N, 2]
         durations = targets[:, 0]  (in [1..T])
-        events    = targets[:, 1]  (1=censored, 0=event in original paper, but may vary)
+        events    = targets[:, 1]  (1=event, 0=censored)
     """
     def __init__(self, eps: float = 1e-7):
         super().__init__()
@@ -543,15 +543,15 @@ class AdaptedCrossEntropySurvivalLoss(nn.Module):
         total_loss = 0.0
         for i in range(N):
             t_i = int(durations[i].item())
-            c_i = events[i].item()
+            c_i = int(events[i].item())
 
-            # clamp
+            # clamp t_i to [1, T]
             t_i = max(1, min(t_i, T))
 
-            # hazards_i is [T] for subject i
+            # hazards for subject i: clamp to avoid log(0)
             hazards_i = preds[i].clamp(min=self.eps, max=1.0 - self.eps)
 
-            if c_i == 1:
+            if c_i == 0:
                 # censored => sum_{t=1..t_i} -log(1 - h(t))
                 loss_i = 0.0
                 for t in range(1, t_i + 1):

@@ -1,23 +1,26 @@
 experiment:
   project_name: TCGA_LUSC
-  annotation_file: /exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/pathbench/test/dataset4_regression_percent_tumor_cells.csv
-  balancing: None
+  annotation_file: /exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/pathbench/test/dataset4_regression_percent_tumor_cells_normalized.csv
+  balancing: patient
   class_weighting: False
   split_technique: k-fold
   k: 3
   val_fraction: 0.1
   best_epoch_based_on: val_loss # Metric to be used for selecting the best epoch, can be val_loss or any metric in evaluation
-  epochs: 50 # Number of epochs for training
-  batch_size: 32 # Batch size for training
+  epochs: 100 # Number of epochs for training
+  batch_size: 64 # Batch size for training
   bag_size: 512 # Bag size for MIL models
-  encoder_layers: 1 # Number of layers in the MIL encoder
+  encoder_layers: 2 # Number of layers in the MIL encoder
   z_dim: 256 # Dimension of the latent space in the MIL encoder
-  dropout_p: 0.1 # Dropout probability for the MIL model
+  dropout_p: 0.0 # Dropout probability for the MIL model
   num_workers: 4 # Number of workers for data loading, 0 for no parallelization.
   aggregation_level: slide # Aggregation level can be 'slide' or 'patient'
   task: regression # Task can be 'classification', 'regression' or 'survival'
   mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
   report: False
+  feature_extraction_only: False
+  multiprocessing_context: fork
+  persistent_workers: True
 
   qc: # List of quality control methods to be used
     - GaussianV2
@@ -62,27 +65,22 @@ benchmark_parameters:
     - macenko
     #- reinhard
   feature_extraction:
-    #- resnet50_imagenet
-    #- CTransPath
-    #- RetCCL
-    #- PLIP
-    - uni
     - phikon_v2
     - h_optimus_0
   mil:
     #- CLAM_SB
-    - dsmil
-    - varmil
+    - linear_mil
+    - mean_mil
     - attention_mil
-
-  augmentation: # MIL-friendly augmentations, as specified in augmentations.py
-    - patch_mixing
 
   activation_function: # activation function for the MIL encoder, supports any pytorch.nn activation function.
     - ReLU
 
   optimizer: # Optimizers, can be any fastai optimizer (Default: Adam)
     - Adam
+
+  activation_function:
+    - LeakyReLU
 
 weights_dir: ../pretrained_weights
 #hf_token: None

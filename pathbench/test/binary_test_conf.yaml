@@ -19,8 +19,14 @@ experiment:
   mode: benchmark # Mode can be either 'benchmark' or 'optimization'.
   custom_metrics: [RocAuc] # Custom metrics to be used, needs to be defined in metrics.py or as a fastai-metric: https://docs.fast.ai/metrics.html
   report: False
-  feature_extraction_only: False
   
+  multiprocessing_context: fork
+  persistent_workers: True
+  pin_memory: True
+  mixed_precision: True
+
+  experiment_label: tcga_binary_classification_treatment_type
+
   qc: # List of quality control methods to be used
     - GaussianV2
     - Otsu-CLAHE
@@ -65,16 +71,13 @@ benchmark_parameters:
   feature_extraction:
     - resnet50_imagenet
     - CTransPath
-    #- RetCCL
-    #- PLIP
-    - phikon_v2
     - h_optimus_0
-    - uni
+
   mil:
     - clam_mil
     - dsmil
-    #- varmil
-    #- attention_mil
+    - transmil
+    - attention_mil
 
 
 weights_dir: ../pretrained_weights

@@ -1,6 +1,6 @@
 experiment:
   project_name: TCGA_LUSC
-  annotation_file: /exports/path-cutane-lymfomen-hpc/siemen/PathDev/Pathdev/pathbench/test/dataset1_multi_classification_pathologic_stage.csv
+  annotation_file: pathbench/test/final_grouped_stage_annotation_tcga-lusc.csv
   balancing: category
   class_weighting: False
   split_technique: fixed
@@ -52,16 +52,17 @@ optimization:
 
 datasets:
   - name: train
-    slide_path: /exports/path-cutane-lymfomen-hpc/siemen/tcga/TCGA-LUSC
+    slide_path: /exports/path-cutane-lymfomen-hpc/siemen/TCGA-Tools/TCGA/TCGA-LUSC
     tfrecord_path: TCGA_LUSC/tfrecords
     tile_path: TCGA_LUSC/tiles
     used_for: training
 
   - name: test
-    slide_path: /exports/path-cutane-lymfomen-hpc/siemen/tcga/TCGA-LUSC
+    slide_path: /exports/path-cutane-lymfomen-hpc/siemen/TCGA-Tools/TCGA/TCGA-LUSC
     tfrecord_path: TCGA_LUSC/tfrecords
     tile_path: TCGA_LUSC/tiles
     used_for: testing
+
 
 
 benchmark_parameters:
@@ -74,10 +75,9 @@ benchmark_parameters:
     - reinhard
   feature_extraction:
     - resnet50_imagenet
-    - uni
-    - PLIP
-    - phikon_v2
+    - CTransPath
     - h_optimus_0
+
     
   mil:
     - clam_mil

@@ -4,8 +4,8 @@ import os
 #Read requirements
 def read_requirements():
     with open('requirements.txt') as f:
-        return f.read().splitlines()
-
+        lines =  f.read().splitlines()
+        return lines
 setup(
     name='pathbench',
     version='0.1.0',
@@ -20,7 +20,7 @@ setup(
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
-        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
     ],
-    install_requires=read_requirements(),
+    install_requires=read_requirements()
 )
