@@ -239,13 +239,14 @@ def get_save_strings(combination_dict: dict) -> str:
     logging.debug(f"String without MIL: {string_without_mil}")
     return save_string, string_without_mil
 
-def get_model_string(combination_dict: dict, feature_extraction: str) -> str:
+def get_model_string(combination_dict: dict, feature_extraction: str, config: dict) -> str:
     """
     Generate a model string based on the combination dictionary and feature extraction method.
 
     Args:
         combination_dict (dict): The combination dictionary.
         feature_extraction (str): The feature extraction method.
+        config (dict): The configuration dictionary.
 
     Returns:
         str: The generated model string.
@@ -253,7 +254,7 @@ def get_model_string(combination_dict: dict, feature_extraction: str) -> str:
     if combination_dict['mil'].lower() in BUILT_IN_MIL:
         model_string = combination_dict['mil'].lower()
     else:
-        if "slide" in feature_extraction.lower():
+        if "slide" in feature_extraction.lower() and config['experiment']['aggregation_level'] == 'slide':
             model_source_script = "slide_level_predictors"
         else:
             model_source_script = "aggregators"
@@ -542,7 +543,7 @@ def benchmark(config : dict, project : sf.Project):
                             **model_kwargs
                         )
 
-                        model_string = get_model_string(combination_dict, combination_dict['feature_extraction'])
+                        model_string = get_model_string(combination_dict, combination_dict['feature_extraction'], config = config)
 
                         def get_test_metrics(model_string: str, test_outdir: str):
                             # Load the test predictions for this specific test dataset
@@ -1872,7 +1873,7 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
                         **model_kwargs
                     )
 
-                    model_string = get_model_string(combination_dict, feature_extraction)
+                    model_string = get_model_string(combination_dict, feature_extraction, config=config)
                     test_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}_{test_dataset['name']}/00000-{model_string}/predictions.parquet")
                     # Save the test_result as csv to the mil_eval {number}_{save_string}_{index} directory
                     test_result.to_csv(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}_{test_dataset['name']}/test_result.csv", index=False)
@@ -1919,7 +1920,7 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
                     **model_kwargs
                 )
 
-                model_string = get_model_string(combination_dict, feature_extraction)
+                model_string = get_model_string(combination_dict, feature_extraction, config=config)
                 test_result = pd.read_parquet(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}/00000-{model_string}/predictions.parquet")
                 test_result.to_csv(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}/test_result.csv", index=False)
                 def get_test_metrics():
