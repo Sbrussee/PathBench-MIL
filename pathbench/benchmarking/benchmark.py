@@ -990,7 +990,8 @@ def generate_bags(config: dict, project: sf.Project, all_data: sf.Dataset,
                                             mixed_precision=config['experiment']['mixed_precision'],
                                             num_gpus=num_gpus,
                                             force_regenerate=not config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else False,
-                                            progress=False
+                                            progress=False,
+                                            num_workers=config['experiment']['num_workers'] if 'num_workers' in config['experiment'] else 4
         )
     else:
         bags = project.generate_feature_bags(model=feature_extractor, dataset=all_data,
@@ -998,7 +999,8 @@ def generate_bags(config: dict, project: sf.Project, all_data: sf.Dataset,
                                             outdir=bags_dir,
                                             num_gpus=num_gpus,
                                             force_regenerate=not config['experiment']['skip_feature_extraction'] if 'skip_feature_extraction' in config['experiment'] else False,
-                                            progress=False)
+                                            progress=False,
+                                            num_workers=config['experiment']['num_workers'] if 'num_workers' in config['experiment'] else 4)
     return bags
 
 

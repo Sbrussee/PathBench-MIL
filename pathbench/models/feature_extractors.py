@@ -27,6 +27,8 @@ from operator import mul
 from conch.open_clip_custom import create_model_from_pretrained
 import logging
 
+from pathbench.utils.utils import remove_cache
+
 #Set weights dir based on the $WEIGHTS_DIR environment variable
 WEIGHTS_DIR = os.environ.get('WEIGHTS_DIR', "./pretrained_weights")
 #Set environment variables for Hugging Face and Torch
@@ -82,6 +84,27 @@ def vit_small(pretrained : bool, progress : bool, key : str, **kwargs):
         print(verbose)
     return model
 
+import re
+
+def remap_swiglu_keys(state_dict):
+    """
+    - any foo.gamma  → foo.weight
+    - any foo.beta   → foo.bias
+    - any blocks.*.ls[12].weight → blocks.*.ls[12].gamma
+    """
+    new_sd = {}
+    for k, v in state_dict.items():
+        if k.endswith(".gamma"):
+            new_key = k[:-6] + ".weight"
+        elif k.endswith(".beta"):
+            new_key = k[:-5] + ".bias"
+        # <-- here’s the new bit:
+        elif re.match(r"blocks\.\d+\.ls[12]\.weight$", k):
+            new_key = k[:-7] + ".gamma"
+        else:
+            new_key = k
+        new_sd[new_key] = v
+    return new_sd
 
 class ResNetTrunk(ResNet):
     """
@@ -654,17 +677,9 @@ class gigapath(TorchFeatureExtractor):
         )
         state_dict = torch.load(model_path, map_location="cpu", weights_only=False)
 
-        # Remap keys to fix mismatches in LayerScale parameters.
-        def remap_swiglu_keys(state_dict):
-            new_state_dict = {}
-            for key, value in state_dict.items():
-                new_key = key.replace("ls1.gamma", "ls1.weight").replace("ls2.gamma", "ls2.weight")
-                new_state_dict[new_key] = value
-            return new_state_dict
-
-        #check if 'gamma' in state_dict
+        # Check if 'gamma' in state_dict
         if 'gamma' in state_dict:
-            #REmap keys
+            # Remap keys
             state_dict = remap_swiglu_keys(state_dict)
 
         self.model.load_state_dict(state_dict, strict=True)
@@ -1158,7 +1173,7 @@ class pathoduet_he(TorchFeatureExtractor):
         checkpoint = {k: v for k, v in checkpoint.items() if not k.startswith('head.')}
 
         # Load the modified state dictionary into your model
-        self.model.load_state_dict(checkpoint, strict=False)
+        self.model.load_state_dict(checkpoint, strict=True)
         self.model.to('cuda')
         self.num_features = 768
         self.transform = transforms.Compose(
@@ -1213,7 +1228,7 @@ class pathoduet_ihc(TorchFeatureExtractor):
         # Remove the 'head.weight' and 'head.bias' keys from the state dictionary
         checkpoint = {k: v for k, v in checkpoint.items() if not k.startswith('head.')}
         # Load the modified state dictionary into your model
-        self.model.load_state_dict(checkpoint, strict=False)
+        self.model.load_state_dict(checkpoint, strict=True)
         self.model.to('cuda')
         self.num_features = 768
         self.transform = transforms.Compose(
@@ -1426,40 +1441,14 @@ class virchow(TorchFeatureExtractor):
         local_dir = WEIGHTS_DIR
         
         # Create the model without auto-loading pretrained weights.
-        base_model = timm.create_model(
+        model = timm.create_model(
             "hf-hub:paige-ai/Virchow",
-            pretrained=False,  # disable auto-loading
+            pretrained=True,  # disable auto-loading
             mlp_layer=SwiGLUPacked,
             act_layer=nn.SiLU,
         )
-        
-        # Download the pretrained weights (safe tensor format) from the Hugging Face hub.
-        from huggingface_hub import hf_hub_download
-        model_path = hf_hub_download(
-            repo_id="paige-ai/Virchow", 
-            filename="model.safetensors", 
-            local_dir=local_dir, 
-            cache_dir=local_dir,
-            force_download=False
-        )
-        
-        # Load weights using safetensors.
-        from safetensors.torch import load_file
-        state_dict = load_file(model_path)
 
-        # Helper to remap keys: convert ls1.gamma/ls2.gamma -> ls1.weight/ls2.weight.
-        def remap_swiglu_keys(state_dict):
-            new_state_dict = {}
-            for key, value in state_dict.items():
-                new_key = key.replace("ls1.gamma", "ls1.weight").replace("ls2.gamma", "ls2.weight")
-                new_state_dict[new_key] = value
-            return new_state_dict
-
-        state_dict = remap_swiglu_keys(state_dict)
-        base_model.load_state_dict(state_dict, strict=False)
-        
-        # Determine the mode from kwargs (default is "full").
-        mode = kwargs.get('mode', "full")
+        mode = kwargs.get('mode', 'full')
 
         # Modify the classifier to output concatenated embeddings.
         class VirchowEmbedder(nn.Module):
@@ -1468,7 +1457,7 @@ class virchow(TorchFeatureExtractor):
             """
             def __init__(self):
                 super(VirchowEmbedder, self).__init__()
-                self.base_model = base_model.cuda()
+                self.base_model = model.cuda()
 
             def forward(self, x):
                 x = self.base_model(x)
@@ -1486,7 +1475,7 @@ class virchow(TorchFeatureExtractor):
         self.num_features = 2560  # Update to reflect the concatenated embedding size
         self.transform = transforms.Compose(
             [
-                transforms.Resize(224),
+                transforms.Resize(224, interpolation=transforms.InterpolationMode.BICUBIC),
                 transforms.ConvertImageDtype(torch.float32),
                 transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             ]
@@ -1538,31 +1527,7 @@ class virchow2(TorchFeatureExtractor):
             mlp_layer=SwiGLUPacked,
             act_layer=nn.SiLU,
         )
-        
-        # Download the pretrained weights (safe tensor file) from the Hugging Face hub.
-        from huggingface_hub import hf_hub_download
-        model_path = hf_hub_download(
-            repo_id="paige-ai/Virchow2", 
-            filename="model.safetensors", 
-            local_dir=local_dir, 
-            cache_dir=local_dir,
-            force_download=False
-        )
-        
-        from safetensors.torch import load_file
-        state_dict = load_file(model_path)
-
-        # Remap keys to fix mismatches in LayerScale parameters.
-        def remap_swiglu_keys(state_dict):
-            new_state_dict = {}
-            for key, value in state_dict.items():
-                new_key = key.replace("ls1.gamma", "ls1.weight").replace("ls2.gamma", "ls2.weight")
-                new_state_dict[new_key] = value
-            return new_state_dict
-
-        state_dict = remap_swiglu_keys(state_dict)
-        base_model.load_state_dict(state_dict, strict=False)
-        
+    
         # Determine the mode (default "full").
         mode = kwargs.get('mode', "full")
         
@@ -1589,13 +1554,13 @@ class virchow2(TorchFeatureExtractor):
         self.model = VirchowEmbedder()
         self.transform = transforms.Compose(
             [
-                transforms.Resize(224),
+                transforms.Resize(224, interpolation=transforms.InterpolationMode.BICUBIC),
                 transforms.ConvertImageDtype(torch.float32),
                 transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             ]
         )
         self.model.to('cuda')
-        self.num_features = 1280
+        self.num_features = 2560
         self.model.eval()
         self.preprocess_kwargs = {'standardize': False}
 
@@ -1634,53 +1599,13 @@ class h_optimus_0(TorchFeatureExtractor):
 
     def __init__(self, tile_px=256, **kwargs):
         super().__init__(**kwargs)
-
-        self.num_features = 1536
-
-        base_model = timm.create_model(
-            "hf-hub:bioptimus/H-optimus-0",
-            pretrained=False,  # disable auto-loading
-            init_values=1e-5,
-            dynamic_img_size=False,
+        
+        self.model = timm.create_model(
+            "hf-hub:bioptimus/H-optimus-0", pretrained=True, init_values=1e-5, dynamic_img_size=False
         )
-
-        # Helper function to remap keys: Replace "ls1.gamma" and "ls2.gamma" with "ls1.weight" and "ls2.weight".
-        def remap_swiglu_keys(state_dict):
-            new_state_dict = {}
-            for key, value in state_dict.items():
-                new_key = key.replace("ls1.gamma", "ls1.weight").replace("ls2.gamma", "ls2.weight")
-                new_state_dict[new_key] = value
-            return new_state_dict
-
-        # Download the pretrained weights (in safetensors format) from Hugging Face.
-        from huggingface_hub import hf_hub_download
-        model_path = hf_hub_download(
-            repo_id="bioptimus/H-optimus-0",
-            filename="pytorch_model.bin",
-            local_dir=WEIGHTS_DIR,
-            cache_dir=WEIGHTS_DIR,
-            force_download=False,
-        )
-        # Load the weights using torch
-        state_dict = torch.load(model_path, map_location="cpu", weights_only=False)
-        # Remap the keys to match the model's expected parameter names.
-        state_dict = remap_swiglu_keys(state_dict)
-        # Load the modified state dict into the model.
-        base_model.load_state_dict(state_dict, strict=False)
-
-        # Define an inner embedder that returns patch token features only.
-        class H_optimus_0_embedder(nn.Module):
-            def __init__(self, model):
-                super(H_optimus_0_embedder, self).__init__()
-                self.model = model
-
-            def forward(self, x):
-                return self.model(x)
-
-        # Wrap the base model with the embedder.
-        self.model = H_optimus_0_embedder(base_model)
         self.model.to("cuda")
         self.model.eval()
+        self.num_features = 1536
 
         self.transform = transforms.Compose([
             transforms.ConvertImageDtype(torch.float32),
@@ -1703,97 +1628,51 @@ class h_optimus_0(TorchFeatureExtractor):
 @register_torch
 class h_optimus_1(TorchFeatureExtractor):
     """
-    H-Optimus-1 feature extractor with a large Vision Transformer backbone.
-    
-    This implementation downloads the model weights manually and remaps SwiGLU keys 
-    (replacing "ls1.gamma" with "ls1.weight" and "ls2.gamma" with "ls2.weight").
-    It extracts and returns patch token features only, without concatenating the CLS token.
+    H-Optimus-1 feature extractor, with large Vision Transformer backbone
     
     Parameters
     ----------
     tile_px : int
-        The size of the tile.
+        The size of the tile
     
     Attributes
     ----------
     model : VisionTransformer
-        The wrapped Vision Transformer model which returns patch features.
-    
+        The Vision Transformer model   
+
     transform : torchvision.transforms.Compose
-        The transformation pipeline.
-    
+        The transformation pipeline
+
     preprocess_kwargs : dict
-        The preprocessing keyword arguments.
+        The preprocessing arguments
     
     Methods
     -------
     dump_config()
-        Dump the configuration of the feature extractor.
+        Dump the configuration of the feature extractor
     """
+
     tag = 'h_optimus_1'
 
     def __init__(self, tile_px=256, **kwargs):
         super().__init__(**kwargs)
+        self.model = timm.create_model(
+            "hf-hub:bioptimus/H-optimus-1", pretrained=True, init_values=1e-5, dynamic_img_size=False
 
-        # Create the base model without automatically loading pretrained weights.
-        base_model = timm.create_model(
-            "hf-hub:bioptimus/H-optimus-1",
-            pretrained=False,  # disable auto-loading
-            init_values=1e-5,
-            dynamic_img_size=False,
         )
-
-        # Helper function to remap keys: Replace "ls1.gamma" and "ls2.gamma" with "ls1.weight" and "ls2.weight".
-        def remap_swiglu_keys(state_dict):
-            new_state_dict = {}
-            for key, value in state_dict.items():
-                new_key = key.replace("ls1.gamma", "ls1.weight").replace("ls2.gamma", "ls2.weight")
-                new_state_dict[new_key] = value
-            return new_state_dict
-
-        # Download the pretrained weights (in safetensors format) from Hugging Face.
-        from huggingface_hub import hf_hub_download
-        model_path = hf_hub_download(
-            repo_id="bioptimus/H-optimus-1",
-            filename="model.safetensors",
-            local_dir=WEIGHTS_DIR,
-            cache_dir=WEIGHTS_DIR,
-            force_download=False,
-        )
-        # Load the weights using safetensors.
-        from safetensors.torch import load_file
-        state_dict = load_file(model_path)
-        # Remap the keys to match the model's expected parameter names.
-        state_dict = remap_swiglu_keys(state_dict)
-        # Load the modified state dict into the model.
-        base_model.load_state_dict(state_dict, strict=False)
-
-        # Define an inner embedder that returns patch token features only.
-        class H_optimus_1_embedder(nn.Module):
-            def __init__(self, model):
-                super(H_optimus_1_embedder, self).__init__()
-                self.model = model
-
-            def forward(self, x):
-                return self.model(x)
-
-        # Wrap the base model with the embedder.
-        self.model = H_optimus_1_embedder(base_model)
         self.model.to("cuda")
         self.model.eval()
-
-        # Each patch feature vector is expected to have 768 dimensions.
         self.num_features = 1536
 
         self.transform = transforms.Compose([
             transforms.ConvertImageDtype(torch.float32),
             transforms.Resize(224),
             transforms.Normalize(
-                mean=(0.707223, 0.578729, 0.703617),
+                mean=(0.707223, 0.578729, 0.703617), 
                 std=(0.211883, 0.230117, 0.177517)
             ),
         ])
-        # Slideflow standardization settings.
+        # Slideflow standardization
         self.preprocess_kwargs = {'standardize': False}
 
     def dump_config(self):
@@ -1828,70 +1707,28 @@ class h0_mini(TorchFeatureExtractor):
     dump_config()
         Dump the configuration of the feature extractor
     """
+
     tag = 'h0_mini'
 
     def __init__(self, tile_px=256, **kwargs):
         super().__init__(**kwargs)
-
-        # Create the model without automatically loading pretrained weights.
         base_model = timm.create_model(
-            "hf-hub:bioptimus/H0-mini",
-            pretrained=False,  # disable auto-loading
-            mlp_layer=timm.layers.SwiGLUPacked,
-            act_layer=nn.SiLU,
+            "hf-hub:bioptimus/H0-mini", pretrained=True, mlp_layer=timm.layers.SwiGLUPacked, act_layer=nn.SiLU,
         )
 
-        # Define a helper function to remap keys.
-        def remap_swiglu_keys(state_dict):
-            """
-            Remap keys in the state dict:
-            Replace occurrences of "ls1.gamma" with "ls1.weight" and "ls2.gamma" with "ls2.weight".
-            """
-            new_state_dict = {}
-            for key, value in state_dict.items():
-                new_key = key.replace("ls1.gamma", "ls1.weight").replace("ls2.gamma", "ls2.weight")
-                new_state_dict[new_key] = value
-            return new_state_dict
-
-        # Download the pretrained weights from Hugging Face; note this will be in the safetensors format.
-        from huggingface_hub import hf_hub_download
-        model_path = hf_hub_download(
-            repo_id="bioptimus/H0-mini", filename="model.safetensors", local_dir=WEIGHTS_DIR, cache_dir=WEIGHTS_DIR,
-            force_download=False
-        )
-        # Load weights using safetensors.
-        from safetensors.torch import load_file
-        state_dict = load_file(model_path)
-        # Remap the keys to match the model's expected parameter names.
-        state_dict = remap_swiglu_keys(state_dict)
-        # Load the modified state dict into the model.
-        base_model.load_state_dict(state_dict, strict=False)
-
-        # Define an inner embedder that uses the model to produce concatenated features.
         class H0_mini_embedder(nn.Module):
             def __init__(self, model):
                 super(H0_mini_embedder, self).__init__()
                 self.model = model
 
-            def forward(self, x):
+            def forward(self):
                 x = self.model(x)
                 cls_features = x[:, 0]
-                # Expected shape: (batch_size, 768)
-                assert cls_features.shape == (x.shape[0], 768), f"Expected shape (batch_size, 768), got {cls_features.shape}"
-                # Retrieve patch tokens (assuming the model has a num_prefix_tokens attribute)
-                patch_token_features = x[:, self.model.num_prefix_tokens :]
-                # Expected shape: (batch_size, 256, 768)
-                assert patch_token_features.shape == (x.shape[0], 256, 768), f"Expected shape (batch_size,256,768), got {patch_token_features.shape}" 
-                # Average pooling of patch tokens and concatenation with cls token
-                concatenated_features = torch.cat([cls_features, patch_token_features.mean(1)], dim=-1)
-                # Expected shape: (batch_size, 1536)
-                assert concatenated_features.shape == (x.shape[0], 1536), f"Expected shape (batch_size, 1536), got {concatenated_features.shape}"
-                return concatenated_features
+                return cls_features
 
-        # Use the embedder wrapper and set up the rest of the extractor.
         self.model = H0_mini_embedder(base_model)
         self.model.to('cuda')
-        self.num_features = 768  # (or update if the downstream embedding size differs)
+        self.num_features = 768
 
         self.transform = transforms.Compose([
             transforms.ConvertImageDtype(torch.float32),
@@ -1978,9 +1815,6 @@ class conch(TorchFeatureExtractor):
 
             def forward(self, x):
                 x = self.model.encode_image(x, proj_contrast=False, normalize=False)
-                #Flag if not 1D tensor
-                if len(x.shape) > 1:
-                    print("Warning: Conch model output is not 1D tensor")
                 return x
         
         self.model = ConchEmbedder(model)
@@ -2003,6 +1837,48 @@ class conch(TorchFeatureExtractor):
             'class': 'conch',
             'kwargs': {}
         }
+
+
+"""
+@register_torch
+class conchv1_5(TorchFeatureExtractor):
+    "Conch V1.5 feature extractor, with Vision Transformer Large backbone"
+    tag = 'conchv1_5'
+
+    def __init__(self, tile_px=256, **kwargs):
+        super().__init__(**kwargs)
+        local_dir = WEIGHTS_DIR
+        model_name = "conchv1_5"
+        model_temp_name = "pytorch_model_vision.bin"
+        model_path = os.path.join(local_dir, model_name)
+
+        if not os.path.exists(model_path):
+            temp_model_path = hf_hub_download(repo_id="MahmoodLab/conchv1_5", filename=model_temp_name, local_dir=local_dir, force_download=True)
+            os.rename(temp_model_path, model_path)
+        
+        self.model = timm.create_model(
+            "vit_large_patch16_224", img_size=224, patch_size=16, init_values=1e-5, num_classes=0, dynamic_img_size=True
+        )
+        
+        self.model.load_state_dict(torch.load(model_path, map_location="cpu"), strict=True)
+        self.model.to('cuda')
+        self.num_features = 1024 
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize(224),
+                transforms.ConvertImageDtype(torch.float32),
+                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+            ]
+        )
+        self.model.eval()
+        self.preprocess_kwargs = {'standardize': False}
+
+    def dump_config(self):
+        return {
+            'class': 'conchv1_5',
+            'kwargs': {}
+        }
+"""
 
 
 @register_torch
@@ -2527,14 +2403,6 @@ class mstar(TorchFeatureExtractor):
             dynamic_img_size=True,
         )
 
-        # 2. Key-remapping for SwiGLU layers (if present)
-        def remap_swiglu_keys(state_dict):
-            new_sd = {}
-            for k, v in state_dict.items():
-                nk = k.replace('ls1.gamma', 'ls1.weight').replace('ls2.gamma', 'ls2.weight')
-                new_sd[nk] = v
-            return new_sd
-
         # 3. Download & load safetensors weights
         from huggingface_hub import hf_hub_download
         from safetensors.torch import load_file
@@ -2547,8 +2415,7 @@ class mstar(TorchFeatureExtractor):
             force_download=False
         )
         state_dict = load_file(model_path)
-        state_dict = remap_swiglu_keys(state_dict)
-        base_model.load_state_dict(state_dict, strict=False)
+        base_model.load_state_dict(state_dict, strict=True)
 
         self.model = base_model
         self.model.to('cuda')
@@ -2628,6 +2495,9 @@ class lunit_onco_fm(TorchFeatureExtractor):
                 assert cls_features.shape == (x.shape[0], 1280), f"Expected shape (batch_size, 1280), got {cls_features.shape}"
                 return cls_features
 
+        #REmap SwiGLU keys
+        state_dict = remap_swiglu_keys(base_model.state_dict())
+        base_model.load_state_dict(state_dict, strict=True)
         self.model = LunitOncoFMEmbedder(base_model)
         self.model.to('cuda')
         self.transform = transforms.Compose(
