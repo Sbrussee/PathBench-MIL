@@ -170,7 +170,9 @@ class Experiment():
                     path = os.path.join(os.getcwd(), path)
                     logging.debug(f"Interpreted as relative path: {path}")
                     if not os.path.exists(path):
-                        raise ValueError(f"Path '{path}' does not exist.")
+                        #Build path
+                        os.makedirs(os.path.dirname(path), exist_ok=True)
+                        logging.debug(f"Path {path} does not exist, creating directories")
                     return path
             
 
