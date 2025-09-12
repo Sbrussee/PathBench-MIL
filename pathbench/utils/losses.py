@@ -3,6 +3,43 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 from typing import Optional, Tuple
 
+
+### Helpers
+def _ce_targets(targets: Tensor) -> Tensor:
+    """
+    Normalize any classification targets to Long indices of shape (N,).
+    Handles:
+      - one-hot/prob vectors (float/bool) -> argmax
+      - float indices -> round then cast
+      - int/bool tensors with trailing singleton dims -> squeeze
+    """
+    if targets is None:
+        raise ValueError("targets is None")
+
+    # (N, 1) -> (N,)
+    if targets.ndim > 1 and targets.size(-1) == 1:
+        targets = targets.squeeze(-1)
+
+    # One-hot (bool or float) => argmax to indices
+    if (targets.ndim > 1) and (targets.size(-1) > 1):
+        return targets.argmax(dim=-1).to(torch.long).view(-1)
+
+    # Scalar per-sample targets
+    if torch.is_floating_point(targets):
+        # floats that are actually indices
+        return targets.round().to(torch.long).view(-1)
+
+    if targets.dtype == torch.bool:
+        # bool class ids 0/1
+        return targets.to(torch.long).view(-1)
+
+    # ints already
+    return targets.to(torch.long).view(-1)
+
+
+def _float_logits(preds: Tensor) -> Tensor:
+    return preds.float()
+
 ################################################################################
 # 1) CLASSIFICATION LOSSES (unchanged, no special signature constraints)
 ################################################################################
@@ -19,7 +56,7 @@ class CrossEntropyLoss(nn.Module):
         self.criterion = nn.CrossEntropyLoss(weight=weight)
 
     def forward(self, preds: Tensor, targets: Tensor) -> Tensor:
-        return self.criterion(preds.float(), targets.float())
+        return self.criterion(_float_logits(preds), _ce_targets(targets))
 
 
 class FocalLoss(nn.Module):
@@ -40,7 +77,7 @@ class FocalLoss(nn.Module):
     def forward(self, preds: Tensor, targets: Tensor) -> Tensor:
         if targets.dim() > 1:
             targets = torch.argmax(targets, dim=1)
-        ce_loss = nn.CrossEntropyLoss(weight=self.weight, reduction='none')(preds, targets)
+        ce_loss = nn.CrossEntropyLoss(weight=self.weight, reduction='none')(_float_logits(preds), _ce_targets(targets))
         pt = torch.exp(-ce_loss)
         focal_loss = self.alpha * (1 - pt) ** self.gamma * ce_loss
         if self.reduction == 'mean':
@@ -94,7 +131,7 @@ class CrossEntropyWithEntropyMinimizationLoss(nn.Module):
         self.weight_entropy = weight_entropy
 
     def forward(self, preds: Tensor, targets: Tensor) -> Tensor:
-        ce_loss = self.cross_entropy_loss(preds, targets)
+        ce_loss = self.cross_entropy_loss(_float_logits(preds), _ce_targets(targets))
         if preds.dim() > 1 and preds.size(1) > 1:
             probs = torch.softmax(preds, dim=1)
         else:
@@ -116,7 +153,7 @@ class AttentionEntropyMinimizedCrossEntropyLoss(nn.Module):
         self.cross_entropy = nn.CrossEntropyLoss(weight=weight)
 
     def forward(self, preds: Tensor, targets: Tensor, attention_weights: Tensor) -> Tensor:
-        ce_loss = self.cross_entropy(preds, targets)
+        ce_loss = self.cross_entropy(_float_logits(preds), _ce_targets(targets))
         if attention_weights.dim() > 1:
             attention_weights = torch.softmax(attention_weights, dim=-1)
         entropy = -torch.sum(attention_weights * torch.log(attention_weights + 1e-9), dim=1)
@@ -136,7 +173,7 @@ class DiversityRegularizedCrossEntropyLoss(nn.Module):
         self.cross_entropy = nn.CrossEntropyLoss(weight=weight)
 
     def forward(self, preds: Tensor, targets: Tensor, attention_weights: Tensor) -> Tensor:
-        ce_loss = self.cross_entropy(preds, targets)
+        ce_loss = self.cross_entropy(_float_logits(preds), _ce_targets(targets))
         if attention_weights.dim() > 1:
             attention_weights = F.softmax(attention_weights, dim=-1)
         var_ = torch.var(attention_weights, dim=1, unbiased=False)
@@ -157,7 +194,7 @@ class SparseAttentionCrossEntropyLoss(nn.Module):
         self.cross_entropy = nn.CrossEntropyLoss(weight=weight)
 
     def forward(self, preds: Tensor, targets: Tensor, attention_weights: Tensor) -> Tensor:
-        ce_loss = self.cross_entropy(preds, targets)
+        ce_loss = self.cross_entropy(_float_logits(preds), _ce_targets(targets))
         if attention_weights.dim() > 1:
             attention_weights = F.softmax(attention_weights, dim=-1)
         sparse_reg = torch.sum(attention_weights ** 2)

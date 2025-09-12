@@ -1085,7 +1085,7 @@ def set_mil_config(config: dict, combination_dict: dict, task: str, slide_level:
     if slide_level:
         mil_conf = mil_config(mil_method,
                             aggregation_level=config['experiment']['aggregation_level'] if 'aggregation_level' in config['experiment'] else 'slide',
-                            trainer="fastai",
+                            trainer="lightning",
                             epochs=config['experiment']['epochs'] if 'epochs' in config['experiment'] else 50,
                             batch_size=config['experiment']['batch_size'] if 'batch_size' in config['experiment'] else 64,
                             bag_size=None,
@@ -1098,7 +1098,7 @@ def set_mil_config(config: dict, combination_dict: dict, task: str, slide_level:
     else:
         mil_conf = mil_config(mil_method,
                             aggregation_level=config['experiment']['aggregation_level'] if 'aggregation_level' in config['experiment'] else 'slide',   
-                            trainer="fastai",
+                            trainer="lightning",
                             epochs=config['experiment']['epochs'] if 'epochs' in config['experiment'] else 50,
                             drop_last=True,
                             batch_size=config['experiment']['batch_size'] if 'batch_size' in config['experiment'] else 64,

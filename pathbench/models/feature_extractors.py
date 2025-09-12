@@ -1839,7 +1839,7 @@ class conch(TorchFeatureExtractor):
         }
 
 
-"""
+
 @register_torch
 class conchv1_5(TorchFeatureExtractor):
     "Conch V1.5 feature extractor, with Vision Transformer Large backbone"
@@ -1878,7 +1878,6 @@ class conchv1_5(TorchFeatureExtractor):
             'class': 'conchv1_5',
             'kwargs': {}
         }
-"""
 
 
 @register_torch
