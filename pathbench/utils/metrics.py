@@ -1,104 +1,98 @@
 from fastai.learner import Metric
-from lifelines.utils import concordance_index
-from sklearn.metrics import roc_auc_score
+from fastai.torch_core import to_detach
 import torch
-from fastai.torch_core import to_detach, flatten_check
-import logging
+import numpy as np
+from sksurv.metrics import concordance_index_censored
 
+# ---- helpers ----
+def _scores_to_hazards(preds_raw: torch.Tensor, link: str = "logit") -> torch.Tensor:
+    """
+    Map unbounded per-bin scores -> hazard probabilities in (0,1).
+    - "logit":    score = logit(h)       -> h = sigmoid(score)
+    - "cloglog":  score = η (cloglog)    -> h = 1 - exp(-exp(score))
+    - "prob":     score = h              -> h = score
+    - "logprob":  score = log(h)         -> h = exp(score)
+    """
+    x = preds_raw.float()
+    if link == "logit":
+        h = torch.sigmoid(x)
+    elif link == "cloglog":
+        h = 1.0 - torch.exp(-torch.exp(x))
+    elif link == "prob":
+        h = x
+    elif link == "logprob":
+        h = torch.exp(x)
+    else:
+        raise ValueError(f"Unknown link: {link}")
+    eps = 1e-9
+    return torch.clamp(h, eps, 1.0 - eps)
+
+def _cumulative_hazard_risk(hazards: torch.Tensor) -> torch.Tensor:
+    """Discrete-time risk proxy: risk = -sum(log(1 - h_k))  (higher = higher hazard)."""
+    return -torch.sum(torch.log(1.0 - hazards), dim=1)
+
+# ---- metric ----
 class ConcordanceIndex(Metric):
     """
-    Concordance index metric for survival analysis, supporting both:
-      (1) Continuous survival predictions: preds.shape == (batch_size,)
-      (2) Discrete survival predictions:   preds.shape == (batch_size, n_bins)
-          We automatically convert discrete to continuous by a weighted sum
-          over the bin indices [1..n_bins].
-    """
+    Concordance index via sksurv for survival (continuous CoxPH or discrete-time).
 
-    def __init__(self, invert_preds=False):
+    - Continuous (CoxPH): preds shape (N,) -> use as risk (higher=worse). Set invert_preds=True
+      ONLY if your scores mean higher=better survival (rare for CoxPH).
+    - Discrete: preds shape (N,K) -> convert scores to hazards (link), then
+      risk = -∑ log(1 - h_k). Pass risk directly to sksurv.
+    """
+    def __init__(self, invert_preds: bool = False, link: str = "logit"):
+        """
+        invert_preds: set True only if larger model scores mean *better* survival.
+        link: "logit" (NLLLogisticHazard), "cloglog", or "prob" (already probabilities).
+        """
         self._name = "concordance_index"
         self.invert_preds = invert_preds
+        self.link = link
         self.reset()
 
     def reset(self):
-        """Reset the metric."""
-        self.preds = []
-        self.durations = []
-        self.events = []
+        self._risk = []
+        self._durations = []
+        self._events = []
 
     def accumulate(self, learn):
-        """Accumulate predictions and targets from a batch."""
-        preds = learn.pred
-        targets = learn.y
-        self.accum_values(preds, targets)
+        self.accum_values(learn.pred, learn.y)
 
     def accum_values(self, preds, targets):
-        """
-        Accumulate predictions and targets from a batch.
+        preds = to_detach(preds)
+        targets = to_detach(targets)
 
-        - targets must be shape (batch_size, 2) -> [duration, event].
-        - preds can be (batch_size,) for continuous survival
-          or (batch_size, n_bins) for discrete survival.
-
-        We automatically interpret 2D preds as discrete probabilities
-        and convert them to a single predicted time by a weighted sum
-        with bin indices [1..n_bins].
-        """
-        preds, targets = to_detach(preds), to_detach(targets)
-
-        # Flatten or convert any containers into a single tensor
-        preds = self._flatten_preds(preds)
-
-        # durations = targets[:, 0], events = targets[:, 1]
         durations = targets[:, 0].float()
         events = targets[:, 1].float()
 
-        # If we have discrete predictions, convert to continuous
-        if preds.dim() > 1 and preds.shape[1] > 1:
-            #Check if preds are probabilities
-            if not torch.all(preds.sum(dim=1) == 1.0):
-                preds = torch.softmax(preds, dim=-1)
-            #Perform weighted sum over bins
-            preds = (preds * torch.arange(1, preds.shape[1] + 1).float()).sum(dim=1)
+        # Build a single risk vector (higher = worse)
+        if preds.dim() == 1 or preds.shape[-1] == 1:
+            # Continuous CoxPH-style: raw score is the linear predictor η
+            risk = preds.view(-1).float()
+        else:
+            # Discrete-time: per-bin scores -> hazards -> cumulative hazard risk
+            hazards = _scores_to_hazards(preds, link=self.link)
+            risk = _cumulative_hazard_risk(hazards)
 
+        if self.invert_preds:
+            risk = -risk
 
-        #Check if preds should be 
-
-        # Accumulate for final c-index computation
-        self.preds.append(preds)
-        self.durations.append(durations)
-        self.events.append(events)
-
-    def _flatten_preds(self, preds):
-        """
-        Flattens nested structures of predictions, if needed.
-        E.g. if preds is a tuple/list, or has multiple dimensions.
-        """
-        # For your use case, you might just do: return preds.view(-1, *preds.shape[2:])
-        # But here's a robust fallback:
-        if isinstance(preds, (list, tuple)):
-            # Attempt to concatenate or flatten
-            preds = torch.cat([p.view(-1, *p.shape[2:]) if p.dim() > 1 else p.flatten()
-                               for p in preds], dim=0)
-        return preds
+        self._risk.append(risk)
+        self._durations.append(durations)
+        self._events.append(events)
 
     @property
     def value(self):
-        """Calculate the concordance index using lifelines."""
-        if len(self.preds) == 0:
+        if not self._risk:
             return None
+        risk = torch.cat(self._risk).cpu().numpy().astype(np.float64)
+        durations = torch.cat(self._durations).cpu().numpy().astype(np.float64)
+        events = torch.cat(self._events).cpu().numpy().astype(np.int32).astype(bool)
 
-        # Concatenate all predictions/durations/events across mini-batches
-        preds = torch.cat(self.preds).cpu().numpy()
-        durations = torch.cat(self.durations).cpu().numpy()
-        events = torch.cat(self.events).cpu().numpy()
-        
-        if self.invert_preds:
-            # Invert predictions if specified
-            preds = -preds
-            
-        # events must be bool or 0/1 for lifelines
-        ci = concordance_index(durations, preds, events)
-        return ci
+        # sksurv: returns (c_index, concordant, discordant, tied_risk, tied_time)
+        c_idx = float(concordance_index_censored(events, durations, risk)[0])
+        return c_idx
 
     @property
     def name(self):
@@ -107,6 +101,7 @@ class ConcordanceIndex(Metric):
     @name.setter
     def name(self, value):
         self._name = value
+
 
 
 class safe_roc_auc(Metric):

@@ -1842,43 +1842,116 @@ class conch(TorchFeatureExtractor):
 
 @register_torch
 class conchv1_5(TorchFeatureExtractor):
-    "Conch V1.5 feature extractor, with Vision Transformer Large backbone"
-    tag = 'conchv1_5'
+    """CONCH v1.5 feature extractor using TITAN's official wrapper + transforms (tensor-safe)."""
+    tag = "conchv1_5"
 
     def __init__(self, tile_px=256, **kwargs):
         super().__init__(**kwargs)
-        local_dir = WEIGHTS_DIR
-        model_name = "conchv1_5"
-        model_temp_name = "pytorch_model_vision.bin"
-        model_path = os.path.join(local_dir, model_name)
 
-        if not os.path.exists(model_path):
-            temp_model_path = hf_hub_download(repo_id="MahmoodLab/conchv1_5", filename=model_temp_name, local_dir=local_dir, force_download=True)
-            os.rename(temp_model_path, model_path)
-        
-        self.model = timm.create_model(
-            "vit_large_patch16_224", img_size=224, patch_size=16, init_values=1e-5, num_classes=0, dynamic_img_size=True
-        )
-        
-        self.model.load_state_dict(torch.load(model_path, map_location="cpu"), strict=True)
-        self.model.to('cuda')
-        self.num_features = 1024 
-        self.transform = transforms.Compose(
-            [
-                transforms.Resize(224),
-                transforms.ConvertImageDtype(torch.float32),
-                transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-            ]
-        )
-        self.model.eval()
-        self.preprocess_kwargs = {'standardize': False}
+        from transformers import AutoModel
+        titan = AutoModel.from_pretrained("MahmoodLab/TITAN", trust_remote_code=True)
+        backbone, eval_transform = titan.return_conch()   # official encoder + eval transform
+
+        import torch
+        import torch.nn as nn
+        from torchvision import transforms as T
+        from PIL import Image
+        import numpy as np
+        import contextlib
+
+        class _ConchFeatureModule(nn.Module):
+            def __init__(self, enc):
+                super().__init__()
+                self.enc = enc
+
+            def forward(self, x):
+                import torch
+                # Resolve the device the module lives on (same as CONCH weights)
+                dev = next(self.parameters()).device
+
+                # Normalize input types/shapes
+                if isinstance(x, (list, tuple)):
+                    x = torch.stack(
+                        [xi if isinstance(xi, torch.Tensor) else torch.as_tensor(xi) for xi in x],
+                        dim=0
+                    )
+                elif not isinstance(x, torch.Tensor):
+                    x = torch.as_tensor(x)
+
+                # HWC -> CHW (single or batched)
+                if x.ndim == 3 and x.shape[-1] in (1, 3):
+                    x = x.permute(2, 0, 1)
+                elif x.ndim == 4 and x.shape[-1] in (1, 3):
+                    x = x.permute(0, 3, 1, 2)
+
+                # Move to same device/dtype as weights
+                x = x.to(device=dev, dtype=torch.float32, non_blocking=True).contiguous()
+
+                # Inference-only + AMP on CUDA
+                use_amp = (dev.type == "cuda")
+                amp_ctx = torch.cuda.amp.autocast if use_amp else contextlib.nullcontext
+
+                with torch.inference_mode():
+                    with amp_ctx():
+                        if hasattr(self.enc, "encode_image"):
+                            return self.enc.encode_image(x)
+                        return self.enc(x)
+
+        class _TensorSafeTransform:
+            """Accept PIL, np arrays, or torch tensors (single image or batch),
+            apply authors' eval_transform per-image, return same 'batchedness'."""
+            def __init__(self, base_transform):
+                self.base = base_transform
+                self.to_pil = T.ToPILImage()
+
+            def _one_to_pil(self, t):
+                # t may be on any device; do CPU work for PIL safely
+                t = t.detach().cpu()
+                if t.dtype.is_floating_point:
+                    t = t.clamp(0, 1)
+                if t.ndim == 3 and t.shape[-1] in (1, 3):  # HWC -> CHW for ToPILImage
+                    t = t.permute(2, 0, 1)
+                return self.to_pil(t)
+
+            def _np_to_pil(self, a):
+                if a.dtype.kind == "f":
+                    a = np.clip(a, 0.0, 1.0)
+                    a = (a * 255).astype(np.uint8)
+                return Image.fromarray(a)
+
+            def __call__(self, img):
+                import torch
+                if isinstance(img, (list, tuple)):
+                    outs = [self(i) for i in img]
+                    return torch.stack(outs, dim=0) if isinstance(outs[0], torch.Tensor) else outs
+                if isinstance(img, np.ndarray):
+                    if img.ndim == 4:  # B,H,W,C
+                        outs = [self.base(self._np_to_pil(img[i])) for i in range(img.shape[0])]
+                        return torch.stack(outs, dim=0) if isinstance(outs[0], torch.Tensor) else outs
+                    return self.base(self._np_to_pil(img))
+                if isinstance(img, torch.Tensor):
+                    if img.ndim == 4:  # B,C,H,W or B,H,W,C
+                        if img.shape[-1] in (1, 3):  # HWC -> BCHW
+                            img = img.permute(0, 3, 1, 2)
+                        outs = [self.base(self._one_to_pil(img[i])) for i in range(img.shape[0])]
+                        return torch.stack(outs, dim=0) if isinstance(outs[0], torch.Tensor) else outs
+                    return self.base(self._one_to_pil(img))
+                # PIL.Image or compatible
+                return self.base(img)
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = _ConchFeatureModule(backbone).to(self.device).eval()
+
+        # Batch-safe transform (runs on CPU; tensors moved to GPU inside forward)
+        self.transform = _TensorSafeTransform(eval_transform)
+
+        # Metadata
+        self.num_features = int(getattr(backbone, "embed_dim", 1024))
+        self.preprocess_kwargs = {"standardize": False}
+        self.tile_px = tile_px
 
     def dump_config(self):
-        return {
-            'class': 'conchv1_5',
-            'kwargs': {}
-        }
-
+        return {"class": "conchv1_5", "kwargs": {"tile_px": self.tile_px}}
 
 @register_torch
 class keep(TorchFeatureExtractor):

@@ -32,7 +32,7 @@ import scipy.stats as stats
 from scipy.special import softmax
 from lifelines.utils import concordance_index
 from lifelines import KaplanMeierFitter
-from sksurv.metrics import integrated_brier_score, cumulative_dynamic_auc, brier_score, concordance_index_ipcw
+from sksurv.metrics import integrated_brier_score, cumulative_dynamic_auc, brier_score, concordance_index_ipcw, concordance_index_censored
 from sksurv.util import Surv
 from sklearn.metrics import (
     balanced_accuracy_score, f1_score, precision_recall_curve, recall_score, average_precision_score, 
@@ -471,6 +471,11 @@ def benchmark(config : dict, project : sf.Project):
                 # Balance the train and val datasets
                 train = balance_dataset(train, task, config)
                 val = balance_dataset(val, task, config)
+                
+                if task in ['survival', 'survival_discrete']:
+                    dur_tr, evt_tr = _surv_labels_from_dataset(train)
+
+
 
                 model_kwargs = {
                     'pb_config' : config,
@@ -501,7 +506,7 @@ def benchmark(config : dict, project : sf.Project):
                     val_result.to_csv(f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/predictions.csv", index=False)
                     logging.info(f"Validation results saved to experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/predictions.parquet")
                     if task == 'survival' or task == 'survival_discrete':	
-                        metrics, durations, events, predictions = calculate_survival_results(val_result, invert_preds=(task == 'survival'))
+                        metrics, durations, events, predictions = calculate_survival_results(val_result, invert_preds=False, y_train=(dur_tr, evt_tr))
                         survival_results_per_split.append((durations, events, predictions))
                     elif task  == 'regression':
                         metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, save_string, "val")
@@ -554,7 +559,7 @@ def benchmark(config : dict, project : sf.Project):
                             test_result.to_csv(f"{test_outdir}/00000-{model_string}/predictions.csv", index=False)
                             # Process the test_result based on task type
                             if task in ['survival', 'survival_discrete']:
-                                metrics, durations, events, predictions = calculate_survival_results(test_result, invert_preds=(task == 'survival'))
+                                metrics, durations, events, predictions = calculate_survival_results(test_result, invert_preds=False, y_train=(dur_tr, evt_tr))
                                 test_survival_results_per_split[test_dataset['name']].append((durations, events, predictions))
                             elif task == 'regression':
                                 metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
@@ -614,7 +619,7 @@ def benchmark(config : dict, project : sf.Project):
 
             plot_across_splits(config, survival_results_per_split, test_survival_results_per_split,
                         val_results_per_split, test_results_per_split, val_pr_per_split, test_pr_per_split,
-                                save_string, invert_preds=True if config['experiment']['task'] == 'survival' else False)
+                                save_string, invert_preds=False)
 
             #Close all unused file handles
             gc.collect()
@@ -1089,7 +1094,7 @@ def set_mil_config(config: dict, combination_dict: dict, task: str, slide_level:
                             epochs=config['experiment']['epochs'] if 'epochs' in config['experiment'] else 50,
                             batch_size=config['experiment']['batch_size'] if 'batch_size' in config['experiment'] else 64,
                             bag_size=None,
-                            z_dim = config['experiment']['z_dim'] if 'bag_size' in config['experiment'] else 512,
+                            z_dim = config['experiment']['z_dim'] if 'z_dim' in config['experiment'] else 512,
                             encoder_layers = config['experiment']['encoder_layers'] if 'encoder_layers' in config['experiment'] else 1,
                             dropout_p = config['experiment']['dropout_p'] if 'dropout_p' in config['experiment'] else 0.25,
                             activation_function = combination_dict['activation_function'] if 'activation_function' in combination_dict else 'ReLU',
@@ -1105,7 +1110,7 @@ def set_mil_config(config: dict, combination_dict: dict, task: str, slide_level:
                             bag_size=config['experiment']['bag_size'] if 'bag_size' in config['experiment'] else 512,
                             z_dim = config['experiment']['z_dim'] if 'z_dim' in config['experiment'] else 512,
                             encoder_layers = config['experiment']['encoder_layers'] if 'encoder_layers' in config['experiment'] else 1,
-                            dropout_p = config['experiment']['dropout_p'] if 'encoder_layers' in config['experiment'] else 0.25,
+                            dropout_p = config['experiment']['dropout_p'] if 'dropout_p' in config['experiment'] else 0.25,
                             activation_function = combination_dict['activation_function'] if 'activation_function' in combination_dict else 'ReLU',
                             slide_level=False,
                             task=task)
@@ -1318,8 +1323,13 @@ def find_and_apply_best_model(config: dict, val_df_agg: pd.DataFrame, test_df_ag
     test_df.loc[test_df[benchmark_parameters.keys()].apply(tuple, axis=1) == best_test_model].to_csv(best_test_model_path)
 
     # Load best model parameters from the test dataframe
-    with open(test_df['mil_params'].iloc[0], 'r') as f:
+    
+    mask = (test_df[benchmark_parameters.keys()].apply(tuple, axis=1) == best_test_model)
+    row = test_df.loc[mask].iloc[0]
+    with open(row['mil_params'], 'r') as f:
         best_test_model_dict = json.load(f)
+        
+    best_bag_dir = row['bags']
     if 'task' in best_test_model_dict:
         best_test_model_dict['goal'] = best_test_model_dict['task']
         del best_test_model_dict['task']
@@ -1340,11 +1350,11 @@ def find_and_apply_best_model(config: dict, val_df_agg: pd.DataFrame, test_df_ag
     else:
         best_test_model_config = None
 
-    best_test_weights = test_df['weights'].iloc[0]
+    best_test_weights = row['weights']
     logging.info(f"Best test weights directory: {best_test_weights}")
 
     # Run the best model on the test set
-    run_best_model(config, 'test', test_dataset, test_df['bag_dir'].iloc[0],
+    run_best_model(config, 'test', test_dataset, best_bag_dir,
                    best_test_model_config, target, best_test_weights)
 
     # Save the best model configuration and copy the weights directory for easy access
@@ -1497,137 +1507,246 @@ def calculate_results(result: pd.DataFrame, config: dict, save_string: str, data
 
     return metrics, tpr, fpr, precision_recall_data
 
-
-def calculate_survival_results(result: pd.DataFrame, invert_preds=False):
+def _hazards_logits_to_survival_matrix(preds_raw: np.ndarray, times: np.ndarray) -> np.ndarray:
     """
-    Calculate survival metrics (C-index and Brier score) from prediction results.
-
-    Args:
-        result (pd.DataFrame): DataFrame containing at least:
-            - one “duration” column (e.g. named "duration")
-            - one “y_true” column (event indicator, 0/1)
-            - one or more “y_pred” columns (raw model outputs)
-
-    Returns:
-        tuple: (metrics dict, durations, events, predictions)
-            - metrics: {'c_index': float, 'brier_score': float}
-            - durations: 1-D numpy array, shape (N,)
-            - events: 1-D numpy array (0/1), shape (N,)
-            - predictions: 1-D numpy array (risk score), shape (N,)
+    Convert discrete-time hazard *logits* with shape (N, K) into survival S(t) on a grid 'times'.
+    We assume K equal-width bins spanning [0, t_max], and use sigmoid to map logits→hazards.
+    If your preds are already hazards in (0,1), replace the sigmoid with a clip.
     """
-    logging.info("Calculating survival metrics...")
+    N, K = preds_raw.shape
+    hazards = 1.0 / (1.0 + np.exp(-preds_raw))  # sigmoid
+    hazards = np.clip(hazards, 1e-9, 1 - 1e-9)
+    one_minus_h = 1.0 - hazards
+    S_bins = np.cumprod(one_minus_h, axis=1)  # survival at end of each bin, shape (N, K)
 
-    # 1) Find the relevant columns by substring
-    duration_cols = [col for col in result.columns if 'duration' in col]
-    event_cols    = [col for col in result.columns if 'y_true'   in col]
-    pred_cols     = [col for col in result.columns if 'y_pred'   in col]
+    if times.size == 0:
+        return np.ones((N, 0), dtype=float)
 
-    if len(duration_cols) != 1:
-        raise ValueError(f"Expected exactly one duration column, found: {duration_cols}")
-    if len(event_cols) != 1:
-        raise ValueError(f"Expected exactly one y_true (event) column, found: {event_cols}")
-    if len(pred_cols) < 1:
-        raise ValueError(f"Expected at least one y_pred column, found: {pred_cols}")
+    t_max = float(np.max(times))
+    if t_max <= 0:
+        return np.ones((N, len(times)), dtype=float)
 
-    # 2) Extract raw arrays, then squeeze to 1-D
-    durations = result[duration_cols[0]].values
-    events    = result[event_cols[0]].values
-    preds_raw = result[pred_cols].values
+    # Map times to bin indices on [0, t_max] with K bins; use step survival of containing bin.
+    bin_edges = np.linspace(0.0, t_max, K + 1)
+    j_idx = np.searchsorted(bin_edges, times, side="right") - 1
+    j_idx = np.clip(j_idx, 0, K - 1)
+    return S_bins[:, j_idx]  # (N, T)
 
-    # If any of these came back as shape (N, 1), or (N, k), we want to squeeze or reshape:
-    durations = np.squeeze(durations)
-    events    = np.squeeze(events)
 
-    # preds_raw might be:
-    #  - shape (N, 1), if there was exactly one y_pred column (continuous survival risk)
-    #  - shape (N, k), if multiple y_pred columns (discrete-time probabilities, etc.)
-    if preds_raw.ndim == 2 and preds_raw.shape[1] == 1:
-        preds = np.squeeze(preds_raw, axis=1)
+def _safe_eval_times(
+    durations_test: np.ndarray,
+    y_train: tuple | None,
+    n_times: int = 100,
+) -> np.ndarray:
+    """
+    Build a time grid strictly inside the *test* follow-up (and intersect with train follow-up
+    if provided). This avoids the 'all times must be within follow-up' error.
+    """
+    d_test = np.asarray(durations_test, float)
+    dmin_t, dmax_t = float(np.min(d_test)), float(np.max(d_test))
+    if not np.isfinite(dmin_t) or not np.isfinite(dmax_t) or dmax_t <= dmin_t:
+        return np.array([], dtype=float)
 
+    eps = (dmax_t - dmin_t) * 1e-6
+    lo, hi = dmin_t + eps, dmax_t - eps
+
+    if y_train is not None:
+        d_tr, _ = y_train
+        d_tr = np.asarray(d_tr, float)
+        if d_tr.size:
+            tr_min, tr_max = float(np.min(d_tr)), float(np.max(d_tr))
+            # intersect (lo, hi) with train range (open interval)
+            lo = max(lo, tr_min + eps)
+            hi = min(hi, tr_max - eps)
+
+    if hi <= lo:
+        return np.array([], dtype=float)
+
+    return np.linspace(lo, hi, n_times)
+
+
+def _hazards_logits_to_risk(preds_raw: np.ndarray) -> np.ndarray:
+    """
+    Convert discrete-time hazard *logits* with shape (N, K) into a 1-D risk score.
+    We map logits -> hazards via sigmoid, clip for numerical stability,
+    then compute cumulative hazard: risk = -sum(log(1 - hazard_k)).
+    Larger risk  => higher event risk (worse prognosis).
+    """
+    logits = preds_raw.astype(np.float64)
+    hazards = 1.0 / (1.0 + np.exp(-logits))  # sigmoid
+    hazards = np.clip(hazards, 1e-9, 1.0 - 1e-9)
+    risk = -np.sum(np.log(1.0 - hazards), axis=1)
+    return risk
+
+
+def _surv_labels_from_dataset(ds: sf.Dataset) -> tuple[np.ndarray, np.ndarray]:
+    # outcomes=['time','event'] in your pipeline
+    lab_dict, _ = ds.labels(['time','event'], format='id')
+    arr = np.asarray(list(lab_dict.values()), dtype=float)
+    # shape (N, 2): [:,0]=time, [:,1]=event
+    durations = arr[:, 0].astype(float)
+    events = arr[:, 1].astype(int).astype(bool)
+    return durations, events
+
+def _pick_col(result: pd.DataFrame, candidates: list[str], required: bool = True) -> str | None:
+    """Pick first existing column (case-insensitive, substring ok)."""
+    cols_lower = {c.lower(): c for c in result.columns}
+    for pat in candidates:
+        # exact first
+        if pat in cols_lower:
+            return cols_lower[pat]
+    # then substring match
+    for c in result.columns:
+        lc = c.lower()
+        if any(pat in lc for pat in candidates):
+            return c
+    if required:
+        raise ValueError(f"Could not find any of columns: {candidates} in predictions dataframe: {list(result.columns)}")
+    return None
+
+
+def calculate_survival_results(
+    result: pd.DataFrame,
+    invert_preds: bool = False,
+    y_train: tuple | None = None,   # (dur_tr, evt_tr)
+    task: str | None = None,        # 'survival' or 'survival_discrete'
+    n_times: int = 100,
+):
+    """
+    Robust survival metrics:
+      - Finds durations column among ['time','duration','survival_time'].
+      - Finds event column among ['event','y_true','status'].
+      - Builds risk so that larger = worse prognosis.
+      - Defensive NaN handling with informative errors (no silent all-drop).
+    """
+    # ---- find columns robustly
+    dur_col = _pick_col(result, ["time", "duration", "survival_time"])
+    evt_col = _pick_col(result, ["event", "y_true", "status"])
+
+    pred_cols = [c for c in result.columns if c.lower().startswith("y_pred")]
+    if not pred_cols:
+        # fallbacks seen in some pipelines
+        pred_cols = [c for c in result.columns if c.lower().startswith("pred")]
+    if not pred_cols:
+        raise ValueError(f"No prediction columns found (expected y_pred*). Columns: {list(result.columns)}")
+
+    # ---- extract arrays
+    durations = result[dur_col].to_numpy(dtype=float)
+    # event can be float/str; normalize to {0,1}
+    events = (pd.to_numeric(result[evt_col], errors="coerce")
+                .fillna(0.0)
+                .to_numpy(dtype=int)) == 1
+
+    preds_raw = result[pred_cols].to_numpy()
+
+    # ---- risk (larger = worse)
+    if preds_raw.ndim == 2 and preds_raw.shape[1] > 1:
+        # discrete: per-bin hazard logits -> cumhazard
+        risk = _hazards_logits_to_risk(preds_raw.astype(np.float64))
     else:
-        # In the “multiple‐column” case, interpret each y_pred_i as logit for discrete bin i:
-        #   1) apply softmax → probability of each time-bin
-        #   2) convert that into a single continuous risk score by taking ∑ bin_index * P(bin_index)
-        logits = preds_raw.astype(np.float64)
-        exp_logits = np.exp(logits - np.max(logits, axis=1, keepdims=True))
-        probs = exp_logits / np.sum(exp_logits, axis=1, keepdims=True)
-        # “bin indices” go from 0..(k−1).  Choose whichever convention you used during training.
-        # Here we assume bin i corresponds to “time category i.”
-        bin_indices = np.arange(probs.shape[1], dtype=np.float64)
-        preds = np.sum(probs * bin_indices[np.newaxis, :], axis=1)
+        # continuous: single score
+        risk = np.squeeze(preds_raw.astype(np.float64))
+        if invert_preds:
+            risk = -risk
 
-    # Now ‘preds’ is a 1-D array of length N:
-    preds = np.asarray(preds, dtype=np.float32)
-    preds = np.squeeze(preds)
+    # ---- clean NaNs / infs
+    m = np.isfinite(risk) & np.isfinite(durations)
+    n_bad = int((~m).sum())
+    if n_bad:
+        logging.warning(f"Dropping {n_bad} samples with non-finite risk/duration.")
+    durations = durations[m]
+    events = events[m]
+    risk = risk[m]
 
-    # ──────────────────────────────────────────────────────────────────────────────
-    # 3) Assertions to catch common mis-shapes or invalid values
-    # ──────────────────────────────────────────────────────────────────────────────
-    assert durations.ndim == 1, f"durations must be 1-D, got shape {durations.shape}"
-    assert events.ndim    == 1, f"events must be 1-D,    got shape {events.shape}"
-    assert preds.ndim     == 1, f"predictions must be 1-D,got shape {preds.shape}"
-    N = durations.shape[0]
-    assert events.shape[0] == N and preds.shape[0] == N, (
-        f"Number of samples mismatch: durations has length {N}, "
-        f"events has length {events.shape[0]}, preds has length {preds.shape[0]}"
-    )
-
-    # Events must be 0 or 1
-    uniq_events = np.unique(events)
-    assert set(uniq_events).issubset({0, 1}), (
-        f"events must only contain 0 or 1, but found {uniq_events}"
-    )
-
-    # Durations must be non-negative (>= 0)
-    if np.any(durations < 0):
-        bad = durations[durations < 0]
-        raise ValueError(f"Found negative durations: {bad}")
-
-    # Predictions (risk scores) must be finite
-    if not np.all(np.isfinite(preds)):
-        bad_idx = np.where(~np.isfinite(preds))[0]
-        raise ValueError(
-            f"Non-finite prediction values at indices {bad_idx}: "
-            f"{preds[bad_idx]}"
-        )
-
-    # ──────────────────────────────────────────────────────────────────────────────
-    # 4) Compute Concordance Index (lifelines ≥ 0.25 signature is (event_times, pred_scores, event_observed))
-    # ──────────────────────────────────────────────────────────────────────────────
-
-    if invert_preds:
-        # If you want to invert the predictions (e.g., higher risk = lower survival)
-        preds = -preds
-
-    c_index = concordance_index(durations, preds, events)
-
-    logging.info(f"Survival C-index: {c_index:.4f}")
-
-    # ──────────────────────────────────────────────────────────────────────────────
-    # 5) Compute a simple time-averaged Brier score over 100 time points
-    # ──────────────────────────────────────────────────────────────────────────────
-    brier = calculate_brier_score(durations, events, preds_raw)
-    logging.info(f"Survival Brier Score: {brier:.4f}")
-
-    metrics = {'c_index': c_index, 'brier_score': brier}
-    return metrics, durations, events, preds
+    if durations.size == 0:
+        # be explicit: show quick diagnostics of columns
+        n_dur_nan = int(np.sum(~np.isfinite(result[dur_col].to_numpy(dtype=float))))
+        n_pred_nan = int(np.sum(~np.isfinite(np.array(preds_raw, dtype=float))))
+        logging.warning(f"All samples dropped! n_dur_nan={n_dur_nan}, n_pred_nan={n_pred_nan}. Cannot compute survival metrics.")
+        metrics = {
+            "c_index": float("nan"),
+            "c_index_ipcw": float("nan"),
+            "td_auc_mean": float("nan"),
+            "brier_score": float("nan"),
+            "ibs": float("nan"),
+        }
+        return metrics, durations, events.astype(int), np.asarray(risk, dtype=np.float32)
     
+    y_test_struct = Surv.from_arrays(event=events.astype(bool), time=durations.astype(float))
 
-def calculate_brier_score(durations: np.array, events: np.array, predictions: np.array) -> float:
-    """
-    Calculate the Brier score for survival analysis over a range of time points.
+    # ---- train struct (optional, for IPCW/TD AUC/IBS)
+    if y_train is not None:
+        dur_tr, evt_tr = y_train
+        dur_tr = np.asarray(dur_tr, float)
+        evt_tr = np.asarray(evt_tr, bool)
+        mt = np.isfinite(dur_tr)
+        if mt.sum() < dur_tr.size:
+            logging.warning(f"Dropping {int((~mt).sum())} non-finite TRAIN durations for IPCW/TD-AUC.")
+        y_train_struct = Surv.from_arrays(event=evt_tr[mt], time=dur_tr[mt])
+    else:
+        y_train_struct = None
 
-    Args:
-        durations (np.array): Array of observed durations.
-        events (np.array): Array of event indicators.
-        predictions (np.array): Array of model predictions.
+    # ---- c-index (Harrell)
+    c_harrell = float(concordance_index_censored(events, durations, risk)[0])
 
-    Returns:
-        float: The average Brier score over the specified time range.
-    """
-    times = np.linspace(0, durations.max(), 100)
-    brier_scores = [np.mean((predictions - (durations <= t) * events) ** 2) for t in times]
-    return np.mean(brier_scores)
+    # ---- IPCW Uno c-index
+    if y_train_struct is not None:
+        try:
+            c_uno, _ = concordance_index_ipcw(y_train_struct, y_test_struct, risk)
+            c_uno = float(c_uno)
+        except Exception as ex:
+            logging.warning(f"IPCW c-index failed: {ex}; setting NaN.")
+            c_uno = float("nan")
+    else:
+        c_uno = float("nan")
+
+    # ---- time-dependent AUC
+    if y_train_struct is not None:
+        times = _safe_eval_times(durations, y_train, n_times=n_times)
+        if times.size:
+            try:
+                _, aucs = cumulative_dynamic_auc(y_train_struct, y_test_struct, risk, times)
+                td_auc_mean = float(np.nanmean(aucs)) if np.size(aucs) else float("nan")
+            except Exception as ex:
+                logging.warning(f"cumulative_dynamic_auc failed: {ex}; setting NaN.")
+                td_auc_mean = float("nan")
+        else:
+            td_auc_mean = float("nan")
+    else:
+        td_auc_mean = float("nan")
+
+    # ---- Brier & IBS (only for discrete-time where we can decode survival curves)
+    if preds_raw.ndim == 2 and preds_raw.shape[1] > 1:
+        times = _safe_eval_times(durations, y_train, n_times=n_times) if y_train is not None else _safe_eval_times(durations, None, n_times=n_times)
+        if times.size:
+            try:
+                surv_pred = _hazards_logits_to_survival_matrix(preds_raw.astype(np.float64), times)
+                _, bs = brier_score(y_train_struct or y_test_struct, y_test_struct, surv_pred, times)
+                brier_mean = float(np.nanmean(np.asarray(bs, float)))
+            except Exception as ex:
+                logging.warning(f"brier_score failed: {ex}; setting NaN.")
+                brier_mean = float("nan")
+            try:
+                ibs = float(integrated_brier_score(y_train_struct or y_test_struct, y_test_struct, surv_pred, times))
+            except Exception as ex:
+                logging.warning(f"integrated_brier_score failed: {ex}; setting NaN.")
+                ibs = float("nan")
+        else:
+            brier_mean, ibs = float("nan"), float("nan")
+    else:
+        brier_mean, ibs = float("nan"), float("nan")
+
+    metrics = {
+        "c_index": c_harrell,
+        "c_index_ipcw": c_uno,
+        "td_auc_mean": td_auc_mean,
+        "brier_score": brier_mean,
+        "ibs": ibs,
+    }
+    return metrics, durations, events.astype(int), np.asarray(risk, dtype=np.float32)
+
+
+
 
 
 # =============================================================================
@@ -1805,6 +1924,9 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
             logging.info(f"Trial {trial.number} - Split {index} started...")
             train = balance_dataset(train, task, config)
             val = balance_dataset(val, task, config)
+            
+            if task in ['survival', 'survival_discrete']:
+                dur_tr, evt_tr = _surv_labels_from_dataset(train)
 
             model_kwargs = {
                 'pb_config': config,
@@ -1831,7 +1953,7 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
                 val_result.to_csv(f"experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/val_result.csv", index=False)
                 logging.info(f"Validation results saved to experiments/{config['experiment']['project_name']}/mil/{number}-{save_string}_{index}/val_result.csv")
                 if task == 'survival' or task == 'survival_discrete':	
-                    metrics, durations, events, predictions = calculate_survival_results(val_result, invert_preds=(task == 'survival'))
+                    metrics, durations, events, predictions = calculate_survival_results(val_result, invert_preds=False, y_train=(dur_tr, evt_tr))
                     survival_results_per_split.append((durations, events, predictions))
                 elif task  == 'regression':
                     metrics, tpr, fpr, val_pr_curves = calculate_results(val_result, config, save_string, "val")
@@ -1881,7 +2003,7 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
                     test_result.to_csv(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}_{test_dataset['name']}/test_result.csv", index=False)
                     def get_test_metrics():
                         if task in ['survival', 'survival_discrete']:
-                            metrics, durations, events, predictions = calculate_survival_results(test_result, invert_preds=(task == 'survival'))
+                            metrics, durations, events, predictions = calculate_survival_results(test_result, invert_preds=False, y_train=(dur_tr, evt_tr))
                             test_survival_results_per_split[test_dataset['name']].append((durations, events, predictions))
                         elif task == 'regression':
                             metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
@@ -1927,7 +2049,7 @@ def optimize_parameters(config: dict, project: sf.Project) -> None:
                 test_result.to_csv(f"experiments/{config['experiment']['project_name']}/mil_eval/{number}-{save_string}_{index}/test_result.csv", index=False)
                 def get_test_metrics():
                     if task in ['survival', 'survival_discrete']:
-                        metrics, durations, events, predictions = calculate_survival_results(test_result, invert_preds=(task == 'survival'))
+                        metrics, durations, events, predictions = calculate_survival_results(test_result, invert_preds=False)
                         test_survival_results_per_split[test_dataset['name']].append((durations, events, predictions))
                     elif task == 'regression':
                         metrics, tpr, fpr, test_pr_curves = calculate_results(test_result, config, save_string, "test")
