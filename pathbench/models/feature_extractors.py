@@ -2765,8 +2765,6 @@ class prism_slide(SlideFeatureExtractor):
         tile_features = tile_features.unsqueeze(0)
         reprs = self.slide_encoder.slide_representations(tile_features)
         output = reprs["image_embedding"]  # [1, 1280]
-        logging.info("PRISM tile_features shape: %s", tile_features.shape)
-        logging.info("PRISM slide level output shape: %s", output.shape)
         return output
 
 

@@ -6,7 +6,7 @@ import slideflow as sf
 import torch
 from PIL import Image, ImageDraw, ImageFont
 from sklearn.metrics import auc
-from lifelines.utils import concordance_index
+from sksurv.metrics import concordance_index_censored
 from lifelines import KaplanMeierFitter
 from lifelines.statistics import logrank_test
 from sklearn.calibration import calibration_curve
@@ -302,13 +302,11 @@ def plot_concordance_index_across_folds(
       - Convert predictions to continuous if needed (discrete -> expected bin index).
       - Collect all durations across folds -> unique time points
       - For each fold and each time t, mask patients with durations >= t
-      - Compute c-index among those patients
+      - Compute c-index among those patients using sksurv.metrics.concordance_index_censored
       - Average across folds
     """
     import numpy as np
     import matplotlib.pyplot as plt
-
-    from lifelines.utils import concordance_index
 
     # Collect all durations
     all_durations = []
@@ -322,14 +320,11 @@ def plot_concordance_index_across_folds(
         durations = durations.reshape(-1).astype(float)
         events    = events.astype(bool)
 
-        # Discrete => continuous
-
-        #If discrete, convert to continuous predictions
+        # If discrete, convert to continuous predictions
         if raw_preds.ndim > 1:
             cont_preds = get_continuous_preds(raw_preds)
         else:
             cont_preds = raw_preds.flatten().astype(float)
-
 
         cindexes = []
         for t in unique_durations:
@@ -338,14 +333,18 @@ def plot_concordance_index_across_folds(
             if mask.sum() < 2:
                 cindexes.append(np.nan)
                 continue
+
             try:
-                cind = concordance_index(
+                # sksurv expects event indicator (True=event), times, and risk scores
+                # Returns (cindex, concordant, discordant, tied_risk, tied_time)
+                cind_tuple = concordance_index_censored(
+                    events[mask],
                     durations[mask],
-                    cont_preds[mask],
-                    events[mask]
+                    cont_preds[mask]
                 )
+                cind = float(cind_tuple[0])  # concordance estimate
                 cindexes.append(cind)
-            except ZeroDivisionError:
+            except Exception:
                 cindexes.append(np.nan)
 
         cindexes_per_fold.append(cindexes)

@@ -1319,17 +1319,35 @@ def find_and_apply_best_model(config: dict, val_df_agg: pd.DataFrame, test_df_ag
     # Save best model details as CSV and pickle the model configuration
     best_val_model_path = f"{saved_models_dir}/best_val_model_{now}.csv"
     best_test_model_path = f"{saved_models_dir}/best_test_model_{now}.csv"
-    val_df.loc[val_df[benchmark_parameters.keys()].apply(tuple, axis=1) == best_val_model].to_csv(best_val_model_path)
-    test_df.loc[test_df[benchmark_parameters.keys()].apply(tuple, axis=1) == best_test_model].to_csv(best_test_model_path)
+
+    bp_cols = list(benchmark_parameters.keys())
+    test_group_cols  = bp_cols + (['test_dataset'] if 'test_dataset' in test_df.columns else [])
+
+    if isinstance(test_df_agg.index, pd.MultiIndex):
+        best_test_params_tuple = tuple(best_test_model[:len(bp_cols)])
+        best_test_dataset = best_test_model[len(bp_cols)] if 'test_dataset' in test_df.columns else None
+    else:
+        best_test_params_tuple = best_test_model
+        best_test_dataset = None
+    
+    if isinstance(val_df_agg.index, pd.MultiIndex):
+        best_val_params_tuple = tuple(best_val_model[:len(bp_cols)])
+    else:
+        best_val_params_tuple = best_val_model
+
+    val_mask = val_df[bp_cols].apply(tuple, axis=1) == best_val_params_tuple
+    if best_test_dataset is None:
+        test_mask_tuple = best_test_params_tuple
+    else:
+        test_mask_tuple = best_test_params_tuple + (best_test_dataset,)
+    test_mask = test_df[test_group_cols].apply(tuple, axis=1) == test_mask_tuple
 
     # Load best model parameters from the test dataframe
-    
-    mask = (test_df[benchmark_parameters.keys()].apply(tuple, axis=1) == best_test_model)
-    row = test_df.loc[mask].iloc[0]
+    row = test_df.loc[test_mask].iloc[0]
     with open(row['mil_params'], 'r') as f:
         best_test_model_dict = json.load(f)
         
-    best_bag_dir = row['bags']
+    best_bag_dir = row['bag_dir']
     if 'task' in best_test_model_dict:
         best_test_model_dict['goal'] = best_test_model_dict['task']
         del best_test_model_dict['task']
@@ -1613,12 +1631,43 @@ def calculate_survival_results(
     n_times: int = 100,
 ):
     """
-    Robust survival metrics:
+    Robust survival metrics (sksurv-only):
       - Finds durations column among ['time','duration','survival_time'].
       - Finds event column among ['event','y_true','status'].
       - Builds risk so that larger = worse prognosis.
       - Defensive NaN handling with informative errors (no silent all-drop).
+      - IPCW c-index made robust (version-agnostic unpack) and restricted
+        to a 'safe' censoring window estimated from TRAIN via KM on censoring.
     """
+    import numpy as np
+    import logging
+    from sksurv.util import Surv
+    from sksurv.metrics import (
+        integrated_brier_score,
+        cumulative_dynamic_auc,
+        brier_score,
+        concordance_index_ipcw,
+        concordance_index_censored,
+    )
+    from sksurv.nonparametric import kaplan_meier_estimator
+
+    # ---- helper: largest train-time with censoring survival G(t) > eps
+    def _safe_censor_tail_time_sksurv(dur_tr: np.ndarray, evt_tr: np.ndarray, eps: float = 1e-6) -> float | None:
+        try:
+            dur = np.asarray(dur_tr, float)
+            evt = np.asarray(evt_tr, bool)
+            censor_event = ~evt  # KM "event observed" == censoring occurrence
+            # KM on censoring; returns times and survival probs Ĝ(t)
+            times, G = kaplan_meier_estimator(censor_event.astype(bool), dur.astype(float))
+            if times.size == 0 or G.size == 0:
+                return None
+            ok = G > eps
+            if not np.any(ok):
+                return None
+            return float(times[ok][-1])
+        except Exception:
+            return None
+
     # ---- find columns robustly
     dur_col = _pick_col(result, ["time", "duration", "survival_time"])
     evt_col = _pick_col(result, ["event", "y_true", "status"])
@@ -1659,7 +1708,7 @@ def calculate_survival_results(
     risk = risk[m]
 
     if durations.size == 0:
-        # be explicit: show quick diagnostics of columns
+        # diagnostics
         n_dur_nan = int(np.sum(~np.isfinite(result[dur_col].to_numpy(dtype=float))))
         n_pred_nan = int(np.sum(~np.isfinite(np.array(preds_raw, dtype=float))))
         logging.warning(f"All samples dropped! n_dur_nan={n_dur_nan}, n_pred_nan={n_pred_nan}. Cannot compute survival metrics.")
@@ -1689,18 +1738,36 @@ def calculate_survival_results(
     # ---- c-index (Harrell)
     c_harrell = float(concordance_index_censored(events, durations, risk)[0])
 
-    # ---- IPCW Uno c-index
+    # ---- IPCW Uno c-index (sksurv only), trimmed to safe censoring window
     if y_train_struct is not None:
+        # compute safe tail time on TRAIN censoring KM
+        t_ok = _safe_censor_tail_time_sksurv(dur_tr[mt], evt_tr[mt], eps=1e-6) if y_train is not None else None
+
+        y_test_ipcw = y_test_struct
+        risk_ipcw = risk
+        if t_ok is not None and np.isfinite(t_ok):
+            m_ok = durations <= t_ok
+            if not np.all(m_ok):
+                logging.debug(
+                    f"Restricting IPCW to {int(m_ok.sum())}/{len(m_ok)} samples "
+                    f"with t <= {t_ok:.6g} where censor SF > 0."
+                )
+                y_test_ipcw = Surv.from_arrays(
+                    event=events[m_ok].astype(bool),
+                    time=durations[m_ok].astype(float)
+                )
+                risk_ipcw = risk[m_ok]
         try:
-            c_uno, _ = concordance_index_ipcw(y_train_struct, y_test_struct, risk)
-            c_uno = float(c_uno)
+            res = concordance_index_ipcw(y_train_struct, y_test_ipcw, risk_ipcw)
+            # robust to (est, se), (est, se, ...), or namedtuple
+            c_uno = float(res[0]) if isinstance(res, (tuple, list)) else float(res)
         except Exception as ex:
             logging.warning(f"IPCW c-index failed: {ex}; setting NaN.")
             c_uno = float("nan")
     else:
         c_uno = float("nan")
 
-    # ---- time-dependent AUC
+    # ---- time-dependent AUC (sksurv)
     if y_train_struct is not None:
         times = _safe_eval_times(durations, y_train, n_times=n_times)
         if times.size:
@@ -1717,7 +1784,7 @@ def calculate_survival_results(
 
     # ---- Brier & IBS (only for discrete-time where we can decode survival curves)
     if preds_raw.ndim == 2 and preds_raw.shape[1] > 1:
-        times = _safe_eval_times(durations, y_train, n_times=n_times) if y_train is not None else _safe_eval_times(durations, None, n_times=n_times)
+        times = _safe_eval_times(durations, y_train, n_times=n_times)
         if times.size:
             try:
                 surv_pred = _hazards_logits_to_survival_matrix(preds_raw.astype(np.float64), times)
@@ -1744,6 +1811,7 @@ def calculate_survival_results(
         "ibs": ibs,
     }
     return metrics, durations, events.astype(int), np.asarray(risk, dtype=np.float32)
+
 
 
 
