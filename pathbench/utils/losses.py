@@ -5,6 +5,21 @@ from typing import Optional, Tuple
 
 
 ### Helpers
+
+def _register_opt_buffer(module: nn.Module, name: str, value: Optional[Tensor], *, dtype=torch.float32) -> None:
+    """Register `value` as a (non-persistent) buffer if not None; else set attr to None."""
+    if value is None:
+        setattr(module, name, None)
+    else:
+        module.register_buffer(name, value.to(dtype=dtype), persistent=False)
+
+def _like(buf: Optional[Tensor], like: Tensor) -> Optional[Tensor]:
+    """Return `buf` cast to the same dtype as `like`. Device is already handled by register_buffer + .to()."""
+    if buf is None:
+        return None
+    # device is already correct because buffers follow the module to GPU/CPU.
+    return buf.to(dtype=like.dtype)
+
 def _ce_targets(targets: Tensor) -> Tensor:
     """
     Normalize any classification targets to Long indices of shape (N,).
@@ -72,12 +87,12 @@ class FocalLoss(nn.Module):
         self.alpha = alpha
         self.gamma = gamma
         self.reduction = reduction
-        self.weight = weight
+        _register_opt_buffer(self, 'weight', weight)
 
     def forward(self, preds: Tensor, targets: Tensor) -> Tensor:
         if targets.dim() > 1:
             targets = torch.argmax(targets, dim=1)
-        ce_loss = nn.CrossEntropyLoss(weight=self.weight, reduction='none')(_float_logits(preds), _ce_targets(targets))
+        ce_loss = F.cross_entropy(_float_logits(preds), targets, weight=_like(self.weight, preds), reduction='none')
         pt = torch.exp(-ce_loss)
         focal_loss = self.alpha * (1 - pt) ** self.gamma * ce_loss
         if self.reduction == 'mean':
@@ -99,7 +114,7 @@ class LabelSmoothingCrossEntropyLoss(nn.Module):
         self.require_attention = False
         self.smoothing = smoothing
         self.confidence = 1.0 - smoothing
-        self.weight = weight
+        _register_opt_buffer(self, 'weight', weight)
         self.criterion = nn.KLDivLoss(reduction='batchmean')
 
     def forward(self, preds: Tensor, targets: Tensor) -> Tensor:
@@ -114,7 +129,8 @@ class LabelSmoothingCrossEntropyLoss(nn.Module):
             true_dist.scatter_(1, targets.view(-1, 1), self.confidence)
 
         if self.weight is not None:
-            true_dist *= self.weight[targets].view(-1, 1)
+            w = _like(self.weight, log_preds)
+            true_dist *= w[targets].view(-1, 1)
         return self.criterion(log_preds, true_dist)
 
 
@@ -276,51 +292,53 @@ from pycox.models.loss import (
     bce_surv_loss as pycox_bce_surv_loss,
 )
 
-class SurvivalLossBase(nn.Module):
-    """Optional interface for survival losses."""
-    index_base: int = 0      # 0- or 1-based labels
-    link: str | None = None  # e.g. "logit", "cloglog", None if not hazards
-
-    @torch.no_grad()
-    def risk(self, scores: torch.Tensor) -> torch.Tensor:
-        """Return scalar risk per sample; higher = higher event risk."""
-        raise NotImplementedError
     
 
 ################################################################################
 # CoxPHLoss
 ################################################################################
 
-class CoxPHLoss(SurvivalLossBase):
+class CoxPHLoss(nn.Module):
     """
-    Cox PH loss from pycox (continuous-time survival).
-
-    Args:
-        event_weight: not used directly here, retained for potential extension
-        censored_weight: not used directly here, retained for potential extension
-
-    forward(self, preds, targets):
-        - preds: shape [N] (log hazards)
-        - targets: shape [N, 2], where
-            durations = targets[:, 0]
-            events    = targets[:, 1]
+    Weighted Cox partial log-likelihood.
+    - If sample_weight is None: use pycox_cox_ph_loss (unchanged).
+    - Else: weighted implementation (per-event weighting).
     """
-    def __init__(self, event_weight=1.0, censored_weight=1.0):
+    def __init__(self, event_weight=1.0, censored_weight=1.0,
+                 sample_weight: Optional[torch.Tensor] = None):
         super().__init__()
         self.event_weight = event_weight
         self.censored_weight = censored_weight
+        self.sample_weight = sample_weight
 
+    @torch.no_grad()
     def risk(self, scores: torch.Tensor) -> torch.Tensor:
         return scores.view(-1).float()
-    
+
     def forward(self, preds: Tensor, targets: Tensor) -> Tensor:
-        durations = targets[:, 0]
-        events = targets[:, 1].bool()
-        log_h = preds.view(-1)  # same as old log_h
-        durations = durations.view(-1)
-        events = events.view(-1)
-        # Use pycox
-        return pycox_cox_ph_loss(log_h, durations, events)
+        durations = targets[:, 0].view(-1)
+        events = targets[:, 1].view(-1).bool()
+        eta = preds.view(-1)
+
+        if self.sample_weight is None:
+            # ✅ keep PyCox when unweighted
+            return pycox_cox_ph_loss(eta, durations, events)
+
+        # --- weighted Cox (per-event weights) ---
+        order = torch.argsort(durations, descending=True)
+        eta = eta[order]
+        events = events[order]
+        sw = self.sample_weight[order].float()
+
+        # log sum exp risk set
+        maxv = torch.max(eta)
+        exp_eta = torch.exp(eta - maxv)
+        cumsum_exp = torch.cumsum(exp_eta, dim=0)
+        log_risk = torch.log(cumsum_exp) + maxv
+        contrib = (eta - log_risk)[events]
+        w_evt = sw[events]
+        denom = w_evt.sum().clamp_min(1e-9)
+        return -(contrib * w_evt).sum() / denom
 
 
 ################################################################################
@@ -328,132 +346,235 @@ class CoxPHLoss(SurvivalLossBase):
 ################################################################################
 
 class ExponentialConcordanceLoss(nn.Module):
-    def __init__(self, event_weight=1.0, censored_weight=1.0):
+    """
+    If sample_weight is None: same behavior.
+    Else: weight event side by sample_weight.
+    """
+    def __init__(self, event_weight=1.0, censored_weight=1.0,
+                 sample_weight: Optional[Tensor] = None):
         super().__init__()
         self.event_weight = event_weight
         self.censored_weight = censored_weight
+        self.sample_weight = sample_weight
 
     def forward(self, preds: Tensor, targets: Tensor) -> Tensor:
-        durations = targets[:, 0]
-        events = targets[:, 1].bool()
-        preds = preds.view(-1)
+        t = targets[:, 0]
+        e = targets[:, 1].bool()
+        s = preds.view(-1)
 
-        finite = torch.isfinite(durations) & torch.isfinite(preds)
+        finite = torch.isfinite(t) & torch.isfinite(s)
         if finite.sum() < 2:
-            return preds.sum() * 0.0
+            return s.sum() * 0.0
 
-        durations = durations[finite]
-        events    = events[finite]
-        preds     = preds[finite]
+        t, e, s = t[finite], e[finite], s[finite]
+        n = s.numel()
+        dur_i = t.view(1, n).repeat(n, 1)
+        dur_j = t.view(n, 1).repeat(1, n)
+        evt_i = e.view(1, n).repeat(n, 1)
+        mask = (dur_i < dur_j) & evt_i
+        if not mask.any():
+            return s.sum() * 0.0
 
-        n = preds.shape[0]
-        dur_i = durations.unsqueeze(0).repeat(n, 1)
-        dur_j = durations.unsqueeze(1).repeat(1, n)
-        evt_i = events.unsqueeze(0).repeat(n, 1)
+        diff = s.view(1, n) - s.view(n, 1)  # p_i - p_j
+        loss_mat = torch.exp(-diff) * mask.float()
 
-        final_mask = (dur_i < dur_j) & evt_i
-        if not final_mask.any():
-            return preds.sum() * 0.0
+        if self.sample_weight is not None:
+            sw = self.sample_weight[finite].view(1, n).repeat(n, 1)
+            loss_mat = loss_mat * sw
 
-        p_i = preds.unsqueeze(0).repeat(n, 1)
-        p_j = preds.unsqueeze(1).repeat(1, n)
-
-        pred_diff = p_i - p_j
-        loss_matrix = torch.exp(-pred_diff) * final_mask.float()
-
-        return loss_matrix.mean()
-
+        denom = mask.float().sum().clamp_min(1.0)
+        return loss_mat.sum() / denom
 
 ################################################################################
 # RankingLoss
 ################################################################################
 
 class RankingLoss(nn.Module):
-    def __init__(self, margin=1.0, event_weight=1.0, censored_weight=1.0):
+    """
+    If sample_weight is None: same behavior.
+    Else: weight event side by sample_weight.
+    """
+    def __init__(self, margin=1.0, event_weight=1.0, censored_weight=1.0,
+                 sample_weight: Optional[Tensor] = None):
         super().__init__()
         self.margin = margin
         self.event_weight = event_weight
         self.censored_weight = censored_weight
+        self.sample_weight = sample_weight
 
     def forward(self, preds: Tensor, targets: Tensor) -> Tensor:
-        durations = targets[:, 0]
-        events = targets[:, 1].bool()
+        t = targets[:, 0]
+        e = targets[:, 1].bool()
+        s = preds.view(-1)
 
-        preds = preds.view(-1)
-        # mask non-finite to avoid degenerate batches
-        finite = torch.isfinite(durations) & torch.isfinite(preds)
+        finite = torch.isfinite(t) & torch.isfinite(s)
         if finite.sum() < 2:
-            return preds.sum() * 0.0  # keep graph
+            return s.sum() * 0.0
 
-        durations = durations[finite]
-        events    = events[finite]
-        preds     = preds[finite]
-
-        # pairwise masks
-        dur_i = durations[:, None]
-        dur_j = durations[None, :]
-        evt_i = events[:, None]                   # event must occur in i
-        mask  = (dur_i < dur_j) & evt_i
-
+        t, e, s = t[finite], e[finite], s[finite]
+        n = s.numel()
+        dur_i = t.view(n, 1)
+        dur_j = t.view(1, n)
+        evt_i = e.view(n, 1)
+        mask = (dur_i < dur_j) & evt_i
         if not mask.any():
-            return preds.sum() * 0.0  # keep graph
+            return s.sum() * 0.0
 
-        diff = preds[:, None] - preds[None, :]
-        loss_mat = torch.relu(self.margin - diff)[mask].float()
-        return loss_mat.mean()
+        diff = s.view(n, 1) - s.view(1, n)
+        loss_mat = torch.relu(self.margin - diff) * mask.float()
 
+        if self.sample_weight is not None:
+            sw = self.sample_weight[finite].view(n, 1)
+            loss_mat = loss_mat * sw
+
+        denom = mask.float().sum().clamp_min(1.0)
+        return loss_mat.sum() / denom
 
 ################################################################################
 # NLLLogisticHazardLoss
 ################################################################################
 
-class NLLLogisticHazardLoss(SurvivalLossBase):
+class NLLLogisticHazardLoss(nn.Module):
     """
-    Discrete-time survival loss based on Logistic Hazard parameterization (PyCox).
-
-    forward(self, preds, targets):
-      - preds: Tensor of shape [N, T] (logits for hazard(t))
-      - targets: shape [N, 2]
-        durations = targets[:, 0]
-        events    = targets[:, 1]
+    preds: [N, T] logits for hazards
+    weight: Optional[T] per-bin weights
+    sample_weight: Optional[N] per-sample weights
+    If both are None -> use pycox_nll_logistic_hazard (unchanged).
     """
-    def __init__(self, reduction: str = 'mean'):
+    def __init__(self, reduction: str = 'mean',
+                 weight: Optional[Tensor] = None,
+                 sample_weight: Optional[Tensor] = None):
         super().__init__()
         self.reduction = reduction
-        self.link = "logit"
-        
+        self.weight = weight
+        self.sample_weight = sample_weight
+
+    @torch.no_grad()
     def risk(self, scores: torch.Tensor) -> torch.Tensor:
         h = torch.sigmoid(scores)
         return -torch.sum(torch.log1p(-h), dim=1)
 
     def forward(self, preds: Tensor, targets: Tensor) -> Tensor:
-        durations = targets[:, 0].long()
-        events = targets[:, 1].bool()
-        return pycox_nll_logistic_hazard(preds, durations, events, self.reduction)
+        N, T = preds.shape
+        d = targets[:, 0].long().clamp(0, T - 1)
+        e = targets[:, 1].bool()
+
+        # ✅ pure PyCox path if no weights
+        if self.weight is None and self.sample_weight is None:
+            return pycox_nll_logistic_hazard(preds, d, e, self.reduction)
+
+        # weighted path (same math, explicit terms)
+        h = torch.sigmoid(preds).clamp(1e-9, 1 - 1e-9)
+        neglog_1mh = -torch.log1p(-h)  # [N, T]
+        neglog_h   = -torch.log(h)     # [N, T]
+
+        if self.weight is not None:
+            w = self.weight.to(h).view(1, -1)
+            neglog_1mh = neglog_1mh * w
+            neglog_h   = neglog_h * w
+
+        per_sample = preds.new_zeros(N)
+        for i in range(N):
+            ti = int(d[i].item())
+            if not e[i]:
+                per_sample[i] = neglog_1mh[i, :ti+1].sum()
+            else:
+                pre = neglog_1mh[i, :ti].sum() if ti > 0 else per_sample.new_zeros(())
+                per_sample[i] = pre + neglog_h[i, ti]
+
+        if self.sample_weight is not None:
+            sw = self.sample_weight.to(per_sample)
+            return (per_sample * sw).sum() / sw.sum().clamp_min(1e-9)
+        return per_sample.mean()
 
 
 ################################################################################
 # NLLPMFLoss
 ################################################################################
 
-class NLLPMFLoss(SurvivalLossBase):
+class NLLPMFLoss(nn.Module):
     """
-    Discrete-time survival loss with a PMF parameterization (PyCox).
-
-    forward(self, preds, targets):
-      - preds: [N, T], real-valued (converted via softmax to PMF).
-      - targets: shape [N, 2]
-        durations = targets[:, 0]
-        events    = targets[:, 1]
+    preds: [N, T] logits -> softmax PMF
+    weight: Optional[T] per-bin weights
+    sample_weight: Optional[N] per-sample weights
     """
-    def __init__(self, reduction: str = 'mean'):
+    def __init__(self, reduction: str = 'mean',
+                 weight: Optional[Tensor] = None,
+                 sample_weight: Optional[Tensor] = None):
         super().__init__()
         self.reduction = reduction
-        
+        self.weight = weight
+        self.sample_weight = sample_weight
+
+    @torch.no_grad()
     def risk(self, scores: torch.Tensor) -> torch.Tensor:
-        pmf = torch.softmax(scores, dim=-1)
+        pmf = torch.softmax(scores, dim=-1).clamp(1e-9, 1-1e-9)
+        N, K = pmf.shape
+        S_prev = torch.ones(N, device=scores.device, dtype=scores.dtype)
+        H = torch.zeros(N, device=scores.device, dtype=scores.dtype)
+        for k in range(K):
+            h_k = (pmf[:, k] / S_prev).clamp(1e-9, 1 - 1e-9)
+            H += -torch.log1p(-h_k)
+            S_prev *= (1 - h_k)
+        return H
+
+    def forward(self, preds: Tensor, targets: Tensor) -> Tensor:
+        N, T = preds.shape
+        d = targets[:, 0].long().clamp(0, T - 1)
+        e = targets[:, 1].bool()
+
+        if self.weight is None and self.sample_weight is None:
+            return pycox_nll_pmf(preds, d, e, self.reduction)
+
+        pmf = torch.softmax(preds, dim=-1).clamp(1e-9, 1-1e-9)
+        cdf = torch.cumsum(pmf, dim=1)
+        per_sample = preds.new_zeros(N)
+
+        w = None
+        if self.weight is not None:
+            w = self.weight.to(pmf.device, pmf.dtype)
+
+        for i in range(N):
+            ti = int(d[i].item())
+            if e[i]:
+                ell = -torch.log(pmf[i, ti])
+                if w is not None: ell = ell * w[ti]
+            else:
+                Sd = (1.0 - cdf[i, ti]).clamp(1e-9, 1.0)
+                ell = -torch.log(Sd)
+                if w is not None:
+                    ell = ell * (w[:ti+1].mean())
+            per_sample[i] = ell
+
+        if self.sample_weight is not None:
+            sw = self.sample_weight.to(per_sample)
+            return (per_sample * sw).sum() / sw.sum().clamp_min(1e-9)
+        return per_sample.mean()
+
+
+################################################################################
+# NLLMTLRLoss
+################################################################################
+
+class NLLMTLRLoss(nn.Module):
+    """
+    preds: [N, T] raw MTLR scores.
+    weight: Optional[T] per-bin weights
+    sample_weight: Optional[N] per-sample weights
+    """
+    def __init__(self, reduction: str = 'mean',
+                 weight: Optional[Tensor] = None,
+                 sample_weight: Optional[Tensor] = None):
+        super().__init__()
+        self.reduction = reduction
+        self.weight = weight
+        self.sample_weight = sample_weight
+
+    @torch.no_grad()
+    def risk(self, scores: Tensor) -> Tensor:
+        rev_cumsum = torch.flip(torch.cumsum(torch.flip(scores, dims=[1]), dim=1), dims=[1])
+        pmf = torch.softmax(rev_cumsum, dim=1)
         eps = 1e-9
-        pmf = pmf.clamp(eps, 1-eps)
         N, K = pmf.shape
         S_prev = torch.ones(N, device=scores.device, dtype=scores.dtype)
         H = torch.zeros(N, device=scores.device, dtype=scores.dtype)
@@ -463,71 +584,100 @@ class NLLPMFLoss(SurvivalLossBase):
             S_prev *= (1 - h_k)
         return H
 
-
     def forward(self, preds: Tensor, targets: Tensor) -> Tensor:
-        durations = targets[:, 0].long()
-        events = targets[:, 1].bool()
-        return pycox_nll_pmf(preds, durations, events, self.reduction)
+        N, T = preds.shape
+        d = targets[:, 0].long().clamp(0, T - 1)
+        e = targets[:, 1].bool()
 
+        if self.weight is None and self.sample_weight is None:
+            return pycox_nll_mtlr(preds, d, e, self.reduction)
 
-################################################################################
-# NLLMTLRLoss
-################################################################################
+        tails = torch.flip(torch.cumsum(torch.flip(preds, dims=[1]), dim=1), dims=[1])
+        log_p = tails - torch.logsumexp(tails, dim=1, keepdim=True)
+        cdf_log = torch.logcumsumexp(torch.exp(log_p), dim=1)
 
-class NLLMTLRLoss(SurvivalLossBase):
-    """
-    Discrete-time survival loss for MTLR (Multi-Task Logistic Regression) (PyCox).
+        per_sample = preds.new_zeros(N)
+        w = None
+        if self.weight is not None:
+            w = self.weight.to(preds.device, preds.dtype)
 
-    forward(self, preds, targets):
-      - preds: [N, T], real-valued
-      - targets: shape [N, 2]
-        durations = targets[:, 0]
-        events    = targets[:, 1]
-    """
-    def __init__(self, reduction: str = 'mean'):
-        super().__init__()
-        self.reduction = reduction
+        for i in range(N):
+            ti = int(d[i].item())
+            if e[i]:
+                ell = -log_p[i, ti]
+                if w is not None: ell = ell * w[ti]
+            else:
+                log_Sd = torch.log1p(-torch.exp(cdf_log[i, ti]).clamp(0, 1-1e-9))
+                ell = -log_Sd
+                if w is not None:
+                    ell = ell * (w[:ti+1].mean())
+            per_sample[i] = ell
 
-    def risk(self, scores: torch.Tensor) -> torch.Tensor:
-        S = torch.sigmoid(scores).clamp(1e-9, 1 - 1e-9)
-        S_prev = torch.cat([torch.ones_like(S[:, :1]), S[:, :-1]], dim=1)
-        h = 1 - (S / S_prev).clamp(1e-9, 1 - 1e-9)
-        return -torch.sum(torch.log1p(-h), dim=1)
-    
-    def forward(self, preds: Tensor, targets: Tensor) -> Tensor:
-        durations = targets[:, 0].long()
-        events = targets[:, 1].bool()
-        return pycox_nll_mtlr(preds, durations, events, self.reduction)
+        if self.sample_weight is not None:
+            sw = self.sample_weight.to(per_sample)
+            return (per_sample * sw).sum() / sw.sum().clamp_min(1e-9)
+        return per_sample.mean()
 
 
 ################################################################################
 # BCESurvLoss
 ################################################################################
 
-class BCESurvLoss(SurvivalLossBase):
+class BCESurvLoss(nn.Module):
     """
-    Discrete-time survival loss using a series of binary classifiers for each time (PyCox).
-
-    forward(self, preds, targets):
-      - preds: [N, T], real-valued logits for survival
-      - targets: shape [N, 2]
-        durations = targets[:, 0]
-        events    = targets[:, 1]
+    preds: [N, T] logits for survival S_k
+    weight: Optional[T] per-bin weights for BCE terms
+    sample_weight: Optional[N] per-sample weights
     """
-    def __init__(self, reduction: str = 'mean'):
+    def __init__(self, reduction: str = 'mean',
+                 weight: Optional[Tensor] = None,
+                 sample_weight: Optional[Tensor] = None):
         super().__init__()
         self.reduction = reduction
-        
+        self.weight = weight
+        self.sample_weight = sample_weight
+
+    @torch.no_grad()
     def risk(self, scores: torch.Tensor) -> torch.Tensor:
-        S = torch.sigmoid(scores).clamp(1e-9, 1 - 1e-9)
+        S = torch.sigmoid(scores).clamp(1e-9, 1-1e-9)
         S_prev = torch.cat([torch.ones_like(S[:, :1]), S[:, :-1]], dim=1)
         h = 1 - (S / S_prev).clamp(1e-9, 1 - 1e-9)
         return -torch.sum(torch.log1p(-h), dim=1)
 
     def forward(self, preds: Tensor, targets: Tensor) -> Tensor:
-        durations = targets[:, 0].long()
-        events = targets[:, 1].bool()
-        return pycox_bce_surv_loss(preds, durations, events, self.reduction)
+        N, T = preds.shape
+        d = targets[:, 0].long().clamp(0, T - 1)
+        e = targets[:, 1].bool()
+
+        if self.weight is None and self.sample_weight is None:
+            # keep original PyCox when unweighted
+            return pycox_bce_surv_loss(preds, d, e, self.reduction)
+
+        S = torch.sigmoid(preds).clamp(1e-9, 1-1e-9)
+        y = torch.ones_like(S)
+        mask = torch.ones_like(S)
+
+        for i in range(N):
+            ti = int(d[i].item())
+            if e[i]:
+                y[i, ti] = 0.0
+                y[i, ti+1:] = 0.0
+            else:
+                y[i, ti+1:] = 0.0
+                mask[i, ti+1:] = 0.0
+
+        bce = F.binary_cross_entropy(S, y, reduction='none') * mask
+
+        if self.weight is not None:
+            w = self.weight.to(S.dtype).to(S.device).view(1, -1)
+            bce = bce * w
+
+        per_sample = bce.sum(dim=1) / mask.sum(dim=1).clamp_min(1.0)
+
+        if self.sample_weight is not None:
+            sw = self.sample_weight.to(per_sample)
+            return (per_sample * sw).sum() / sw.sum().clamp_min(1e-9)
+        return per_sample.mean()
 
 
 
@@ -536,28 +686,49 @@ class BCESurvLoss(SurvivalLossBase):
 ################################################################################
 
 class AdaptedCrossEntropySurvivalLoss(nn.Module):
-    def __init__(self, eps: float = 1e-7):
+    """
+    preds: [N, T] hazards in [0,1]
+    weight: Optional[T] per-bin weights
+    sample_weight: Optional[N] per-sample weights
+    """
+    def __init__(self, eps: float = 1e-7,
+                 weight: Optional[Tensor] = None,
+                 sample_weight: Optional[Tensor] = None):
         super().__init__()
         self.eps = eps
+        self.weight = weight
+        self.sample_weight = sample_weight
         self.require_attention = False
-        
+
+    @torch.no_grad()
     def risk(self, scores: torch.Tensor) -> torch.Tensor:
         h = scores.clamp(1e-9, 1 - 1e-9)
         return -torch.sum(torch.log1p(-h), dim=1)
 
     def forward(self, preds: Tensor, targets: Tensor) -> Tensor:
         N, T = preds.shape
-        durations = targets[:, 0].long().clamp(0, T-1)   # 0-based
-        events = targets[:, 1].bool()
-        preds = preds.clamp(1e-9, 1 - 1e-9)              # hazards in [0,1]
-        total = preds.new_tensor(0.)
+        d = targets[:, 0].long().clamp(0, T - 1)
+        e = targets[:, 1].bool()
+        h = preds.clamp(1e-9, 1 - 1e-9)
+
+        neglog_1mh = -torch.log1p(-h)  # [N, T]
+        neglog_h   = -torch.log(h)     # [N, T]
+
+        if self.weight is not None:
+            w = self.weight.to(h).view(1, -1)
+            neglog_1mh = neglog_1mh * w
+            neglog_h   = neglog_h * w
+
+        per_sample = preds.new_zeros(N)
         for i in range(N):
-            t = int(durations[i].item())
-            h = preds[i]
-            if not events[i]:
-                loss_i = -torch.log1p(-h[:t+1]).sum()                  # t inclusive
+            ti = int(d[i].item())
+            if not e[i]:
+                per_sample[i] = neglog_1mh[i, :ti+1].sum()
             else:
-                pre = -torch.log1p(-h[:t]).sum() if t > 0 else h.new_tensor(0.)
-                loss_i = pre + (-torch.log(h[t]))
-            total += loss_i
-        return total / N
+                pre = neglog_1mh[i, :ti].sum() if ti > 0 else per_sample.new_zeros(())
+                per_sample[i] = pre + neglog_h[i, ti]
+
+        if self.sample_weight is not None:
+            sw = self.sample_weight.to(per_sample)
+            return (per_sample * sw).sum() / sw.sum().clamp_min(1e-9)
+        return per_sample.mean()

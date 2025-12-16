@@ -987,6 +987,9 @@ def generate_bags(config: dict, project: sf.Project, all_data: sf.Dataset,
         logging.info("Running on a SLURM server environment, removing torch/huggingface cache to avoid full cache errors.")
         remove_cache()
 
+    if combination_dict['normalization'].lower() == "none":
+        combination_dict['normalization'] = None
+
     #If some bags are missing, recalculate them
     if "mixed_precision" in config['experiment']:
         bags = project.generate_feature_bags(model=feature_extractor, dataset=all_data,
@@ -1504,7 +1507,7 @@ def calculate_results(result: pd.DataFrame, config: dict, save_string: str, data
         all_y_pred_prob = np.vstack(all_y_pred_prob).T
         all_y_pred_class = np.argmax(all_y_pred_prob, axis=1)
         all_cm = confusion_matrix(all_y_true, all_y_pred_class, labels=unique_classes)
-        if 'confusion_matrix' in config['experiment']['visualization']:
+        if 'confusion_matrix' in config['experiment'].get('visualization', []):
             disp = ConfusionMatrixDisplay(confusion_matrix=all_cm, display_labels=unique_classes)
             disp.plot(cmap=plt.cm.Blues)
             plt.title('Overall Confusion Matrix')
@@ -1518,7 +1521,7 @@ def calculate_results(result: pd.DataFrame, config: dict, save_string: str, data
 
         metrics['balanced_accuracy'] = np.mean(balanced_accuracies)
         metrics['mean_f1'] = np.mean(list(f1_scores.values()))
-        metrics['auc'] = np.mean(aucs)
+        metrics['auc'] = metrics['roc_auc_score'] = np.mean(aucs)
         metrics['mean_average_precision'] = np.mean(average_precisions)
         metrics['mean_average_recall'] = np.mean(average_recalls)
         logging.info(f"Classification Metrics - Balanced Accuracy: {metrics['balanced_accuracy']}, Mean F1: {metrics['mean_f1']}, AUC: {metrics['auc']}")
@@ -2251,21 +2254,15 @@ def plot_optimization_output(project_directory, study):
     """
     opt_dir = f"{project_directory}/optimization"
     os.makedirs(opt_dir, exist_ok=True)
-    current_date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    
-    # Reset plot
-    plt.close()
-    # Plot parameter importances
-    fig = opt_vis.plot_param_importances(study)
-    plt.title("Parameter Importances")
-    plt.savefig(f"{opt_dir}/parameter_importances_{current_date}.png")
-    plt.close()
+    ts = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-    # Plot optimization history
-    fig = opt_vis.plot_optimization_history(study)
-    plt.title("Optimization History")
-    plt.savefig(f"{opt_dir}/optimization_history_{current_date}.png")
-    plt.close()
+    ax_imp = plot_param_importances(study)
+    ax_imp.figure.savefig(f"{opt_dir}/parameter_importances_{ts}.png", bbox_inches="tight")
+    ax_imp.figure.clf()
+
+    ax_hist = plot_optimization_history(study)
+    ax_hist.figure.savefig(f"{opt_dir}/optimization_history_{ts}.png", bbox_inches="tight")
+    ax_hist.figure.clf()
 
 # =============================================================================
 # End of Module
