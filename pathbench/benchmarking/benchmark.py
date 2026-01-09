@@ -41,7 +41,7 @@ from sklearn.metrics import (
 )
 from sklearn.preprocessing import label_binarize
 import optuna
-import optuna.visualization as opt_vis
+from optuna.visualization.matplotlib import plot_param_importances, plot_optimization_history
 from optuna.samplers import TPESampler
 from optuna.pruners import HyperbandPruner
 
